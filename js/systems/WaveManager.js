@@ -71,4 +71,19 @@ export class WaveManager {
     get isLastWave() {
         return this.currentWave >= this.totalWaves;
     }
+
+    /**
+     * What the next wave is made of, so the player can pick their elements
+     * before it arrives rather than after. `currentWave` is bumped the moment a
+     * wave starts, so this index is always the one that has not run yet.
+     */
+    get nextComposition() {
+        const wave = WAVE_DATA[this.currentWave];
+        if (!wave) return null;
+        return wave.enemies.map(g => ({ type: g.type, count: g.count }));
+    }
+
+    get nextWaveNumber() {
+        return this.currentWave + 1;
+    }
 }

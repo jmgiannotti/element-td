@@ -5,16 +5,20 @@ import { EconomySystem, BARRICADE_COST, refundValue } from '../systems/EconomySy
 import { FusionSystem } from '../systems/FusionSystem.js';
 import { TempleSystem } from '../systems/TempleSystem.js';
 import { RouteView } from '../systems/RouteView.js';
+import { FloatingText } from '../systems/FloatingText.js';
+import { TutorialSystem } from '../systems/TutorialSystem.js';
 import { audio } from '../systems/AudioSystem.js';
+import { ABILITY_ORDER, HERO_ABILITIES } from '../data/HeroData.js';
 import { Tower } from '../entities/Tower.js';
 import { Temple } from '../entities/Temple.js';
 import { Hero } from '../entities/Hero.js';
 import { TOWER_DATA, ELEMENTS } from '../data/TowerData.js';
-import { TEMPLE_DATA } from '../data/TempleData.js';
+import { TEMPLE_DATA, TRACK_ORDER } from '../data/TempleData.js';
 import {
     GRASS_VARIANTS, DIRT_VARIANTS, EDGE_VARIANTS, RUT_VARIANTS, BREAKABLE_VARIANTS,
 } from './BootScene.js';
 import { safeTexture } from '../systems/TextureGuard.js';
+import { applyViewport, pointerWorld } from '../systems/Viewport.js';
 
 // Depth budget for the terrain layers (all below entities at depth ≥ 1).
 const D_BASE = 0;
@@ -32,6 +36,10 @@ const BLOCK_REASON = {
     enemy: 'Encerraria a un enemigo',
 };
 
+// Three-letter track names for the inspector card. The upgrade panel has room
+// for DAÑO/CADENCIA/ALCANCE; a label hanging over a 32px tile does not.
+const TRACK_SHORT = { damage: 'DMG', fireRate: 'CAD', range: 'ALC' };
+
 /** Stable per-cell hash — same cell always draws the same variant. */
 function cellHash(col, row) {
     let h = Math.imul(col + 1, 374761393) ^ Math.imul(row + 1, 668265263);
@@ -45,8 +53,17 @@ export class GameScene extends Phaser.Scene {
     }
 
     create() {
+        // The canvas is a supersampled buffer, so the camera has to be zoomed to
+        // it before anything is drawn — otherwise the world would render into one
+        // corner. Done here rather than once at boot because restarting the game
+        // builds a brand-new camera.
+        applyViewport(this);
+
         // ── Systems ─────────────────────────────
         this.gridSystem = new GridSystem();
+        // Built before anything that can take damage: Enemy.takeDamage reaches
+        // for it on the very first hit.
+        this.floating = new FloatingText(this);
         this.economySystem = new EconomySystem(this);
         this.waveManager = new WaveManager(this);
         this.fusionSystem = new FusionSystem(this);
@@ -77,6 +94,8 @@ export class GameScene extends Phaser.Scene {
         // Set by UIScene while the temple upgrade panel is open, so clicks
         // meant for the panel never fall through onto the map behind it.
         this.uiModalOpen = false;
+        // The structure whose range is pinned open, if any.
+        this.selectedStructure = null;
 
         // ── Render map ──────────────────────────
         this._renderMap();
@@ -107,16 +126,32 @@ export class GameScene extends Phaser.Scene {
             color: '#FFD700', stroke: '#000000', strokeThickness: 3,
         }).setOrigin(0.5, 1).setVisible(false).setDepth(31);
 
+        // The pinned tower's live numbers. Read off the tower rather than off
+        // TOWER_DATA, so a temple upgrade bought afterwards shows up here.
+        // Backed rather than merely stroked: four lines of stats over a busy
+        // grass texture need a surface to sit on, not just an outline.
+        this.statLabel = this.add.text(0, 0, '', {
+            fontFamily: '"Press Start 2P"', fontSize: '8px',
+            color: '#FFD54F',
+            backgroundColor: '#0a0a1ae8',
+            padding: { x: 7, y: 6 },
+            align: 'left', lineSpacing: 4,
+        }).setOrigin(0.5, 1).setVisible(false).setDepth(31);
+
         // ── Input ───────────────────────────────
         this.input.mouse.disableContextMenu();
         this.input.on('pointerdown', (pointer, gameObjects) => {
             if (this.gameOver || this.gameWon) return;
             if (this.uiModalOpen) return;       // upgrade panel has the floor
-            if (pointer.x >= GAME_WIDTH) return; // sidebar click
+
+            // Read through the camera, never off the pointer: `pointer.x` is in
+            // the supersampled buffer's space, which is 2× or 3× the world.
+            const p = pointerWorld(this, pointer);
+            if (p.x >= GAME_WIDTH) return;       // sidebar click
 
             // Right click → move hero exact position, even if clicking on a tower
             if (pointer.button === 2) {
-                this.hero.moveTo(pointer.x, pointer.y);
+                this.hero.moveTo(p.x, p.y);
                 return;
             }
 
@@ -125,10 +160,27 @@ export class GameScene extends Phaser.Scene {
             const blocked = gameObjects.some(o => o.getData && o.getData('uiBlocker'));
             if (blocked && !this.sellMode) return;
 
-            this._handleClick(pointer);
+            this._handleClick(pointer, p);
         });
         this.input.on('pointermove', (pointer) => this._handleMove(pointer));
-        this.input.keyboard.on('keydown-ESC', () => this._cancelPlacement());
+        this.input.keyboard.on('keydown-ESC', () => {
+            this._cancelPlacement();
+            this.selectStructure(null);
+        });
+
+        // Hero abilities. Bound off the data so adding one to HeroData is the
+        // only edit an extra ability needs.
+        for (const key of ABILITY_ORDER) {
+            const hotkey = HERO_ABILITIES[key].hotkey;
+            this.input.keyboard.on(`keydown-${hotkey}`, () => {
+                if (this.gameOver || this.gameWon || this.uiModalOpen) return;
+                this.hero.useAbility(key);
+            });
+        }
+        this.events.on('use-ability', (key) => {
+            if (this.gameOver || this.gameWon) return;
+            this.hero.useAbility(key);
+        });
 
         // ── Internal events ─────────────────────
         this.events.on('select-element', (el) => {
@@ -199,6 +251,10 @@ export class GameScene extends Phaser.Scene {
 
         this.events.on('start-wave', () => this.waveManager.startWave());
 
+        // A global upgrade is meant to be felt. If a tower is pinned open when
+        // one lands, its numbers change under the cursor.
+        this.events.on('temple-upgraded', () => this._refreshStatLabel());
+
         // The route hides for the duration of a wave and comes back the moment
         // the board is clear again, which is when planning resumes.
         this.events.on('wave-started', () => this._refreshRouteVisibility());
@@ -225,7 +281,11 @@ export class GameScene extends Phaser.Scene {
         on('all-waves-complete', 'victory');
 
         // ── Launch parallel UI scene ────────────
+        // Before the tutorial, which speaks through events UIScene renders.
         this.scene.launch('UIScene', { gameScene: this });
+
+        // ── Tutorial ────────────────────────────
+        this.tutorial = new TutorialSystem(this);
     }
 
     // ─── Map rendering ──────────────────────────────────
@@ -257,13 +317,13 @@ export class GameScene extends Phaser.Scene {
         const enter = WAYPOINTS[1]; // first visible waypoint
         this.add.text(
             8, enter.row * TILE_SIZE + TILE_SIZE / 2,
-            '▶', { fontSize: '18px', color: '#66BB6A' }
+            '▶', { fontSize: '16px', color: '#66BB6A' }
         ).setOrigin(0, 0.5).setDepth(3);
 
         const exit = WAYPOINTS[WAYPOINTS.length - 2]; // last visible
         this.add.text(
             exit.col * TILE_SIZE + TILE_SIZE, exit.row * TILE_SIZE + TILE_SIZE / 2,
-            '🏠', { fontSize: '14px' }
+            '🏠', { fontSize: '16px' }
         ).setOrigin(0, 0.5).setDepth(3);
     }
 
@@ -370,9 +430,11 @@ export class GameScene extends Phaser.Scene {
     }
 
     // ─── Input handling ─────────────────────────────────
-    _handleClick(pointer) {
+    /** `world` is the pointer already resolved through the camera by the caller. */
+    _handleClick(pointer, world) {
         if (pointer.button !== 0) return;
-        const { col, row } = this.gridSystem.worldToGrid(pointer.x, pointer.y);
+        const p = world ?? pointerWorld(this, pointer);
+        const { col, row } = this.gridSystem.worldToGrid(p.x, p.y);
 
         if (this.sellMode) {
             this._trySell(col, row);
@@ -380,11 +442,89 @@ export class GameScene extends Phaser.Scene {
         }
 
         // Left click → place tower
-        if (this.placementMode && this.selectedElement) this._tryPlace(col, row);
+        if (this.placementMode && this.selectedElement) {
+            this._tryPlace(col, row);
+            return;
+        }
+
+        // Nothing on the cursor: a click is an inspection. Resolved from the
+        // cell rather than from the sprite that was hit, so clicking the grass
+        // beside a tower reliably puts the ring away again.
+        const tower = this.towers.find(t => t.alive && t.col === col && t.row === row);
+        this.selectStructure(tower ?? null);
+    }
+
+    // ─── Inspection ─────────────────────────────────────
+    /**
+     * Pins one tower's range open and shows what it actually does — the two
+     * things you need to judge whether a global upgrade was worth the maná.
+     * Passing null clears it.
+     */
+    selectStructure(structure) {
+        if (this.selectedStructure === structure) {
+            // Clicking the pinned tower again lets go of it.
+            structure = null;
+        }
+
+        if (this.selectedStructure && this.selectedStructure.setSelected) {
+            this.selectedStructure.setSelected(false);
+        }
+        this.selectedStructure = structure ?? null;
+
+        if (!this.selectedStructure) {
+            this.statLabel.setVisible(false);
+            return;
+        }
+
+        if (this.selectedStructure.setSelected) this.selectedStructure.setSelected(true);
+        audio.play('click');
+        this._refreshStatLabel();
+    }
+
+    /**
+     * The card over a pinned tower: what it is, what rank the temples have
+     * bought it to, what it actually does right now, and what is currently
+     * modifying it. Every number is derived live, so it doubles as the readout
+     * that makes a global upgrade felt the instant it is paid for.
+     */
+    _refreshStatLabel() {
+        const t = this.selectedStructure;
+        if (!t || !t.alive) {
+            this.statLabel.setVisible(false);
+            return;
+        }
+
+        const ts = this.templeSystem;
+        const total = ts.totalLevels(t.element);
+
+        const lines = [
+            `${t.data.emoji} ${t.data.name}${total > 0 ? `  Nv.${total}` : ''}`,
+            `DMG ${Math.round(t.damage)}   RNG ${Math.round(t.range)}`,
+            `${t.shotsPerSecond.toFixed(2)}/s   ${t.data.specialDesc}`,
+            total > 0
+                ? TRACK_ORDER.map(tr => `${TRACK_SHORT[tr]} ${ts.levelOf(t.element, tr)}`).join('  ')
+                : 'sin mejoras de templo',
+        ];
+        if (t.empowered) lines.push('potenciada por el heroe');
+
+        this.statLabel.setText(lines.join('\n'));
+
+        // Towers on the top rows have no room above them, so the card flips
+        // below rather than sliding off the board.
+        const x = Phaser.Math.Clamp(
+            t.x, this.statLabel.width / 2 + 2, GAME_WIDTH - this.statLabel.width / 2 - 2
+        );
+        if (t.y - 20 - this.statLabel.height < 2) {
+            this.statLabel.setOrigin(0.5, 0).setPosition(x, t.y + 18);
+        } else {
+            this.statLabel.setOrigin(0.5, 1).setPosition(x, t.y - 20);
+        }
+        this.statLabel.setVisible(true);
     }
 
     _handleMove(pointer) {
-        if ((!this.placementMode && !this.sellMode) || pointer.x >= GAME_WIDTH) {
+        const p = pointerWorld(this, pointer);
+        if ((!this.placementMode && !this.sellMode) || p.x >= GAME_WIDTH) {
             this.previewSprite.setVisible(false);
             this.previewRange.setVisible(false);
             this.previewTile.setVisible(false);
@@ -393,7 +533,7 @@ export class GameScene extends Phaser.Scene {
             return;
         }
 
-        const { col, row } = this.gridSystem.worldToGrid(pointer.x, pointer.y);
+        const { col, row } = this.gridSystem.worldToGrid(p.x, p.y);
         const pos = this.gridSystem.gridToWorld(col, row);
 
         if (this.sellMode) {
@@ -713,6 +853,8 @@ export class GameScene extends Phaser.Scene {
 
         // Life force nobody can drink just evaporates, and that is invisible
         // unless we say so — this is the one moment the rule has to be taught.
+        // Unless the tutorial is already saying it, at more length and better.
+        if (this.tutorial && this.tutorial.active) this._manaHintShown = true;
         if (!this._manaHintShown && this.temples.length === 0 && this.manaMotes.length > 0) {
             this._manaHintShown = true;
             this.events.emit('hint', 'Templo o heroe: alguien debe absorber ✦');
@@ -724,12 +866,22 @@ export class GameScene extends Phaser.Scene {
         // Hero
         this.hero.update(time, delta);
 
+        // Tutorial — after the hero and the motes, so it reads the state the
+        // player is actually looking at this frame.
+        if (this.tutorial) this.tutorial.update(time, delta);
+
         // Cleanup dead entities
         this.towers = this.towers.filter(t => t.alive);
         this.temples = this.temples.filter(t => t.alive);
         this.enemies = this.enemies.filter(e => e.alive);
         this.projectiles = this.projectiles.filter(p => p.alive);
         this.manaMotes = this.manaMotes.filter(m => m.alive);
+
+        // Selling or fusing the pinned tower leaves the readout hanging over an
+        // empty tile, so the pin is dropped with the building.
+        if (this.selectedStructure && !this.selectedStructure.alive) {
+            this.selectStructure(null);
+        }
     }
 
     // ─── Breakable Blocks ───────────────────────────────

@@ -1,5 +1,8 @@
 import * as Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../systems/GridSystem.js';
+import { HERO_ABILITIES, ABILITY_ORDER, COMBO, comboMultiplier } from '../data/HeroData.js';
+import { audio } from '../systems/AudioSystem.js';
+import { pointerWorld } from '../systems/Viewport.js';
 
 const SPAWN_COL = 10;
 const SPAWN_ROW = 7;
@@ -37,10 +40,36 @@ export class Hero {
         this.collectRadius = 50;
         this.manaCollected = 0;
 
+        // ── Combo state ─────────────────────────
+        // Motes picked up inside the window compound. Counted here rather than
+        // in the economy because the streak belongs to the hero — a temple's
+        // steady drip is precisely the thing it is not.
+        this.comboCount = 0;
+        this.comboTimer = 0;
+
+        // ── Ability state ───────────────────────
+        // Remaining cooldown per ability, in scaled milliseconds — so a cast at
+        // double game speed also recharges at double speed.
+        this.abilityCd = {};
+        for (const key of ABILITY_ORDER) this.abilityCd[key] = 0;
+        // Time left in the current cast. While it runs the auto-attack is
+        // suppressed: an ability the normal swing talks over is not an ability.
+        this.busy = 0;
+        this.invuln = 0;
+        this.dashing = false;
+        this.dashTarget = null;
+        this.dashSpeed = 0;
+
         this.collectField = scene.add.circle(pos.x, pos.y, this.collectRadius, 0xB388FF, 0.05);
         this.collectField.setStrokeStyle(1, 0xB388FF, 0.2);
         this.collectField.setDepth(1);
         this.collectField.setVisible(false);
+
+        // Streak readout, parked over the hero's head while a combo is live.
+        this.comboLabel = scene.add.text(pos.x, pos.y - 32, '', {
+            fontFamily: '"Press Start 2P"', fontSize: '8px',
+            color: '#FFD54F', stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0.5).setDepth(29).setVisible(false);
 
         this.targetPos = null;
         this.moving = false;
@@ -66,28 +95,156 @@ export class Hero {
     /** Named to match Temple, so one absorption scan can drive both. */
     get absorbRadius() { return this.collectRadius; }
 
+    get comboMult() { return comboMultiplier(this.comboCount); }
+
+    // ─── Abilities ──────────────────────────────────────
+    /** 0 → ready, 1 → just cast. Drives the cooldown wipe in the UI. */
+    cooldownPct(key) {
+        const a = HERO_ABILITIES[key];
+        if (!a) return 0;
+        return Phaser.Math.Clamp(this.abilityCd[key] / a.cooldown, 0, 1);
+    }
+
+    cooldownSeconds(key) {
+        return Math.ceil((this.abilityCd[key] ?? 0) / 1000);
+    }
+
+    isReady(key) {
+        return !this.isDead && this.busy <= 0 && (this.abilityCd[key] ?? 0) <= 0;
+    }
+
     /**
-     * A mote finished its flight into the hero. Credited at face value: the
-     * refining bonus is what a temple is for.
+     * Fire an ability. Returns false — and complains — when it cannot, so the
+     * keyboard and the sidebar button never have to duplicate the check.
+     */
+    useAbility(key) {
+        const a = HERO_ABILITIES[key];
+        if (!a) return false;
+        if (!this.isReady(key)) {
+            audio.play('deny');
+            return false;
+        }
+
+        if (key === 'dash') this._castDash(a);
+        else if (key === 'quake') this._castQuake(a);
+        else return false;
+
+        this.abilityCd[key] = a.cooldown;
+        this.busy = a.castTime;
+        this.scene.events.emit('hero-ability', key);
+        return true;
+    }
+
+    /**
+     * A burst toward the cursor. Deliberately not toward the move target: the
+     * point of a dash is reacting to where the trouble is right now, which is
+     * where you are already looking.
+     */
+    _castDash(a) {
+        // Through the camera: the canvas is a supersampled buffer, so the raw
+        // pointer is in a space several times larger than the world.
+        const raw = this.scene.input.activePointer;
+        const p = raw ? pointerWorld(this.scene, raw) : null;
+        let dx = (p ? p.x : this.posX + (this.sprite.flipX ? -1 : 1) * 50) - this.posX;
+        let dy = (p ? p.y : this.posY) - this.posY;
+
+        // Pointer parked on the sidebar, or exactly on the hero: fall back to
+        // whichever way he is facing rather than dashing nowhere.
+        if (Math.abs(dx) + Math.abs(dy) < 4) {
+            dx = this.sprite.flipX ? -1 : 1;
+            dy = 0;
+        }
+
+        const len = Math.hypot(dx, dy) || 1;
+        const reach = Math.min(a.range, Math.max(60, len));
+
+        this.dashTarget = {
+            x: Phaser.Math.Clamp(this.posX + (dx / len) * reach, 10, GAME_WIDTH - 10),
+            y: Phaser.Math.Clamp(this.posY + (dy / len) * reach, 12, GAME_HEIGHT - 10),
+        };
+        this.dashing = true;
+        this.dashSpeed = (reach / a.castTime) * 1000;
+        this.invuln = a.castTime + a.invulnExtra;
+
+        // A queued walk order would resume mid-dash and drag him back.
+        this.moving = false;
+        this.targetPos = null;
+
+        audio.play('dash');
+        this._dashTrail(a.color);
+    }
+
+    _dashTrail(color) {
+        for (let i = 0; i < 4; i++) {
+            const ghost = this.scene.add.sprite(this.posX, this.posY, 'hero')
+                .setScale(2).setDepth(18).setAlpha(0.45).setTint(color);
+            this.scene.tweens.add({
+                targets: ghost,
+                alpha: 0,
+                duration: 260,
+                delay: i * 45,
+                onComplete: () => ghost.destroy(),
+            });
+        }
+    }
+
+    /** Ground slam: damage plus a slow in a ring around the hero. */
+    _castQuake(a) {
+        audio.play('quake');
+        this.scene.cameras.main.shake(180, 0.006);
+
+        const ring = this.scene.add.circle(this.posX, this.posY, a.radius * 0.35, a.color, 0.18);
+        ring.setStrokeStyle(3, a.color, 0.9).setDepth(3);
+        this.scene.tweens.add({
+            targets: ring,
+            scaleX: a.radius / (a.radius * 0.35),
+            scaleY: a.radius / (a.radius * 0.35),
+            alpha: 0,
+            duration: 380,
+            ease: 'Quad.easeOut',
+            onComplete: () => ring.destroy(),
+        });
+
+        let hits = 0;
+        for (const enemy of this.scene.enemies) {
+            if (!enemy.alive) continue;
+            const d = Phaser.Math.Distance.Between(this.posX, this.posY, enemy.x, enemy.y);
+            if (d > a.radius) continue;
+            enemy.takeDamage(a.damage);
+            enemy.applySlow(a.slow, a.slowDuration);
+            hits++;
+        }
+
+        if (hits === 0 && this.scene.floating) {
+            this.scene.floating.show(this.posX, this.posY - 26, 'sin blancos', {
+                color: '#78909C', size: 7, rise: 16,
+            });
+        }
+    }
+
+    // ─── Life force ─────────────────────────────────────
+    /**
+     * A mote finished its flight into the hero. Credited at face value times
+     * whatever the current streak is worth: the refining bonus is what a temple
+     * is for, and the combo is what the hero has instead of one.
      */
     absorbMote(value) {
-        this.manaCollected += value;
-        this.scene.events.emit('mana-collected', value);
-        this.scene.events.emit('hero-collected', value);
+        this.comboCount = this.comboTimer > 0 ? this.comboCount + 1 : 1;
+        this.comboTimer = COMBO.window;
 
-        const t = this.scene.add.text(this.posX, this.posY - 22, `+${value}`, {
-            fontFamily: '"Press Start 2P"', fontSize: '6px',
-            color: '#B388FF', stroke: '#000000', strokeThickness: 2,
-        }).setOrigin(0.5).setDepth(28);
+        const mult = this.comboMult;
+        const gained = Math.round(value * mult);
+        const bonus = gained - value;
 
-        this.scene.tweens.add({
-            targets: t,
-            y: this.posY - 38,
-            alpha: 0,
-            duration: 700,
-            ease: 'Quad.easeOut',
-            onComplete: () => t.destroy(),
-        });
+        this.manaCollected += gained;
+        this.scene.events.emit('mana-collected', gained);
+        this.scene.events.emit('hero-collected', gained);
+        if (this.comboCount > 1) {
+            this.scene.events.emit('hero-combo', this.comboCount, mult, bonus);
+        }
+
+        this._showPickup(gained, bonus, mult);
+        this._refreshComboLabel();
 
         this.scene.tweens.add({
             targets: this.collectField,
@@ -98,8 +255,63 @@ export class Hero {
         });
     }
 
+    _showPickup(gained, bonus, mult) {
+        const f = this.scene.floating;
+        if (f) {
+            f.show(this.posX, this.posY - 22, `+${gained}`, {
+                color: bonus > 0 ? '#FFD54F' : '#B388FF',
+                size: bonus > 0 ? 9 : 7,
+                rise: 18,
+                jitter: 8,
+            });
+            if (bonus > 0) {
+                f.show(this.posX, this.posY - 34, `x${mult.toFixed(2)} +${bonus}`, {
+                    color: '#FFD54F', size: 7, rise: 22, duration: 780,
+                });
+            }
+            return;
+        }
+
+        // FloatingText is created by the scene; if it somehow is not there yet
+        // the pickup must still be visible.
+        const t = this.scene.add.text(this.posX, this.posY - 22, `+${gained}`, {
+            fontFamily: '"Press Start 2P"', fontSize: '8px',
+            color: '#B388FF', stroke: '#000000', strokeThickness: 2,
+        }).setOrigin(0.5).setDepth(28);
+        this.scene.tweens.add({
+            targets: t, y: this.posY - 38, alpha: 0, duration: 700,
+            ease: 'Quad.easeOut', onComplete: () => t.destroy(),
+        });
+    }
+
+    _refreshComboLabel() {
+        const live = this.comboCount > 1 && this.comboTimer > 0;
+        this.comboLabel.setVisible(live);
+        if (!live) return;
+
+        this.comboLabel.setText(`COMBO x${this.comboMult.toFixed(2)}`);
+        this.comboLabel.setScale(1.35);
+        this.scene.tweens.add({
+            targets: this.comboLabel,
+            scaleX: 1, scaleY: 1,
+            duration: 180,
+            ease: 'Back.easeOut',
+        });
+    }
+
+    _endCombo() {
+        const had = this.comboCount;
+        this.comboCount = 0;
+        this.comboLabel.setVisible(false);
+        if (had > 1) this.scene.events.emit('hero-combo-end', had);
+    }
+
     moveTo(worldX, worldY) {
         if (this.isDead) return;
+        // A dash owns the hero's motion until it lands; queueing a walk on top
+        // of it is how you end up teleporting back to where you started.
+        if (this.dashing) return;
+
         const tx = Phaser.Math.Clamp(worldX, 10, GAME_WIDTH - 10);
         const ty = Phaser.Math.Clamp(worldY, 12, GAME_HEIGHT - 10);
         this.targetPos = { x: tx, y: ty };
@@ -122,24 +334,22 @@ export class Hero {
     }
 
     update(time, delta) {
+        // Cooldowns keep ticking through death, so respawning does not hand
+        // back a hero with everything on full charge.
+        this._tickTimers(delta);
         if (this.isDead) return;
 
         // ── Movement ────────────────────────────
-        if (this.moving && this.targetPos) {
-            const dx = this.targetPos.x - this.posX;
-            const dy = this.targetPos.y - this.posY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            const step = this.speed * (delta / 1000);
-
-            if (dist <= step) {
-                this.posX = this.targetPos.x;
-                this.posY = this.targetPos.y;
-                this.moving = false;
-            } else {
-                this.posX += (dx / dist) * step;
-                this.posY += (dy / dist) * step;
+        if (this.dashing) {
+            this._stepToward(this.dashTarget, this.dashSpeed * (delta / 1000));
+            if (this.busy <= 0 || this._reached(this.dashTarget)) {
+                this.dashing = false;
+                this.dashTarget = null;
             }
-            if (Math.abs(dx) > 1) this.sprite.flipX = dx < 0;
+        } else if (this.moving && this.targetPos) {
+            if (this._stepToward(this.targetPos, this.speed * (delta / 1000))) {
+                this.moving = false;
+            }
         }
 
         this.posX = Phaser.Math.Clamp(this.posX, 10, GAME_WIDTH - 10);
@@ -148,7 +358,8 @@ export class Hero {
         this._syncSprite(delta);
 
         // ── Auto-attack nearby enemies ──────────
-        if (time - this.lastAttack >= this.attackRate) {
+        // Suppressed mid-cast: the ability is the action right now.
+        if (this.busy <= 0 && time - this.lastAttack >= this.attackRate) {
             const target = this._findNearest();
             if (target) {
                 target.takeDamage(this.attackDamage);
@@ -183,10 +394,51 @@ export class Hero {
         this._checkEmpowerment();
     }
 
+    /** Cooldowns, cast time, invulnerability and the combo window. */
+    _tickTimers(delta) {
+        for (const key of ABILITY_ORDER) {
+            if (this.abilityCd[key] > 0) {
+                this.abilityCd[key] = Math.max(0, this.abilityCd[key] - delta);
+            }
+        }
+        if (this.busy > 0) this.busy = Math.max(0, this.busy - delta);
+        if (this.invuln > 0) this.invuln = Math.max(0, this.invuln - delta);
+
+        if (this.comboTimer > 0) {
+            this.comboTimer = Math.max(0, this.comboTimer - delta);
+            if (this.comboTimer === 0) this._endCombo();
+        }
+    }
+
+    /** Moves toward a point; true once it is reached. */
+    _stepToward(target, step) {
+        if (!target) return true;
+        const dx = target.x - this.posX;
+        const dy = target.y - this.posY;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist <= step || dist < 0.001) {
+            this.posX = target.x;
+            this.posY = target.y;
+            if (Math.abs(dx) > 1) this.sprite.flipX = dx < 0;
+            return true;
+        }
+
+        this.posX += (dx / dist) * step;
+        this.posY += (dy / dist) * step;
+        if (Math.abs(dx) > 1) this.sprite.flipX = dx < 0;
+        return false;
+    }
+
+    _reached(target) {
+        if (!target) return true;
+        return Math.hypot(target.x - this.posX, target.y - this.posY) < 1;
+    }
+
     /** Pushes logical position + idle bob + lunge offset onto the sprite. */
     _syncSprite(delta) {
-        this.bobPhase += (delta / 1000) * (this.moving ? 9 : 3.4);
-        const bob = this.moving
+        this.bobPhase += (delta / 1000) * (this.moving || this.dashing ? 9 : 3.4);
+        const bob = this.moving || this.dashing
             ? -Math.abs(Math.sin(this.bobPhase)) * 2   // little hop while walking
             : Math.sin(this.bobPhase) * 1.5;           // slow float while idle
 
@@ -194,12 +446,14 @@ export class Hero {
         this.sprite.y = this.posY + this.lunge.y + bob;
         this.shadow.x = this.posX;
         this.shadow.y = this.posY + 14;
-        this.shadow.setScale(this.moving ? 0.9 : 1, 1);
+        this.shadow.setScale(this.moving || this.dashing ? 0.9 : 1, 1);
 
         // The pickup field is only drawn when there is something to pick up —
         // a circle trailing the hero at all times is noise the rest of the time.
         this.collectField.setPosition(this.posX, this.posY);
         this.collectField.setVisible(this.scene.manaMotes.length > 0);
+
+        this.comboLabel.setPosition(this.posX, this.posY - 32);
 
         this._updateHpBar();
     }
@@ -243,6 +497,17 @@ export class Hero {
 
     takeDamage(amount) {
         if (this.isDead) return;
+
+        // Mid-dash he is not there to be hit — that is what the dash is for.
+        if (this.invuln > 0) {
+            if (this.scene.floating) {
+                this.scene.floating.show(this.posX, this.posY - 24, 'esquiva', {
+                    color: '#4FC3F7', size: 7, rise: 18,
+                });
+            }
+            return;
+        }
+
         this.hp -= amount;
 
         // setTintFill was removed in Phaser 4 — FILL is now a tint mode
@@ -263,6 +528,12 @@ export class Hero {
         this.isDead = true;
         this.moving = false;
         this.targetPos = null;
+        this.dashing = false;
+        this.dashTarget = null;
+        this.busy = 0;
+        this.invuln = 0;
+        this.comboTimer = 0;
+        this._endCombo();
         this.sprite.setVisible(false);
         this.shadow.setVisible(false);
         this.hpBg.setVisible(false);

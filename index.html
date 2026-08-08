@@ -10,7 +10,27 @@
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-    <div id="game-container" oncontextmenu="return false;"></div>
+    <!--
+      The size control lives out here rather than in the sidebar for two
+      reasons: the 920x480 canvas is full to the pixel, and native HTML is drawn
+      at the screen's own resolution instead of being magnified along with the
+      game, so it stays legible at every scale.
+    -->
+    <div id="shell">
+        <div id="game-container" oncontextmenu="return false;"></div>
+
+        <div id="size-bar">
+            <label for="size-range">TAMAÑO</label>
+            <input type="range" id="size-range" list="size-ticks"
+                   min="1" max="4" step="0.01" value="2"
+                   aria-label="Tamaño del juego">
+            <datalist id="size-ticks"></datalist>
+            <output id="size-readout" for="size-range"></output>
+            <button type="button" id="size-crisp" title="El tamaño más grande sin deformar los píxeles">NÍTIDO</button>
+            <button type="button" id="size-fill" title="Ocupar toda la ventana">LLENAR</button>
+        </div>
+    </div>
+
     <script type="module" src="/js/main.js"></script>
 </body>
 </html>

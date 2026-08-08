@@ -103,8 +103,11 @@ export class Temple {
             onComplete: () => { if (this.glow) this.glow.fillAlpha = 0.18; },
         });
 
+        // 8px, not 6: Press Start 2P is drawn on an 8px grid, so it is only
+        // pixel-exact at multiples of 8 — at 6 the glyphs get resampled and the
+        // number comes out furry. Nothing here constrains the width.
         const t = this.scene.add.text(this.x, this.y - 14, `+${gained}`, {
-            fontFamily: '"Press Start 2P"', fontSize: '6px',
+            fontFamily: '"Press Start 2P"', fontSize: '8px',
             color: '#B388FF', stroke: '#000000', strokeThickness: 2,
         }).setOrigin(0.5).setDepth(28);
 

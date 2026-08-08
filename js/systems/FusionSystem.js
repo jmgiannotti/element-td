@@ -84,7 +84,7 @@ export class FusionSystem {
 
         const text = this.scene.add.text(midX, midY - 22, label, {
             fontFamily: '"Press Start 2P"',
-            fontSize: '7px',
+            fontSize: '8px',
             color: '#FFD700',
             stroke: '#000000',
             strokeThickness: 2,
@@ -93,6 +93,14 @@ export class FusionSystem {
         // Highlight source buildings
         b1.setFusionHint(true);
         b2.setFusionHint(true);
+
+        // Hovering the badge asks the question the badge implies: what do I get?
+        // Answered by UIScene, which owns every tooltip on screen — this only
+        // hands over the pair and lets it do the comparison.
+        circle.on('pointerover', () => this.scene.events.emit('fusion-hover', {
+            b1, b2, result: resultElement, kind, x: midX, y: midY,
+        }));
+        circle.on('pointerout', () => this.scene.events.emit('fusion-hover', null));
 
         // On click → fuse. The badge sits on the seam between the two tiles, so
         // while the sell cursor is armed it has to yield: a click there is
@@ -148,6 +156,11 @@ export class FusionSystem {
     }
 
     clearIndicators() {
+        // Taking a fusion destroys the badge the cursor was over, and no
+        // pointerout ever fires for an object that stopped existing — so the
+        // answer has to be withdrawn explicitly or it hangs there forever.
+        if (this.indicators.length > 0) this.scene.events.emit('fusion-hover', null);
+
         for (const ind of this.indicators) {
             ind.circle.destroy();
             ind.label.destroy();

@@ -1,4 +1,4 @@
-# 📝 Épicas y User Stories - Nuevas Mecánicas TD
+//-# 📝 Épicas y User Stories - Nuevas Mecánicas TD
 
 A continuación se detallan las historias de usuario (User Stories) para las nuevas mecánicas propuestas. Están agrupadas por "Épicas" (Epics) para facilitar su gestión en tableros como Jira, Trello o Asana.
 
@@ -28,7 +28,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 
 ### US 0.3: Feedback Visual de Rango y Daño
 **Como** jugador,
-**Quiero** ver el rango exacto de mis torres/templos al seleccionarlos y ver el daño numérico flotante cuando impactan a un enemigo,
+**Quiero** ver el rango exacto de mis torres/templos al seleccionarlos, el nivel de la torre/templo e info que tiene, en caso de combinacion cuales serian los nuevos stats y ver el daño numérico flotante cuando impactan a un enemigo,
 **Para** medir la efectividad de mis defensas y sentir el impacto real al comprar una mejora global.
 
 > **Criterios de Aceptación:**

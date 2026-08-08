@@ -1,4 +1,5 @@
 import * as Phaser from 'phaser';
+import { effectOf, effectMultiplier } from '../data/Elements.js';
 
 export class Projectile {
     /**
@@ -48,12 +49,12 @@ export class Projectile {
         if (!this.alive) return;
 
         if (this.target && this.target.alive) {
-            // Resistance check
-            const resisted =
-                this.target.data.resistance === this.towerData.element;
-            const dmg = resisted ? this.damage * 0.5 : this.damage;
+            // Elemental match-up. The effect travels with the damage so the
+            // number that pops off the enemy can explain itself.
+            const effect = effectOf(this.towerData.element, this.target.data);
+            const dmg = this.damage * effectMultiplier(effect);
 
-            this.target.takeDamage(dmg);
+            this.target.takeDamage(dmg, { effect });
 
             // Apply specials
             switch (this.towerData.special) {
@@ -91,7 +92,10 @@ export class Projectile {
                 this.target.x, this.target.y, enemy.x, enemy.y
             );
             if (d <= radius) {
-                enemy.takeDamage(this.damage * 0.4);
+                // Splash is the same element as the shot that caused it, so the
+                // match-up is re-read per victim rather than inherited.
+                const effect = effectOf(this.towerData.element, enemy.data);
+                enemy.takeDamage(this.damage * 0.4 * effectMultiplier(effect), { effect });
             }
         }
     }
@@ -108,7 +112,8 @@ export class Projectile {
             if (!enemy.alive || hit.has(enemy)) continue;
             const d = Phaser.Math.Distance.Between(lastX, lastY, enemy.x, enemy.y);
             if (d <= 90) {
-                enemy.takeDamage(chainDmg);
+                const effect = effectOf(this.towerData.element, enemy.data);
+                enemy.takeDamage(chainDmg * effectMultiplier(effect), { effect });
                 // Visual chain line
                 const line = this.scene.add.line(
                     0, 0, lastX, lastY, enemy.x, enemy.y, 0xFFD54F, 0.7

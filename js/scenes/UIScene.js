@@ -6,6 +6,13 @@ import {
 import { safeTexture } from '../systems/TextureGuard.js';
 import { audio } from '../systems/AudioSystem.js';
 import { BARRICADE_COST, SELL_REFUND } from '../systems/EconomySystem.js';
+import { ENEMY_DATA } from '../data/EnemyData.js';
+import {
+    EFFECT, EFFECT_MARK, EFFECT_LABEL, EFFECT_COLOR,
+    SUPER_MULT, RESIST_MULT, elementSymbol, elementName,
+} from '../data/Elements.js';
+import { HERO_ABILITIES, ABILITY_ORDER, COMBO, abilityHeading } from '../data/HeroData.js';
+import { applyViewport } from '../systems/Viewport.js';
 
 const FONT = '"Press Start 2P"';
 const MANA = '✦';
@@ -24,29 +31,60 @@ const INNER_W = BAR_W - PAD * 2;   // 256
 const MAP_CX = 320;
 const MAP_CY = 240;
 
+// The bottom of the sidebar, from the divider at y=384 down to the 480 edge.
+// Three rows have to fit: the toggles, the next-wave readout, and the start
+// button — named here because inserting the readout moved all three.
+const ROW_CONTROLS = 398;
+const ROW_PREVIEW = 423;
+const ROW_WAVE_BTN = 452;
+const WAVE_BTN_H = 34;
+
+// Hero ability bar, over the bottom-left of the map. The sidebar is full, and
+// the two cells it covers are the only corner of the board no route touches.
+const HUD_X = 22;
+const HUD_Y = 455;
+const HUD_SIZE = 30;
+const HUD_GAP = 36;
+
 export class UIScene extends Phaser.Scene {
     constructor() {
         super('UIScene');
     }
 
     create(data) {
+        // Same supersampled buffer as GameScene, so this camera needs the same
+        // zoom — the sidebar's coordinates are all in the 920×480 world.
+        applyViewport(this);
+
         /** @type {import('./GameScene.js').GameScene} */
         this.gs = data.gameScene;
 
         this.upgradePanel = null;
         this.helpPanel = null;
+        this.helpTab = null;
         this.notifSlots = [];
+        // One-shot teaching moments, each said the first time it can be seen.
+        this.saidOnce = {};
 
         this._buildSidebar();
         this._buildResourcePanel();
         this._buildTowerButtons();
         this._buildTempleButtons();
         this._buildGlobalControls();
+        this._buildWavePreview();
         this._buildWaveButton();
+        this._buildHeroHud();
+        this._buildTutorialBanner();
         this._registerEvents();
 
         this._updateAffordability();
         this._updateManaBar();
+        this._refreshWavePreview();
+    }
+
+    /** Cooldown wipes have to be redrawn every frame; nothing else here does. */
+    update() {
+        this._refreshHeroHud();
     }
 
     // ─── Shared chrome helpers ──────────────────────────
@@ -58,7 +96,7 @@ export class UIScene extends Phaser.Scene {
         // A colour rule beside the label reads as a section break at a glance,
         // which identical grey words in a column never did.
         this.add.text(LEFT, y, text, {
-            fontFamily: FONT, fontSize: '10px', color,
+            fontFamily: FONT, fontSize: '8px', color,
         }).setOrigin(0, 0.5);
 
         const textW = text.length * 10 + 8;
@@ -70,7 +108,7 @@ export class UIScene extends Phaser.Scene {
         this.add.rectangle(BAR_X, 240, 2, 480, 0x2a2a4a).setDepth(0);
 
         this.add.text(CX, 18, 'ELEMENTAL TD', {
-            fontFamily: FONT, fontSize: '12px', color: '#FFD54F',
+            fontFamily: FONT, fontSize: '8px', color: '#FFD54F',
         }).setOrigin(0.5);
 
         this._divider(32);
@@ -94,7 +132,7 @@ export class UIScene extends Phaser.Scene {
         }).setOrigin(0.5);
 
         this.statusText = this.add.text(CX, 140, '', {
-            fontFamily: FONT, fontSize: '10px', color: '#B0BEC5',
+            fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
         }).setOrigin(0.5);
         this._updateStatus();
 
@@ -106,7 +144,7 @@ export class UIScene extends Phaser.Scene {
         card.setStrokeStyle(1, stroke);
 
         this.add.text(LEFT + 10, y, label, {
-            fontFamily: FONT, fontSize: '10px', color,
+            fontFamily: FONT, fontSize: '8px', color,
         }).setOrigin(0, 0.5);
 
         return this.add.text(RIGHT - 10, y, '0', {
@@ -182,7 +220,7 @@ export class UIScene extends Phaser.Scene {
         ).setScale(2.4);
 
         const cost = this.add.text(x, y + 20, `${td.cost}`, {
-            fontFamily: FONT, fontSize: '10px', color: '#FFD700',
+            fontFamily: FONT, fontSize: '8px', color: '#FFD700',
             stroke: '#000000', strokeThickness: 3,
         }).setOrigin(0.5);
 
@@ -206,10 +244,10 @@ export class UIScene extends Phaser.Scene {
             .setInteractive({ useHandCursor: true });
         const icon = this.add.sprite(l + 16, y, 'tile_barricade').setScale(0.85);
         this.add.text(l + 34, y, 'BARRICADA', {
-            fontFamily: FONT, fontSize: '9px', color: '#ECEFF1',
+            fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
         }).setOrigin(0, 0.5);
         const cost = this.add.text(l + w - 8, y, `${BARRICADE_COST}`, {
-            fontFamily: FONT, fontSize: '10px', color: '#FFD700',
+            fontFamily: FONT, fontSize: '8px', color: '#FFD700',
         }).setOrigin(1, 0.5);
 
         const btn = { bg, icon, cost, kind: 'barricade' };
@@ -235,7 +273,7 @@ export class UIScene extends Phaser.Scene {
             .setStrokeStyle(2, 0x3a3a5a)
             .setInteractive({ useHandCursor: true });
         const label = this.add.text(x, y, 'VENDER', {
-            fontFamily: FONT, fontSize: '9px', color: '#ECEFF1',
+            fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
         }).setOrigin(0.5);
 
         const btn = { bg, label, kind: 'sell' };
@@ -264,7 +302,7 @@ export class UIScene extends Phaser.Scene {
         });
 
         this.templeCostText = this.add.text(CX, 372, '', {
-            fontFamily: FONT, fontSize: '9px', color: '#FFD700',
+            fontFamily: FONT, fontSize: '8px', color: '#FFD700',
         }).setOrigin(0.5);
 
         this._divider(384);
@@ -351,9 +389,9 @@ export class UIScene extends Phaser.Scene {
     // ─── Global controls ────────────────────────────────
     _buildGlobalControls() {
         const mk = (x, w, label, onClick) => {
-            const bg = this.add.rectangle(x + w / 2, 404, w, 26, 0x333344)
+            const bg = this.add.rectangle(x + w / 2, ROW_CONTROLS, w, 26, 0x333344)
                 .setInteractive({ useHandCursor: true });
-            const txt = this.add.text(x + w / 2, 404, label, {
+            const txt = this.add.text(x + w / 2, ROW_CONTROLS, label, {
                 fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
             }).setOrigin(0.5);
             bg.on('pointerdown', () => { audio.play('click'); onClick(bg, txt); });
@@ -397,14 +435,145 @@ export class UIScene extends Phaser.Scene {
         mk(LEFT + 216, 40, '?', () => this._openHelpPanel());
     }
 
+    // ─── Next-wave preview ──────────────────────────────
+    /**
+     * What is coming, and of which element — beside the button that summons it,
+     * because that is the moment the answer changes what you do.
+     *
+     * Rebuilt rather than mutated on every wave boundary: the number of enemy
+     * groups changes from wave to wave, so there is no stable set of slots to
+     * keep around.
+     */
+    _buildWavePreview() {
+        this.previewLabel = this.add.text(LEFT, ROW_PREVIEW, '', {
+            fontFamily: FONT, fontSize: '8px', color: '#78909C',
+        }).setOrigin(0, 0.5);
+
+        this.previewEntries = [];
+    }
+
+    _refreshWavePreview() {
+        for (const e of this.previewEntries) e.destroy();
+        this.previewEntries = [];
+
+        const wm = this.gs.waveManager;
+        const comp = wm.nextComposition;
+
+        if (!comp) {
+            this.previewLabel.setText('ULTIMA OLEADA').setColor('#FFD54F');
+            return;
+        }
+
+        this.previewLabel.setText(`PROX ${wm.nextWaveNumber}`).setColor('#78909C');
+
+        // Whatever room is left after the label, split evenly.
+        const startX = LEFT + 54;
+        const span = RIGHT - startX;
+        const step = Math.min(52, span / Math.max(1, comp.length));
+
+        comp.forEach((group, i) => {
+            const data = ENEMY_DATA[group.type];
+            if (!data) return;
+            const x = startX + step * i + 12;
+
+            const icon = this.add.sprite(x, ROW_PREVIEW, safeTexture(this, `enemy_${group.type}`, 'enemy_slime'))
+                .setScale(1.25)
+                .setInteractive({ useHandCursor: false });
+
+            // The element rides on the icon's shoulder as a glyph, not as a
+            // tint: an enemy already has a colour, and it is not its element's.
+            const glyph = this.add.text(x + 9, ROW_PREVIEW - 8, elementSymbol(data.element), {
+                fontFamily: FONT, fontSize: '8px',
+            }).setOrigin(0.5);
+
+            const count = this.add.text(x + 12, ROW_PREVIEW + 6, `x${group.count}`, {
+                fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
+                stroke: '#12122a', strokeThickness: 3,
+            }).setOrigin(0, 0.5);
+
+            icon.on('pointerover', () => this._showEnemyTooltip(group.type, x + 40, ROW_PREVIEW - 58));
+            icon.on('pointerout', () => this._hideTooltip());
+
+            this.previewEntries.push(icon, glyph, count);
+        });
+    }
+
+    // ─── Fusion preview ─────────────────────────────────
+    /**
+     * What the pair under the badge would become, next to what it is now.
+     *
+     * A fusion is irreversible and consumes two buildings you paid for, so the
+     * before/after has to be available *before* the click — quoting only the
+     * result would still leave the actual question ("is that better than what I
+     * already have?") unanswered.
+     */
+    _showFusionTooltip(info) {
+        const { b1, b2, result, kind } = info;
+        const ts = this.gs.templeSystem;
+        const r1 = (n) => Math.round(n);
+        let lines;
+
+        if (kind === 'temple') {
+            const d = TEMPLE_DATA[result];
+            const a = TEMPLE_DATA[b1.element];
+            const b = TEMPLE_DATA[b2.element];
+            const pct = (v) => Math.round(v * 100);
+            lines = [
+                `${d.emoji} ${d.name}`,
+                `Alcance ${d.absorbRadius}   antes ${a.absorbRadius}/${b.absorbRadius}`,
+                `Refina +${pct(d.absorbBonus)}%   antes +${pct(a.absorbBonus)}%`,
+                `Abre mejoras de ${d.shortName}`,
+                'Libera 1 casilla',
+            ];
+        } else {
+            const d = TOWER_DATA[result];
+            // The hybrid's own element carries its own upgrade tree, so its
+            // numbers are quoted through that tree rather than the parents'.
+            const dmg = d.damage * ts.multiplier(result, 'damage');
+            const rng = d.range * ts.multiplier(result, 'range');
+            const rate = d.fireRate * ts.multiplier(result, 'fireRate');
+            lines = [
+                `${d.emoji} ${d.name}`,
+                `DMG ${r1(dmg)}   antes ${r1(b1.damage)}+${r1(b2.damage)}`,
+                `RNG ${r1(rng)}   antes ${r1(b1.range)}/${r1(b2.range)}`,
+                `${(1000 / rate).toFixed(2)}/s   antes ${b1.shotsPerSecond.toFixed(2)}+${b2.shotsPerSecond.toFixed(2)}`,
+                d.specialDesc,
+                'Libera 1 casilla',
+            ];
+        }
+
+        // Opens away from the nearer edge, so a card on a badge at the far left
+        // of the board is not half off it.
+        const leftSide = info.x < 300;
+        this._showTooltip(
+            lines,
+            leftSide ? info.x + 16 : info.x - 16,
+            Phaser.Math.Clamp(info.y - 56, 66, 400),
+            leftSide ? 0 : 1
+        );
+    }
+
+    _showEnemyTooltip(type, x, y) {
+        const d = ENEMY_DATA[type];
+        const list = (els) => els.map(e => `${elementSymbol(e)}${elementName(e)}`).join(' ');
+        const lines = [
+            d.name,
+            `Clase: ${elementSymbol(d.element)}${elementName(d.element)}`,
+            `${d.hp} HP  ·  vel ${d.speed}`,
+        ];
+        if (d.weakness?.length) lines.push(`${EFFECT_MARK[EFFECT.SUPER]} debil: ${list(d.weakness)}`);
+        if (d.resistance?.length) lines.push(`${EFFECT_MARK[EFFECT.RESIST]} resiste: ${list(d.resistance)}`);
+        this._showTooltip(lines, x, y);
+    }
+
     // ─── Wave button ────────────────────────────────────
     _buildWaveButton() {
-        this.waveBtnBg = this.add.rectangle(CX, 448, INNER_W, 40, 0x2E7D32);
+        this.waveBtnBg = this.add.rectangle(CX, ROW_WAVE_BTN, INNER_W, WAVE_BTN_H, 0x2E7D32);
         this.waveBtnBg.setStrokeStyle(2, 0x4CAF50);
         this.waveBtnBg.setInteractive({ useHandCursor: true });
 
-        this.waveBtnText = this.add.text(CX, 448, 'OLEADA ▶', {
-            fontFamily: FONT, fontSize: '12px', color: '#FFFFFF',
+        this.waveBtnText = this.add.text(CX, ROW_WAVE_BTN, 'OLEADA ▶', {
+            fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
         }).setOrigin(0.5);
 
         this.waveBtnBg.on('pointerdown', () => {
@@ -415,6 +584,171 @@ export class UIScene extends Phaser.Scene {
         });
         this.waveBtnBg.on('pointerout', () => {
             this.waveBtnBg.fillColor = this.gs.waveManager.waveActive ? 0x333344 : 0x2E7D32;
+        });
+    }
+
+    // ─── Hero ability bar ───────────────────────────────
+    /**
+     * Lives over the board rather than in the sidebar. The sidebar is full to
+     * the pixel, and an ability bar belongs next to the thing it drives anyway —
+     * you fire these while watching the lane, not while reading a menu.
+     */
+    _buildHeroHud() {
+        this.add.text(HUD_X - HUD_SIZE / 2, HUD_Y - HUD_SIZE / 2 - 9, 'HEROE', {
+            fontFamily: FONT, fontSize: '8px', color: '#B388FF',
+            stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0, 0.5).setDepth(50);
+
+        this.abilityBtns = ABILITY_ORDER.map((key, i) => {
+            const a = HERO_ABILITIES[key];
+            const x = HUD_X + i * HUD_GAP;
+
+            const bg = this.add.rectangle(x, HUD_Y, HUD_SIZE, HUD_SIZE, 0x12122a, 0.86)
+                .setStrokeStyle(2, a.color)
+                .setDepth(50)
+                .setInteractive({ useHandCursor: true });
+
+            const glyph = this.add.text(x, HUD_Y - 3, a.glyph, {
+                fontFamily: FONT, fontSize: '8px', color: a.colorHex,
+                stroke: '#000000', strokeThickness: 3,
+            }).setOrigin(0.5).setDepth(52);
+
+            const hot = this.add.text(x, HUD_Y + 10, a.hotkey, {
+                fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
+                stroke: '#000000', strokeThickness: 3,
+            }).setOrigin(0.5).setDepth(52);
+
+            // Cooldown wipe: anchored at the bottom and grown upward, so the
+            // shrinking clear area reads as the ability filling back up.
+            const wipe = this.add.rectangle(x, HUD_Y + HUD_SIZE / 2, HUD_SIZE - 4, 0, 0x000000, 0.66)
+                .setOrigin(0.5, 1)
+                .setDepth(51);
+
+            const timer = this.add.text(x, HUD_Y, '', {
+                fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
+                stroke: '#000000', strokeThickness: 3,
+            }).setOrigin(0.5).setDepth(53);
+
+            bg.on('pointerdown', (pointer) => {
+                pointer.event.stopPropagation();
+                this.gs.events.emit('use-ability', key);
+            });
+            bg.on('pointerover', () => this._showTooltip(
+                [abilityHeading(key), ...a.desc], HUD_X - HUD_SIZE / 2, HUD_Y - 48, 0
+            ));
+            bg.on('pointerout', () => this._hideTooltip());
+
+            return { key, ability: a, bg, glyph, hot, wipe, timer };
+        });
+    }
+
+    _refreshHeroHud() {
+        if (!this.abilityBtns) return;
+        const hero = this.gs.hero;
+        if (!hero) return;
+
+        for (const btn of this.abilityBtns) {
+            const pct = hero.cooldownPct(btn.key);
+            btn.wipe.height = (HUD_SIZE - 4) * pct;
+
+            const cooling = pct > 0;
+            btn.timer.setText(cooling ? `${hero.cooldownSeconds(btn.key)}` : '');
+            btn.glyph.setAlpha(cooling ? 0.35 : 1);
+
+            // Dead or mid-cast is a different refusal from cooling down, and the
+            // border is where that difference is legible.
+            const usable = hero.isReady(btn.key);
+            btn.bg.setStrokeStyle(2, usable ? btn.ability.color : 0x3a3a5a);
+            btn.hot.setColor(usable ? '#ECEFF1' : '#555566');
+        }
+    }
+
+    // ─── Tutorial ───────────────────────────────────────
+    /**
+     * One line at the foot of the board, plus a way out of it. Everything the
+     * tutorial has to say is a single instruction about the thing you are
+     * looking at, so it never needs more room than this.
+     */
+    _buildTutorialBanner() {
+        this.tutorialBox = this.add.rectangle(344, 456, 470, 36, 0x0a0a1a, 0.9)
+            .setStrokeStyle(1, 0xB388FF)
+            .setDepth(70)
+            .setVisible(false);
+
+        // Wrapped narrow enough to leave the skip button its own column: a
+        // three-line instruction must never run underneath the way out of it.
+        this.tutorialText = this.add.text(310, 456, '', {
+            fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
+            align: 'center', lineSpacing: 5,
+            wordWrap: { width: 380 },
+        }).setOrigin(0.5).setDepth(71).setVisible(false);
+
+        this.tutorialSkipBg = this.add.rectangle(548, 456, 52, 20, 0x2a2a4a)
+            .setStrokeStyle(1, 0x555577)
+            .setDepth(71)
+            .setVisible(false)
+            .setInteractive({ useHandCursor: true });
+
+        this.tutorialSkip = this.add.text(548, 456, 'SALTAR', {
+            fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
+        }).setOrigin(0.5).setDepth(72).setVisible(false);
+
+        this.tutorialSkipBg.on('pointerdown', (pointer) => {
+            pointer.event.stopPropagation();
+            audio.play('click');
+            this.gs.events.emit('tutorial-skip');
+        });
+        this.tutorialSkipBg.on('pointerover', () => { this.tutorialSkipBg.fillColor = 0x3a3a5a; });
+        this.tutorialSkipBg.on('pointerout', () => { this.tutorialSkipBg.fillColor = 0x2a2a4a; });
+
+        // Ring drawn around whichever part of the sidebar the current step is
+        // asking you to press.
+        this.tutorialRing = this.add.rectangle(0, 0, 10, 10, 0x000000, 0)
+            .setStrokeStyle(2, 0xFFD54F)
+            .setDepth(69)
+            .setVisible(false);
+    }
+
+    _showTutorialStep(text, highlight) {
+        const on = !!text;
+        this.tutorialBox.setVisible(on);
+        this.tutorialText.setVisible(on).setText(text ?? '');
+        this.tutorialSkipBg.setVisible(on);
+        this.tutorialSkip.setVisible(on);
+        this._setTutorialHighlight(highlight);
+    }
+
+    _setTutorialHighlight(target) {
+        if (this.tutorialRingTween) {
+            this.tutorialRingTween.stop();
+            this.tutorialRingTween = null;
+        }
+
+        // Only one region is ever pointed at, so a lookup beats a registry.
+        const REGIONS = {
+            temples: { x: CX, y: 328, w: INNER_W + 6, h: 68 },
+            towers: { x: CX, y: 202, w: INNER_W + 6, h: 68 },
+        };
+        const region = target ? REGIONS[target] : null;
+
+        if (!region) {
+            this.tutorialRing.setVisible(false).setAlpha(1);
+            return;
+        }
+
+        this.tutorialRing
+            .setPosition(region.x, region.y)
+            .setSize(region.w, region.h)
+            .setAlpha(1)
+            .setVisible(true);
+
+        this.tutorialRingTween = this.tweens.add({
+            targets: this.tutorialRing,
+            alpha: 0.25,
+            duration: 620,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut',
         });
     }
 
@@ -437,9 +771,13 @@ export class UIScene extends Phaser.Scene {
             this._updateStatus();
             this.waveBtnBg.fillColor = 0x333344;
             this.waveBtnText.setColor('#555555');
+            // currentWave has already advanced, so the readout now describes the
+            // wave after this one — which is the one still worth preparing for.
+            this._refreshWavePreview();
         });
 
         this.gs.events.on('wave-complete', () => {
+            this._refreshWavePreview();
             if (this.gs.waveManager.isLastWave) return;
 
             this.waveBtnBg.fillColor = 0x2E7D32;
@@ -478,15 +816,56 @@ export class UIScene extends Phaser.Scene {
             this._updateManaBar();
         });
 
+        this.gs.events.on('fusion-hover', (info) => {
+            if (info) this._showFusionTooltip(info);
+            else this._hideTooltip();
+        });
+
         this.gs.events.on('open-temple', (el) => this._openUpgradePanel(el));
         this.gs.events.on('hint', (text, color) => this._flashNotification(text, color ?? '#B388FF'));
 
         // Said once, the first time it happens: the floating +N shows that the
-        // hero collects, but not that he collects at face value.
+        // hero collects, but not that he collects at face value. While the
+        // tutorial is up it is teaching exactly this, so the hint stays quiet.
         this.gs.events.on('hero-collected', () => {
             if (this.heroHintShown) return;
+            if (this.gs.tutorial && this.gs.tutorial.active) return;
             this.heroHintShown = true;
             this._flashNotification('El heroe recoge ✦ sin refinar', '#B388FF');
+        });
+
+        // ── Elemental match-ups ─────────────────
+        // Colour and an arrow only mean something once. Named the first time
+        // each kind of hit happens, then never again.
+        this.gs.events.on('damage-effect', (effect) => {
+            const key = `effect-${effect}`;
+            if (this.saidOnce[key]) return;
+            this.saidOnce[key] = true;
+            const pct = effect === EFFECT.SUPER
+                ? `+${Math.round((SUPER_MULT - 1) * 100)}%`
+                : `-${Math.round((1 - RESIST_MULT) * 100)}%`;
+            this._flashNotification(
+                `${EFFECT_MARK[effect]} ${EFFECT_LABEL[effect]}: ${pct} daño`,
+                EFFECT_COLOR[effect]
+            );
+        });
+
+        // ── Hero combo ──────────────────────────
+        this.gs.events.on('hero-combo', (count, mult) => {
+            if (this.saidOnce.combo) return;
+            this.saidOnce.combo = true;
+            this._flashNotification(
+                `Combo x${mult.toFixed(2)}: seguí recogiendo (${COMBO.window / 1000}s)`,
+                '#FFD54F'
+            );
+        });
+
+        // ── Tutorial ────────────────────────────
+        this.gs.events.on('tutorial-step', (text, highlight) => {
+            this._showTutorialStep(text, highlight);
+        });
+        this.gs.events.on('tutorial-done', () => {
+            this._flashNotification('Tutorial completo. Suerte.', '#4CAF50');
         });
 
         this.gs.events.on('temple-upgraded', (el, track, lvl) => {
@@ -511,11 +890,13 @@ export class UIScene extends Phaser.Scene {
         this.gs.events.on('game-over', () => {
             this._closeUpgradePanel();
             this._closeHelpPanel();
+            this._showTutorialStep(null, null);
             this._showEndScreen('¡DERROTA!', '#EF5350');
         });
         this.gs.events.on('all-waves-complete', () => {
             this._closeUpgradePanel();
             this._closeHelpPanel();
+            this._showTutorialStep(null, null);
             this._showEndScreen('¡VICTORIA!', '#4CAF50');
         });
     }
@@ -553,7 +934,7 @@ export class UIScene extends Phaser.Scene {
             .setStrokeStyle(1, 0x555577)
             .setInteractive({ useHandCursor: true });
         const txt = this.add.text(0, y, 'CERRAR', {
-            fontFamily: FONT, fontSize: '10px', color: '#FFFFFF',
+            fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
         }).setOrigin(0.5);
         bg.on('pointerdown', () => { audio.play('click'); onClick(); });
         bg.on('pointerover', () => { bg.fillColor = 0x44445a; });
@@ -561,34 +942,78 @@ export class UIScene extends Phaser.Scene {
         container.add([bg, txt]);
     }
 
-    // ─── Fusion reference (help overlay) ────────────────
+    // ─── Reference overlay ──────────────────────────────
     /**
      * The fusion table used to sit permanently in the sidebar at 6px, where it
      * was barely legible and ate the room every other section needed. As an
      * overlay it can be read at a usable size and costs nothing when closed.
+     *
+     * Three tabs now, because there are three sets of rules a player has to be
+     * able to look up mid-game and none of them fit in a tooltip: what fuses
+     * with what, which element beats which, and what the hero can do.
      */
-    _openHelpPanel() {
-        if (this.helpPanel) { this._closeHelpPanel(); return; }
-        this._closeUpgradePanel();
+    _openHelpPanel(tab = 'fusion') {
+        // Pressing ? again closes; picking the tab you are on does too.
+        if (this.helpPanel && this.helpTab === tab) { this._closeHelpPanel(); return; }
 
-        const { shade, container } = this._openModal(460, 300, 0xFFD54F);
+        const reopening = !!this.helpPanel;
+        this._closeHelpPanel();
+        if (!reopening) this._closeUpgradePanel();
+
+        const { shade, container } = this._openModal(470, 336, 0xFFD54F);
         this.helpShade = shade;
+        this.helpTab = tab;
 
-        container.add(this.add.text(0, -122, 'FUSIONES', {
-            fontFamily: FONT, fontSize: '14px', color: '#FFD54F',
-        }).setOrigin(0.5));
+        this._buildHelpTabs(container, tab);
 
-        container.add(this.add.text(0, -100, 'Dos vecinas compatibles se pueden fusionar.', {
+        if (tab === 'elements') this._buildElementsTab(container);
+        else if (tab === 'hero') this._buildHeroTab(container);
+        else this._buildFusionTab(container);
+
+        this._closeButton(container, 148, () => this._closeHelpPanel());
+        this.helpPanel = container;
+    }
+
+    _buildHelpTabs(container, active) {
+        const TABS = [
+            { key: 'fusion', label: 'FUSIONES' },
+            { key: 'elements', label: 'ELEMENTOS' },
+            { key: 'hero', label: 'HEROE' },
+        ];
+
+        TABS.forEach((t, i) => {
+            const x = -148 + i * 148;
+            const on = t.key === active;
+
+            const bg = this.add.rectangle(x, -150, 142, 24, on ? 0x2a2a5a : 0x16162a)
+                .setStrokeStyle(1, on ? 0xFFD54F : 0x3a3a5a)
+                .setInteractive({ useHandCursor: true });
+            const txt = this.add.text(x, -150, t.label, {
+                fontFamily: FONT, fontSize: '8px', color: on ? '#FFD54F' : '#78909C',
+            }).setOrigin(0.5);
+
+            bg.on('pointerdown', (pointer) => {
+                pointer.event.stopPropagation();
+                audio.play('click');
+                this._openHelpPanel(t.key);
+            });
+
+            container.add([bg, txt]);
+        });
+    }
+
+    _buildFusionTab(container) {
+        container.add(this.add.text(0, -124, 'Dos vecinas compatibles se pueden fusionar.', {
             fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
         }).setOrigin(0.5));
-        container.add(this.add.text(0, -84, 'Vale igual para torres y para templos.', {
+        container.add(this.add.text(0, -110, 'Vale igual para torres y para templos.', {
             fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
         }).setOrigin(0.5));
 
         // Derived from FUSION_MAP so the table can never drift from the rules.
         Object.entries(FUSION_MAP).forEach(([pair, result], i) => {
             const [a, b] = pair.split('+');
-            const y = -46 + i * 40;
+            const y = -70 + i * 40;
             const d = TOWER_DATA[result];
 
             const icon = (x, el) => container.add(
@@ -596,7 +1021,7 @@ export class UIScene extends Phaser.Scene {
             );
             const glyph = (x, t) => container.add(
                 this.add.text(x, y, t, {
-                    fontFamily: FONT, fontSize: '10px', color: '#78909C',
+                    fontFamily: FONT, fontSize: '8px', color: '#78909C',
                 }).setOrigin(0.5)
             );
 
@@ -607,19 +1032,112 @@ export class UIScene extends Phaser.Scene {
             icon(-70, result);
 
             container.add(this.add.text(-44, y - 6, d.name, {
-                fontFamily: FONT, fontSize: '11px', color: `#${d.color.toString(16).padStart(6, '0')}`,
+                fontFamily: FONT, fontSize: '8px', color: `#${d.color.toString(16).padStart(6, '0')}`,
             }).setOrigin(0, 0.5));
             container.add(this.add.text(-44, y + 9, d.specialDesc, {
                 fontFamily: FONT, fontSize: '8px', color: '#78909C',
             }).setOrigin(0, 0.5));
         });
+    }
 
-        this._closeButton(container, 128, () => this._closeHelpPanel());
-        this.helpPanel = container;
+    /**
+     * The match-up table, read straight off ENEMY_DATA. Every element is named
+     * by its glyph as well as its word, and the two verdicts carry ▲ and ▼, so
+     * none of this depends on telling gold from grey.
+     */
+    _buildElementsTab(container) {
+        const superPct = `x${SUPER_MULT}`;
+        const resistPct = `x${RESIST_MULT}`;
+
+        container.add(this.add.text(0, -124,
+            `${EFFECT_MARK[EFFECT.SUPER]} Super efectivo ${superPct}   ·   ${EFFECT_MARK[EFFECT.RESIST]} Resistido ${resistPct}`,
+            { fontFamily: FONT, fontSize: '8px', color: '#B0BEC5' }
+        ).setOrigin(0.5));
+
+        container.add(this.add.text(0, -110, 'Los hibridos cuentan como su propio elemento.', {
+            fontFamily: FONT, fontSize: '8px', color: '#78909C',
+        }).setOrigin(0.5));
+
+        const list = (els) => (els?.length ? els.map(elementSymbol).join(' ') : '—');
+
+        Object.entries(ENEMY_DATA).forEach(([type, d], i) => {
+            const y = -76 + i * 44;
+
+            container.add(this.add.rectangle(0, y, 420, 40, 0x0d0d1c, 0.55)
+                .setStrokeStyle(1, 0x22223a));
+
+            container.add(this.add.sprite(
+                -188, y, safeTexture(this, `enemy_${type}`, 'enemy_slime')
+            ).setScale(1.7));
+
+            container.add(this.add.text(-166, y - 9, d.name, {
+                fontFamily: FONT, fontSize: '8px',
+                color: `#${d.color.toString(16).padStart(6, '0')}`,
+            }).setOrigin(0, 0.5));
+
+            container.add(this.add.text(-166, y + 8,
+                `${elementSymbol(d.element)} ${elementName(d.element)}  ·  ${d.hp} HP`,
+                { fontFamily: FONT, fontSize: '8px', color: '#78909C' }
+            ).setOrigin(0, 0.5));
+
+            container.add(this.add.text(30, y - 9,
+                `${EFFECT_MARK[EFFECT.SUPER]} ${list(d.weakness)}`,
+                { fontFamily: FONT, fontSize: '8px', color: EFFECT_COLOR[EFFECT.SUPER] }
+            ).setOrigin(0, 0.5));
+
+            container.add(this.add.text(30, y + 8,
+                `${EFFECT_MARK[EFFECT.RESIST]} ${list(d.resistance)}`,
+                { fontFamily: FONT, fontSize: '8px', color: EFFECT_COLOR[EFFECT.RESIST] }
+            ).setOrigin(0, 0.5));
+        });
+    }
+
+    _buildHeroTab(container) {
+        container.add(this.add.text(0, -124, 'Click derecho mueve al heroe.', {
+            fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
+        }).setOrigin(0.5));
+
+        ABILITY_ORDER.forEach((key, i) => {
+            const a = HERO_ABILITIES[key];
+            const y = -88 + i * 66;
+
+            container.add(this.add.rectangle(0, y, 420, 58, 0x0d0d1c, 0.55)
+                .setStrokeStyle(1, 0x22223a));
+
+            container.add(this.add.rectangle(-180, y, 30, 30, 0x12122a)
+                .setStrokeStyle(2, a.color));
+            container.add(this.add.text(-180, y, a.glyph, {
+                fontFamily: FONT, fontSize: '8px', color: a.colorHex,
+            }).setOrigin(0.5));
+
+            container.add(this.add.text(-152, y - 18, abilityHeading(key), {
+                fontFamily: FONT, fontSize: '8px', color: a.colorHex,
+            }).setOrigin(0, 0.5));
+
+            // Anchored at its top edge, not its middle: a centred block grows
+            // upward as lines are added and walks straight over the heading.
+            container.add(this.add.text(-152, y - 6, a.desc.join('\n'), {
+                fontFamily: FONT, fontSize: '8px', color: '#B0BEC5', lineSpacing: 5,
+            }).setOrigin(0, 0));
+        });
+
+        container.add(this.add.rectangle(0, 44, 420, 58, 0x0d0d1c, 0.55)
+            .setStrokeStyle(1, 0x22223a));
+        container.add(this.add.text(-196, 26, `COMBO DE ${MANA}`, {
+            fontFamily: FONT, fontSize: '8px', color: '#FFD54F',
+        }).setOrigin(0, 0.5));
+        container.add(this.add.text(-196, 50, [
+            `Cada orbe recogido dentro de ${COMBO.window / 1000}s del anterior suma`,
+            `+${Math.round(COMBO.step * 100)}% al valor del siguiente, hasta x${COMBO.maxMult}.`,
+            'Se reinicia si dejas de recoger. El templo no combea.',
+        ].join('\n'), {
+            fontFamily: FONT, fontSize: '8px', color: '#B0BEC5', lineSpacing: 4,
+        }).setOrigin(0, 0.5));
     }
 
     _closeHelpPanel() {
         if (this.helpShade) { this.helpShade.destroy(); this.helpShade = null; }
+        this.helpTab = null;
         if (!this.helpPanel) return;
         this.helpPanel.destroy(true);
         this.helpPanel = null;
@@ -640,9 +1158,10 @@ export class UIScene extends Phaser.Scene {
         container.add(this.add.sprite(
             -162, -132, safeTexture(this, `temple_${element}`, 'temple_earth')
         ).setScale(2.4));
-        container.add(this.add.text(-132, -140, d.name.toUpperCase(), {
-            fontFamily: FONT, fontSize: '11px', color: '#FFFFFF',
-        }).setOrigin(0, 0.5));
+        this.panelTitle = this.add.text(-132, -140, d.name.toUpperCase(), {
+            fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
+        }).setOrigin(0, 0.5);
+        container.add(this.panelTitle);
 
         this.panelSubtitle = this.add.text(-132, -120, '', {
             fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
@@ -673,7 +1192,7 @@ export class UIScene extends Phaser.Scene {
         bandBg.setStrokeStyle(1, 0x22223a);
 
         const name = this.add.text(-168, y - 16, t.label, {
-            fontFamily: FONT, fontSize: '10px', color: t.color,
+            fontFamily: FONT, fontSize: '8px', color: t.color,
         }).setOrigin(0, 0.5);
 
         // One pip per possible level, so the whole progression is legible
@@ -687,7 +1206,7 @@ export class UIScene extends Phaser.Scene {
 
         // The concrete before → after, which a bare "+20%" never conveyed
         const preview = this.add.text(-6, y - 14, '', {
-            fontFamily: FONT, fontSize: '11px', color: '#ECEFF1',
+            fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
         }).setOrigin(0.5);
         const pct = this.add.text(-6, y + 10, '', {
             fontFamily: FONT, fontSize: '8px', color: t.color,
@@ -700,7 +1219,7 @@ export class UIScene extends Phaser.Scene {
             fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
         }).setOrigin(0.5);
         const btnCost = this.add.text(120, y + 10, '', {
-            fontFamily: FONT, fontSize: '10px', color: '#B388FF',
+            fontFamily: FONT, fontSize: '8px', color: '#B388FF',
         }).setOrigin(0.5);
 
         btnBg.on('pointerdown', () => {
@@ -731,9 +1250,16 @@ export class UIScene extends Phaser.Scene {
         const el = this.panelElement;
         const mana = this.gs.economySystem.mana;
         const n = ts.towerCount(el);
+        const d = TEMPLE_DATA[el];
+        const total = ts.totalLevels(el);
 
+        // Rank in the title, the building's own numbers underneath: what this
+        // temple *is* belongs beside its name, not buried in a tooltip.
+        this.panelTitle.setText(
+            total > 0 ? `${d.name.toUpperCase()}  Nv.${total}` : d.name.toUpperCase()
+        );
         this.panelSubtitle.setText(
-            `${MANA} ${mana}  ·  ${n} ${n === 1 ? 'torre afectada' : 'torres afectadas'}`
+            `${MANA} ${mana} · ${n} ${n === 1 ? 'torre' : 'torres'} · alc ${d.absorbRadius} · +${Math.round(d.absorbBonus * 100)}% ${MANA}`
         );
 
         for (const track of TRACK_ORDER) {
@@ -784,6 +1310,7 @@ export class UIScene extends Phaser.Scene {
         this.upgradePanel = null;
         this.panelElement = null;
         this.panelRows = null;
+        this.panelTitle = null;
         if (!this.helpPanel) this.gs.uiModalOpen = false;
     }
 
@@ -808,16 +1335,21 @@ export class UIScene extends Phaser.Scene {
         this._showTooltip(lines, x, y);
     }
 
-    _showTooltip(lines, x, y) {
+    /**
+     * `originX` is 1 by default because everything in the sidebar hangs to the
+     * left of the thing it describes. The hero bar sits at the far left of the
+     * board instead, where a right-anchored box would run off the edge.
+     */
+    _showTooltip(lines, x, y, originX = 1) {
         this._hideTooltip();
         this.tooltip = this.add.text(x, y, lines.join('\n'), {
             fontFamily: FONT,
-            fontSize: '9px',
+            fontSize: '8px',
             color: '#ECEFF1',
             backgroundColor: '#0a0a1af0',
             padding: { x: 10, y: 10 },
             lineSpacing: 7,
-        }).setOrigin(1, 0.5).setDepth(60);
+        }).setOrigin(originX, 0.5).setDepth(60);
     }
 
     _hideTooltip() {
@@ -835,7 +1367,7 @@ export class UIScene extends Phaser.Scene {
         this.notifSlots[slot] = true;
 
         const n = this.add.text(MAP_CX, 34 + slot * 18, text, {
-            fontFamily: FONT, fontSize: '11px', color,
+            fontFamily: FONT, fontSize: '8px', color,
             stroke: '#000000', strokeThickness: 4,
         }).setOrigin(0.5).setDepth(100);
 
@@ -897,7 +1429,7 @@ export class UIScene extends Phaser.Scene {
             `Torres: ${this.gs.towers.length}`,
         ];
         this.add.text(MAP_CX, 224, stats.join('\n'), {
-            fontFamily: FONT, fontSize: '9px', color: '#B0BEC5',
+            fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
             lineSpacing: 10, align: 'center',
         }).setOrigin(0.5).setDepth(91);
 
@@ -906,7 +1438,7 @@ export class UIScene extends Phaser.Scene {
         rbg.setInteractive({ useHandCursor: true });
 
         this.add.text(MAP_CX, 340, 'REINICIAR', {
-            fontFamily: FONT, fontSize: '11px', color: '#FFFFFF',
+            fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
         }).setOrigin(0.5).setDepth(92);
 
         rbg.on('pointerdown', () => {

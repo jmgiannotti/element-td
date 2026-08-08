@@ -195,6 +195,19 @@ class AudioSystem {
         this._tone({ type: 'sawtooth', freq: 330, to: 440, dur: 0.26, gain: 0.11, delay: 0.16 });
     }
 
+    _dash() {
+        // A short upward whoosh: air moving, not a thing being struck.
+        this._noise({ dur: 0.16, gain: 0.1, from: 500, to: 4000 });
+        this._tone({ type: 'sine', freq: 320, to: 880, dur: 0.14, gain: 0.06 });
+    }
+
+    _quake() {
+        // Bottom-heavy, so it lands as an impact on the ground rather than a hit
+        // on one enemy — the whole ring felt it.
+        this._tone({ type: 'triangle', freq: 130, to: 45, dur: 0.34, gain: 0.2 });
+        this._noise({ dur: 0.3, gain: 0.15, from: 900, to: 90 });
+    }
+
     _deny() {
         this._tone({ type: 'square', freq: 150, to: 100, dur: 0.11, gain: 0.12 });
     }

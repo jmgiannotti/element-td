@@ -18,6 +18,9 @@ export class Tower {
         this.fusionHint = false;
         this.lastFired = 0;
         this.alive = true;
+        // Hover shows the range for as long as the cursor is there; a click
+        // pins it, which is the only way to compare two towers' reach at once.
+        this.selected = false;
 
         const pos = scene.gridSystem.gridToWorld(col, row);
 
@@ -51,10 +54,11 @@ export class Tower {
             ease: 'Back.easeOut',
         });
 
-        // Hover interactivity
+        // Hover interactivity. A pinned tower keeps its ring when the cursor
+        // leaves — otherwise pinning would be indistinguishable from hovering.
         this.sprite.setInteractive();
         this.sprite.on('pointerover', () => this.rangeGfx.setVisible(true));
-        this.sprite.on('pointerout', () => this.rangeGfx.setVisible(false));
+        this.sprite.on('pointerout', () => this.rangeGfx.setVisible(this.selected));
     }
 
     get x() { return this.sprite.x; }
@@ -79,6 +83,27 @@ export class Tower {
     refreshStats() {
         if (!this.alive || !this.rangeGfx) return;
         this.rangeGfx.setRadius(this.range);
+    }
+
+    /**
+     * Pin the range ring. Drawn brighter than the hover version so a pinned
+     * tower stays findable once the cursor has wandered off it.
+     */
+    setSelected(value) {
+        if (this.selected === value) return;
+        this.selected = value;
+        if (!this.alive || !this.rangeGfx) return;
+
+        this.rangeGfx.setRadius(this.range);
+        this.rangeGfx.setVisible(value);
+        this.rangeGfx.setFillStyle(0xFFD54F, value ? 0.09 : 0.07);
+        this.rangeGfx.setStrokeStyle(1, value ? 0xFFD54F : 0xffffff, value ? 0.55 : 0.15);
+    }
+
+    /** Shots per second at the stats it actually has right now. */
+    get shotsPerSecond() {
+        const rate = this.empowered ? this.fireRate * 0.75 : this.fireRate;
+        return 1000 / rate;
     }
 
     update(time, enemies) {

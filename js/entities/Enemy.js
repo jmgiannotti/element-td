@@ -1,5 +1,6 @@
 import * as Phaser from 'phaser';
 import { ENEMY_DATA } from '../data/EnemyData.js';
+import { EFFECT } from '../data/Elements.js';
 import { WAYPOINTS, TILE_SIZE, TILE } from '../systems/GridSystem.js';
 import { audio } from '../systems/AudioSystem.js';
 
@@ -105,7 +106,7 @@ export class Enemy {
             this.burnTimer -= delta;
             this.burnTick += delta;
             if (this.burnTick >= 500) {
-                this.takeDamage(this.burnDps, true);
+                this.takeDamage(this.burnDps, { silent: true });
                 this.burnTick -= 500;
             }
             if (this.burnTimer <= 0) this.burning = false;
@@ -121,7 +122,7 @@ export class Enemy {
                     hero.takeDamage(this.data.hp * 0.2 + 5);
                     this.heroAttackTimer = 0;
                     
-                    const slash = this.scene.add.text(hero.x, hero.y - 10, '💥', { fontSize: '10px' }).setOrigin(0.5).setDepth(30);
+                    const slash = this.scene.add.text(hero.x, hero.y - 10, '💥', { fontSize: '8px' }).setOrigin(0.5).setDepth(30);
                     this.scene.tweens.add({
                         targets: slash, scale: 2, alpha: 0, duration: 300, onComplete: () => slash.destroy()
                     });
@@ -219,9 +220,25 @@ export class Enemy {
         else this.hpFill.fillColor = 0xEF5350;
     }
 
-    takeDamage(amount, silent = false) {
+    /**
+     * @param {number} amount
+     * @param {{silent?: boolean, effect?: string, showNumber?: boolean}} [opts]
+     *   `silent` suppresses the sound and the flash — burn ticks land twice a
+     *   second and would otherwise strobe. `effect` is the elemental match-up,
+     *   which decides the colour and glyph of the floating number.
+     */
+    takeDamage(amount, opts = {}) {
         if (!this.alive) return;
+        const { silent = false, effect = EFFECT.NORMAL, showNumber = !silent } = opts;
+
         this.hp -= amount;
+
+        if (showNumber && this.scene.floating && this.sprite) {
+            this.scene.floating.damage(this.x, this.y - 14, amount, effect);
+        }
+        // Said once per kind by the UI, the first time it ever happens: the
+        // colour and the arrow only mean something if you were told what for.
+        if (effect !== EFFECT.NORMAL) this.scene.events.emit('damage-effect', effect);
 
         if (!silent && this.sprite) {
             audio.play('hit');
