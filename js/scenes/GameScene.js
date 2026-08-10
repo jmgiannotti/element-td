@@ -303,14 +303,17 @@ export class GameScene extends Phaser.Scene {
             }
         }
 
-        // Faint build grid, only shown while placing something
+        // Faint build grid — corner marks instead of full lines for a spacious feel
         this.buildGrid = this.add.graphics().setDepth(D_GRID).setVisible(false);
-        this.buildGrid.lineStyle(1, 0xffffff, 0.07);
+        const MARK = 4;
+        this.buildGrid.lineStyle(1, 0xffffff, 0.06);
         for (let c = 1; c < GRID_COLS; c++) {
-            this.buildGrid.lineBetween(c * TILE_SIZE, 0, c * TILE_SIZE, GAME_HEIGHT);
-        }
-        for (let r = 1; r < GRID_ROWS; r++) {
-            this.buildGrid.lineBetween(0, r * TILE_SIZE, GAME_WIDTH, r * TILE_SIZE);
+            for (let r = 1; r < GRID_ROWS; r++) {
+                const gx = c * TILE_SIZE;
+                const gy = r * TILE_SIZE;
+                this.buildGrid.lineBetween(gx - MARK, gy, gx + MARK, gy);
+                this.buildGrid.lineBetween(gx, gy - MARK, gx, gy + MARK);
+            }
         }
 
         // Entrance / Exit markers
