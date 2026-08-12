@@ -12,6 +12,7 @@ import {
     SUPER_MULT, RESIST_MULT, elementSymbol, elementName,
 } from '../data/Elements.js';
 import { HERO_ABILITIES, ABILITY_ORDER, COMBO, abilityHeading } from '../data/HeroData.js';
+import { HERO_LORE, DEFAULT_LOOK, heroTextureKey } from '../data/HeroLook.js';
 import { applyViewport } from '../systems/Viewport.js';
 
 const FONT = '"Press Start 2P"';
@@ -217,7 +218,7 @@ export class UIScene extends Phaser.Scene {
         const bg = this.add.image(x, y, 'btn_build').setInteractive({ useHandCursor: true });
         const icon = this.add.sprite(
             x, y - 8, safeTexture(this, `tower_${element}`, 'tower_earth')
-        ).setScale(2.4);
+        ).setScale(1.2);
 
         const cost = this.add.text(x, y + 20, `${td.cost}`, {
             fontFamily: FONT, fontSize: '8px', color: '#FFD700',
@@ -312,7 +313,7 @@ export class UIScene extends Phaser.Scene {
         const bg = this.add.image(x, y, 'btn_build').setInteractive({ useHandCursor: true });
         const icon = this.add.sprite(
             x, y - 8, safeTexture(this, `temple_${element}`, 'temple_earth')
-        ).setScale(2.4);
+        ).setScale(1.2);
 
         // Lit only once you own that temple: shows at a glance which upgrade
         // trees are actually open to you.
@@ -477,7 +478,7 @@ export class UIScene extends Phaser.Scene {
             const x = startX + step * i + 12;
 
             const icon = this.add.sprite(x, ROW_PREVIEW, safeTexture(this, `enemy_${group.type}`, 'enemy_slime'))
-                .setScale(1.25)
+                .setScale(0.65)
                 .setInteractive({ useHandCursor: false });
 
             // The element rides on the icon's shoulder as a glyph, not as a
@@ -594,7 +595,8 @@ export class UIScene extends Phaser.Scene {
      * you fire these while watching the lane, not while reading a menu.
      */
     _buildHeroHud() {
-        this.add.text(HUD_X - HUD_SIZE / 2, HUD_Y - HUD_SIZE / 2 - 9, 'HEROE', {
+        // Named, not labelled: the abilities belong to somebody.
+        this.add.text(HUD_X - HUD_SIZE / 2, HUD_Y - HUD_SIZE / 2 - 9, HERO_LORE.name, {
             fontFamily: FONT, fontSize: '8px', color: '#B388FF',
             stroke: '#000000', strokeThickness: 3,
         }).setOrigin(0, 0.5).setDepth(50);
@@ -1017,7 +1019,7 @@ export class UIScene extends Phaser.Scene {
             const d = TOWER_DATA[result];
 
             const icon = (x, el) => container.add(
-                this.add.sprite(x, y, safeTexture(this, `tower_${el}`, 'tower_earth')).setScale(1.8)
+                this.add.sprite(x, y, safeTexture(this, `tower_${el}`, 'tower_earth')).setScale(0.9)
             );
             const glyph = (x, t) => container.add(
                 this.add.text(x, y, t, {
@@ -1068,24 +1070,32 @@ export class UIScene extends Phaser.Scene {
 
             container.add(this.add.sprite(
                 -188, y, safeTexture(this, `enemy_${type}`, 'enemy_slime')
-            ).setScale(1.7));
+            ).setScale(0.85));
 
-            container.add(this.add.text(-166, y - 9, d.name, {
-                fontFamily: FONT, fontSize: '8px',
-                color: `#${d.color.toString(16).padStart(6, '0')}`,
+            // Name, epithet, and the one line that says what the thing is.
+            // These four are what the Marcas made out of what died in them, and
+            // a bestiary that only lists hit points never says so.
+            container.add(this.add.text(-166, y - 12,
+                `${(d.title ?? d.name).toUpperCase()}  ·  ${elementSymbol(d.element)} ${d.hp} HP`, {
+                    fontFamily: FONT, fontSize: '8px',
+                    color: `#${d.color.toString(16).padStart(6, '0')}`,
+                }).setOrigin(0, 0.5));
+
+            container.add(this.add.text(-166, y + 2, d.codex ?? '', {
+                fontFamily: FONT, fontSize: '7px', color: '#8a93a8',
             }).setOrigin(0, 0.5));
 
-            container.add(this.add.text(-166, y + 8,
-                `${elementSymbol(d.element)} ${elementName(d.element)}  ·  ${d.hp} HP`,
-                { fontFamily: FONT, fontSize: '8px', color: '#78909C' }
+            container.add(this.add.text(-166, y + 13,
+                `${elementName(d.element)}`,
+                { fontFamily: FONT, fontSize: '7px', color: '#5f6a80' }
             ).setOrigin(0, 0.5));
 
-            container.add(this.add.text(30, y - 9,
+            container.add(this.add.text(122, y - 9,
                 `${EFFECT_MARK[EFFECT.SUPER]} ${list(d.weakness)}`,
                 { fontFamily: FONT, fontSize: '8px', color: EFFECT_COLOR[EFFECT.SUPER] }
             ).setOrigin(0, 0.5));
 
-            container.add(this.add.text(30, y + 8,
+            container.add(this.add.text(122, y + 8,
                 `${EFFECT_MARK[EFFECT.RESIST]} ${list(d.resistance)}`,
                 { fontFamily: FONT, fontSize: '8px', color: EFFECT_COLOR[EFFECT.RESIST] }
             ).setOrigin(0, 0.5));
@@ -1120,6 +1130,24 @@ export class UIScene extends Phaser.Scene {
                 fontFamily: FONT, fontSize: '8px', color: '#B0BEC5', lineSpacing: 5,
             }).setOrigin(0, 0));
         });
+
+        // The codex. Every line of it is a rule the game already enforces —
+        // motes evaporate, the lantern holds the streak, the monoliths burn
+        // hotter near Vesper — so the flavour doubles as the manual.
+        container.add(this.add.rectangle(0, 100, 420, 52, 0x0d0d1c, 0.55)
+            .setStrokeStyle(1, 0x22223a));
+        // The portrait shows whatever Vesper is currently wearing, but always
+        // standing still: a codex illustration caught mid-stride reads as a
+        // mistake rather than as an animation frame.
+        container.add(this.add.sprite(-186, 100, safeTexture(this,
+            heroTextureKey(this.gs.hero ? this.gs.hero.look : DEFAULT_LOOK, 'stand'),
+            'mana_mote')).setScale(1.1));
+        container.add(this.add.text(-164, 82, `${HERO_LORE.name}  ·  ${HERO_LORE.order}`, {
+            fontFamily: FONT, fontSize: '8px', color: '#B388FF',
+        }).setOrigin(0, 0.5));
+        container.add(this.add.text(-164, 90, HERO_LORE.codex.join('\n'), {
+            fontFamily: FONT, fontSize: '7px', color: '#78909C', lineSpacing: 2,
+        }).setOrigin(0, 0));
 
         container.add(this.add.rectangle(0, 44, 420, 58, 0x0d0d1c, 0.55)
             .setStrokeStyle(1, 0x22223a));
@@ -1157,7 +1185,7 @@ export class UIScene extends Phaser.Scene {
         container.add(this.add.rectangle(0, -132, 390, 50, d.color, 0.14));
         container.add(this.add.sprite(
             -162, -132, safeTexture(this, `temple_${element}`, 'temple_earth')
-        ).setScale(2.4));
+        ).setScale(1.2));
         this.panelTitle = this.add.text(-132, -140, d.name.toUpperCase(), {
             fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
         }).setOrigin(0, 0.5);

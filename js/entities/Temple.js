@@ -28,14 +28,14 @@ export class Temple {
         this.field.setDepth(0.9);
 
         // Ground glow under the building itself
-        this.glow = scene.add.circle(pos.x, pos.y + 6, 13, this.data.color, 0.18);
+        this.glow = scene.add.circle(pos.x, pos.y + 9, 13, this.data.color, 0.18);
         this.glow.setDepth(4);
 
         this.sprite = scene.add.sprite(
             pos.x, pos.y,
             safeTexture(scene, `temple_${element}`, 'temple_earth')
         );
-        this.sprite.setScale(2);
+        this.sprite.setScale(1);
         // Same row-biased depth rule as towers, one notch above so a temple
         // reads as the taller building when they share a row.
         this.sprite.setDepth(5.5 + row * 0.01);
@@ -48,7 +48,7 @@ export class Temple {
         this.sprite.setScale(0);
         scene.tweens.add({
             targets: this.sprite,
-            scaleX: 2, scaleY: 2,
+            scaleX: 1, scaleY: 1,
             duration: 300,
             ease: 'Back.easeOut',
         });
@@ -106,14 +106,14 @@ export class Temple {
         // 8px, not 6: Press Start 2P is drawn on an 8px grid, so it is only
         // pixel-exact at multiples of 8 — at 6 the glyphs get resampled and the
         // number comes out furry. Nothing here constrains the width.
-        const t = this.scene.add.text(this.x, this.y - 14, `+${gained}`, {
+        const t = this.scene.add.text(this.x, this.y - 20, `+${gained}`, {
             fontFamily: '"Press Start 2P"', fontSize: '8px',
             color: '#B388FF', stroke: '#000000', strokeThickness: 2,
         }).setOrigin(0.5).setDepth(28);
 
         this.scene.tweens.add({
             targets: t,
-            y: this.y - 30,
+            y: this.y - 36,
             alpha: 0,
             duration: 700,
             ease: 'Quad.easeOut',
@@ -152,7 +152,7 @@ export class Temple {
         const shown = Math.min(total, 8);
         const startX = this.x - ((shown - 1) * 3) / 2;
         for (let i = 0; i < shown; i++) {
-            const dot = this.scene.add.circle(startX + i * 3, this.y - 18, 1, 0xFFD54F, 1);
+            const dot = this.scene.add.circle(startX + i * 3, this.y - 20, 1, 0xFFD54F, 1);
             dot.setDepth(27);
             this.pips.push(dot);
         }

@@ -1,8 +1,18 @@
 import * as Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../systems/GridSystem.js';
 import { HERO_ABILITIES, ABILITY_ORDER, COMBO, comboMultiplier } from '../data/HeroData.js';
+import {
+    DEFAULT_LOOK, LANTERNS, HERO_GLOW_KEY, HERO_SLASH_KEY, WALK_CYCLE,
+    ensureHeroTexture, lanternTierFor,
+} from '../data/HeroLook.js';
 import { audio } from '../systems/AudioSystem.js';
 import { pointerWorld } from '../systems/Viewport.js';
+
+// One sword swing, and how long each walk frame is held. The walk is the
+// two-frame cycle in HeroLook (stride, pass), so 145ms a frame puts a full
+// cycle just under a third of a second — a walk, not a scurry.
+const SWING_MS = 260;
+const WALK_FRAME_MS = 145;
 
 const SPAWN_COL = 10;
 const SPAWN_ROW = 7;
@@ -23,11 +33,30 @@ export class Hero {
 
         this.shadow = scene.add.image(pos.x, pos.y + 14, 'hero_shadow').setDepth(19);
 
-        this.sprite = scene.add.sprite(pos.x, pos.y, 'hero');
-        this.sprite.setScale(2);
+        // What Vesper currently looks like. A recipe, not a texture key: an
+        // upgrade that changes the appearance calls setLook() with the slot it
+        // affects, and the sprite for that combination is baked on first use.
+        // See HeroLook.js for the slots and the fiction behind them.
+        this.look = { ...DEFAULT_LOOK };
+        // Which frame of which action is showing. Independent of `look`: the
+        // two multiply out in HeroLook rather than here.
+        this.pose = 'stand';
+        this.walkPhase = 0;
+        // Frames left of the current sword swing, in scaled ms. While this runs
+        // the walk cycle stands down — one action owns the sprite at a time.
+        this.swing = 0;
+
+        this.sprite = scene.add.sprite(pos.x, pos.y, ensureHeroTexture(scene, this.look, 'stand'));
+        // 32×32 art at one texel per world pixel, like everything else on the board.
+        this.sprite.setScale(1);
         this.sprite.setDepth(20);
 
-        this.speed = 90;
+        // The lantern's halo. Its own object rather than part of the sprite, so
+        // it can breathe on its own clock without rebaking anything.
+        this.lanternGlow = scene.add.image(pos.x - 7, pos.y + 4, HERO_GLOW_KEY)
+            .setDepth(19.5).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
+
+        this.speed = 155;
         this.attackDamage = 10;
         this.attackRange = 55;
         this.attackRate = 900;
@@ -79,9 +108,9 @@ export class Hero {
         this.isDead = false;
 
         // HP bar
-        this.hpBg = scene.add.rectangle(pos.x, pos.y - 18, 26, 4, 0x1a1a1a, 0.8).setDepth(21);
+        this.hpBg = scene.add.rectangle(pos.x, pos.y - 21, 26, 4, 0x1a1a1a, 0.8).setDepth(21);
         this.hpBg.setStrokeStyle(1, 0x333333);
-        this.hpFill = scene.add.rectangle(pos.x, pos.y - 18, 24, 2, 0x4CAF50).setDepth(22);
+        this.hpFill = scene.add.rectangle(pos.x, pos.y - 21, 24, 2, 0x4CAF50).setDepth(22);
 
         // Move indicator
         this.moveIndicator = scene.add.circle(0, 0, 6, 0xB388FF, 0);
@@ -96,6 +125,88 @@ export class Hero {
     get absorbRadius() { return this.collectRadius; }
 
     get comboMult() { return comboMultiplier(this.comboCount); }
+
+    // ─── Appearance ─────────────────────────────────────
+    /**
+     * Change one or more look slots and swap to the sprite for the result.
+     *
+     * This is the whole interface a future upgrade needs: add an entry to the
+     * relevant table in HeroLook and call `hero.setLook({ blade: 'estrellada' })`.
+     * The texture bakes itself the first time that combination appears and is a
+     * cache hit forever after, so appearance upgrades cost nothing per frame and
+     * nothing in the boot texture list.
+     *
+     * Tints are reapplied afterwards: setTexture drops nothing, but a dash ghost
+     * or a damage flash set mid-swap would otherwise be read off the old sprite.
+     */
+    setLook(patch) {
+        const next = { ...this.look, ...patch };
+        const changed = Object.keys(next).some(k => next[k] !== this.look[k]);
+        if (!changed || !this.sprite) return false;
+
+        this.look = next;
+        this.sprite.setTexture(ensureHeroTexture(this.scene, next, this.pose));
+        this._refreshLantern();
+        return true;
+    }
+
+    /**
+     * Show a given animation frame. Cheap enough to call every tick — it bails
+     * when the pose has not changed, and the texture behind each (look, pose)
+     * is baked once and cached.
+     */
+    _setPose(pose) {
+        if (this.pose === pose || !this.sprite) return;
+        this.pose = pose;
+        this.sprite.setTexture(ensureHeroTexture(this.scene, this.look, pose));
+    }
+
+    /**
+     * Picks the frame that matches what Vesper is doing this instant.
+     *
+     * Order matters: a swing outranks walking, and walking outranks standing.
+     * Without this the character slid across the ground with its legs welded
+     * together, which is most of what read as "moving backwards".
+     */
+    _animate(delta) {
+        if (this.isDead) return;
+
+        if (this.swing > 0) {
+            this.swing -= delta;
+            // Wind-up for the first third, the strike for the rest: a swing
+            // that spends equal time in both halves reads as a slow wave.
+            this._setPose(this.swing > SWING_MS * 0.62 ? 'windUp' : 'strike');
+            if (this.swing <= 0) this.walkPhase = 0;
+            return;
+        }
+
+        if (this.moving || this.dashing) {
+            this.walkPhase += delta;
+            const frame = Math.floor(this.walkPhase / WALK_FRAME_MS) % WALK_CYCLE.length;
+            this._setPose(WALK_CYCLE[frame]);
+        } else {
+            this.walkPhase = 0;
+            this._setPose('stand');
+        }
+    }
+
+    /**
+     * The lantern reports the collection streak. Vesper carries the maná that
+     * has been drunk and not yet banked, so the character itself is the combo
+     * readout — the number over the head is the redundant copy, not this.
+     */
+    _refreshLantern() {
+        if (!this.lanternGlow) return;
+        const l = LANTERNS[this.look.lantern] ?? LANTERNS.apagado;
+        this.scene.tweens.add({
+            targets: this.lanternGlow,
+            alpha: this.isDead ? 0 : l.glow,
+            scaleX: l.radius ? l.radius / 9 : 0.3,
+            scaleY: l.radius ? l.radius / 9 : 0.3,
+            duration: 220,
+            ease: 'Quad.easeOut',
+        });
+    }
 
     // ─── Abilities ──────────────────────────────────────
     /** 0 → ready, 1 → just cast. Drives the cooldown wipe in the UI. */
@@ -176,8 +287,11 @@ export class Hero {
 
     _dashTrail(color) {
         for (let i = 0; i < 4; i++) {
-            const ghost = this.scene.add.sprite(this.posX, this.posY, 'hero')
-                .setScale(2).setDepth(18).setAlpha(0.45).setTint(color);
+            // Off the live texture, not a fixed key: the trail has to be
+            // whatever Vesper looks like right now.
+            const ghost = this.scene.add.sprite(this.posX, this.posY, this.sprite.texture.key)
+                .setScale(1).setDepth(18).setAlpha(0.45).setTint(color);
+            ghost.flipX = this.sprite.flipX;
             this.scene.tweens.add({
                 targets: ghost,
                 alpha: 0,
@@ -285,6 +399,11 @@ export class Hero {
     }
 
     _refreshComboLabel() {
+        // The lantern fills with the streak — including the very first mote,
+        // which is below the threshold the label cares about. Driven from here
+        // rather than from absorbMote so the two readouts cannot disagree.
+        this.setLook({ lantern: lanternTierFor(this.comboCount) });
+
         const live = this.comboCount > 1 && this.comboTimer > 0;
         this.comboLabel.setVisible(live);
         if (!live) return;
@@ -303,6 +422,9 @@ export class Hero {
         const had = this.comboCount;
         this.comboCount = 0;
         this.comboLabel.setVisible(false);
+        // Let the streak lapse and the lantern goes out. That is the fiction and
+        // the rule at once: what is not held evaporates.
+        this.setLook({ lantern: lanternTierFor(0) });
         if (had > 1) this.scene.events.emit('hero-combo-end', had);
     }
 
@@ -365,20 +487,21 @@ export class Hero {
                 target.takeDamage(this.attackDamage);
                 this.lastAttack = time;
 
-                // Attack visual – quick beam
-                const line = this.scene.add.line(
-                    0, 0,
-                    this.posX, this.posY,
-                    target.x, target.y,
-                    0xB388FF, 0.8
-                ).setOrigin(0, 0).setDepth(19).setLineWidth(1.5);
+                const dx = target.x - this.posX;
+                const dy = target.y - this.posY;
 
-                this.scene.time.delayedCall(100, () => line.destroy());
+                // Turn to face what he is hitting. Without this the hero
+                // lunged at an enemy behind him while still facing forward and
+                // swung out of his own back — which is exactly what "corre de
+                // espaldas" looked like. Movement sets facing; so must combat.
+                if (Math.abs(dx) > 1) this.sprite.flipX = dx < 0;
+
+                this.swing = SWING_MS;
+                this._animate(0);
+                this._slash(dx, dy);
 
                 // Slight lunge toward target — applied as an offset so it
                 // never overwrites the hero's real position.
-                const dx = target.x - this.posX;
-                const dy = target.y - this.posY;
                 this.scene.tweens.add({
                     targets: this.lunge,
                     x: dx * 0.12,
@@ -392,6 +515,31 @@ export class Hero {
 
         // ── Empower hybrid towers ───────────────
         this._checkEmpowerment();
+    }
+
+    /**
+     * The crescent the edge leaves, thrown at whatever was hit.
+     *
+     * Rotated onto the actual attack vector rather than drawn from the hero to
+     * the target: a straight line between two points is a beam, and Vesper is
+     * carrying a sword.
+     */
+    _slash(dx, dy) {
+        const ang = Math.atan2(dy, dx);
+        const s = this.scene.add.image(
+            this.posX + Math.cos(ang) * 12,
+            this.posY + Math.sin(ang) * 12 - 2,
+            HERO_SLASH_KEY
+        ).setDepth(21).setRotation(ang).setScale(0.7).setAlpha(0.95);
+
+        this.scene.tweens.add({
+            targets: s,
+            scaleX: 1.15, scaleY: 1.05,
+            alpha: 0,
+            duration: 170,
+            ease: 'Quad.easeOut',
+            onComplete: () => s.destroy(),
+        });
     }
 
     /** Cooldowns, cast time, invulnerability and the combo window. */
@@ -439,14 +587,23 @@ export class Hero {
     _syncSprite(delta) {
         this.bobPhase += (delta / 1000) * (this.moving || this.dashing ? 9 : 3.4);
         const bob = this.moving || this.dashing
-            ? -Math.abs(Math.sin(this.bobPhase)) * 2   // little hop while walking
+            ? 0                                        // the walk frames do this
             : Math.sin(this.bobPhase) * 1.5;           // slow float while idle
+
+        // The pose carries its own bounce now, so the idle float stays and the
+        // walking hop goes: two bounces on the same body fight each other.
+        this._animate(delta);
 
         this.sprite.x = this.posX + this.lunge.x;
         this.sprite.y = this.posY + this.lunge.y + bob;
         this.shadow.x = this.posX;
         this.shadow.y = this.posY + 14;
         this.shadow.setScale(this.moving || this.dashing ? 0.9 : 1, 1);
+
+        // The halo rides the lantern, which hangs on whichever hip is currently
+        // facing the camera — so it has to flip with the sprite.
+        this.lanternGlow.x = this.sprite.x + (this.sprite.flipX ? 7 : -7);
+        this.lanternGlow.y = this.sprite.y + 4;
 
         // The pickup field is only drawn when there is something to pick up —
         // a circle trailing the hero at all times is noise the rest of the time.
@@ -485,10 +642,10 @@ export class Hero {
         if (!this.hpBg) return;
         const pct = Math.max(0, this.hp / this.maxHp);
         this.hpBg.x = this.posX;
-        this.hpBg.y = this.posY - 18;
+        this.hpBg.y = this.posY - 21;
         this.hpFill.width = 24 * pct;
         this.hpFill.x = this.posX - (24 * (1 - pct)) / 2;
-        this.hpFill.y = this.posY - 18;
+        this.hpFill.y = this.posY - 21;
 
         if (pct > 0.6) this.hpFill.fillColor = 0x4CAF50;
         else if (pct > 0.3) this.hpFill.fillColor = 0xFFC107;
@@ -539,12 +696,12 @@ export class Hero {
         this.hpBg.setVisible(false);
         this.hpFill.setVisible(false);
         this.collectField.setVisible(false);
+        this.lanternGlow.setAlpha(0);
 
-        // Spawn death visual
-        const skull = this.scene.add.text(this.posX, this.posY, '💀', { fontSize: '16px' }).setOrigin(0.5);
-        this.scene.tweens.add({
-            targets: skull, y: this.posY - 30, alpha: 0, duration: 1500, onComplete: () => skull.destroy()
-        });
+        // Vesper does not die so much as come apart: the ash lifts, and the
+        // lantern light goes with it. Drawn rather than typeset — an emoji is
+        // the one thing on this board that cannot match the art.
+        this._ashBurst();
 
         // Cancel all empowerment since hero is dead
         for (const tower of this.scene.towers) {
@@ -555,11 +712,36 @@ export class Hero {
         this.scene.time.delayedCall(8000, () => this._respawn());
     }
 
+    /** Flakes of ash lifting off the spot where Vesper stood. */
+    _ashBurst() {
+        for (let i = 0; i < 14; i++) {
+            const a = (i / 14) * Math.PI * 2 + Math.random();
+            const d = 6 + Math.random() * 14;
+            const fleck = this.scene.add.rectangle(
+                this.posX, this.posY,
+                1 + Math.round(Math.random()), 1,
+                i % 3 === 0 ? 0xb388ff : 0x6f6b80
+            ).setDepth(21);
+            this.scene.tweens.add({
+                targets: fleck,
+                x: this.posX + Math.cos(a) * d,
+                y: this.posY + Math.sin(a) * d - 14 - Math.random() * 10,
+                alpha: 0,
+                duration: 900 + Math.random() * 600,
+                ease: 'Quad.easeOut',
+                onComplete: () => fleck.destroy(),
+            });
+        }
+    }
+
     _respawn() {
         this.isDead = false;
         this.hp = this.maxHp;
         this.lunge.x = 0;
         this.lunge.y = 0;
+        this.swing = 0;
+        this.walkPhase = 0;
+        this._setPose('stand');
 
         const pos = this.scene.gridSystem.gridToWorld(SPAWN_COL, SPAWN_ROW);
         this.posX = pos.x;
@@ -575,10 +757,11 @@ export class Hero {
         this.hpFill.setVisible(true);
         this.sprite.clearTint();
         this._updateHpBar();
+        this._refreshLantern();
 
         this.sprite.setScale(0);
         this.scene.tweens.add({
-            targets: this.sprite, scale: 2, duration: 400, ease: 'Back.easeOut'
+            targets: this.sprite, scale: 1, duration: 400, ease: 'Back.easeOut'
         });
     }
 }

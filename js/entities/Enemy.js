@@ -51,13 +51,15 @@ export class Enemy {
         if (!this.path) {
             this.alive = false; // Failsafe if path is completely blocked
         } else {
-            this.sprite.setScale(2);
+            // 32×32 art on a 32px tile: one texel to one world pixel, the same
+            // density as the ground it walks on.
+            this.sprite.setScale(1);
             this.sprite.setDepth(10);
 
-            // HP bar
-            this.hpBg = scene.add.rectangle(this.sprite.x, this.sprite.y - 18, 26, 4, 0x1a1a1a, 0.8);
+            // HP bar, clear of the taller sprite
+            this.hpBg = scene.add.rectangle(this.sprite.x, this.sprite.y - 21, 26, 4, 0x1a1a1a, 0.8);
             this.hpBg.setStrokeStyle(1, 0x333333).setDepth(11);
-            this.hpFill = scene.add.rectangle(this.sprite.x, this.sprite.y - 18, 24, 2, 0x4CAF50).setDepth(12);
+            this.hpFill = scene.add.rectangle(this.sprite.x, this.sprite.y - 21, 24, 2, 0x4CAF50).setDepth(12);
 
             // Listen for path changes
             this.pathChangeHandler = () => this.recalculatePath();
@@ -210,10 +212,10 @@ export class Enemy {
         if (!this.hpBg) return;
         const pct = Math.max(0, this.hp / this.maxHp);
         this.hpBg.x = this.x;
-        this.hpBg.y = this.y - 18;
+        this.hpBg.y = this.y - 21;
         this.hpFill.width = 24 * pct;
         this.hpFill.x = this.x - (24 * (1 - pct)) / 2;
-        this.hpFill.y = this.y - 18;
+        this.hpFill.y = this.y - 21;
 
         if (pct > 0.6) this.hpFill.fillColor = 0x4CAF50;
         else if (pct > 0.3) this.hpFill.fillColor = 0xFFC107;
@@ -234,7 +236,7 @@ export class Enemy {
         this.hp -= amount;
 
         if (showNumber && this.scene.floating && this.sprite) {
-            this.scene.floating.damage(this.x, this.y - 14, amount, effect);
+            this.scene.floating.damage(this.x, this.y - 17, amount, effect);
         }
         // Said once per kind by the UI, the first time it ever happens: the
         // colour and the arrow only mean something if you were told what for.

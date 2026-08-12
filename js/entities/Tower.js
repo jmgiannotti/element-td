@@ -30,7 +30,10 @@ export class Tower {
             pos.x, pos.y,
             safeTexture(scene, `tower_${element}`, 'tower_earth')
         );
-        this.sprite.setScale(2);
+        // Textures are authored at the tile's own 32×32, so the sprite is drawn
+        // one texel to one world pixel — same pixel density as the ground it
+        // stands on.
+        this.sprite.setScale(1);
         this.sprite.setDepth(5 + row * 0.01);
         this.sprite.setData('tower', true);
 
@@ -48,17 +51,21 @@ export class Tower {
         this.sprite.setScale(0);
         scene.tweens.add({
             targets: this.sprite,
-            scaleX: 2,
-            scaleY: 2,
+            scaleX: 1,
+            scaleY: 1,
             duration: 250,
             ease: 'Back.easeOut',
         });
 
-        // Hover interactivity. A pinned tower keeps its ring when the cursor
-        // leaves — otherwise pinning would be indistinguishable from hovering.
+        // Hover interactivity. Leaving the tower dismisses the inspection card.
         this.sprite.setInteractive();
         this.sprite.on('pointerover', () => this.rangeGfx.setVisible(true));
-        this.sprite.on('pointerout', () => this.rangeGfx.setVisible(this.selected));
+        this.sprite.on('pointerout', () => {
+            this.rangeGfx.setVisible(false);
+            if (this.selected && this.scene.selectStructure) {
+                this.scene.selectStructure(null);
+            }
+        });
     }
 
     get x() { return this.sprite.x; }
@@ -145,12 +152,12 @@ export class Tower {
         // Recoil — a squash, so the sprite never grows past its own tile
         this.scene.tweens.add({
             targets: this.sprite,
-            scaleX: 2.15,
-            scaleY: 1.82,
+            scaleX: 1.08,
+            scaleY: 0.91,
             duration: 50,
             yoyo: true,
             ease: 'Quad.easeOut',
-            onComplete: () => this.sprite.setScale(2),
+            onComplete: () => this.sprite.setScale(1),
         });
     }
 

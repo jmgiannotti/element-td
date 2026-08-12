@@ -6,6 +6,25 @@ export const ENEMY_TYPES = {
 };
 
 /**
+ * WHAT WALKS THE ROAD, and why each thing is the thing it is.
+ *
+ * These four are not a bestiary bolted onto the board; they are what the Marcas
+ * de Ceniza made out of what died in them, which is the same premise Vesper is
+ * built on (see HeroLook.js). Stated once here, and drawn to match in
+ * BootScene:
+ *
+ *   CUAJO    fuego fatuo that nobody drank, pooled and gone thick. You can see
+ *            the violet motes still suspended in it — it is the resource, spoiled.
+ *   SILLAR   a block of the fallen temple that remembered how to walk. Same
+ *            marble as the temples you build, same gold in its seams.
+ *   VELADOR  a vigilante of Vesper's own order who died and would not put the
+ *            lantern down. Hooded like Vesper, hollow inside, carrying a lamp
+ *            that went out a long time ago. You are fighting your predecessors.
+ *   ASCUA    what was sleeping underneath the fire temple. Basalt hide with the
+ *            magma still showing through — the same molten the lava tower spits.
+ *
+ * `title` is the epithet the codex shows; `codex` is the one line under it.
+ *
  * `gold` is the kill bounty. Since motes became life force that only temples
  * may absorb, this is where the entire building budget comes from — retuning
  * it is retuning the pace of the whole game.
@@ -23,6 +42,8 @@ export const ENEMY_TYPES = {
 export const ENEMY_DATA = {
     [ENEMY_TYPES.SLIME]: {
         name: 'Slime',
+        title: 'Cuajo',
+        codex: 'Fuego fatuo que nadie bebio, cuajado.',
         hp: 30,
         speed: 55,
         element: 'water',
@@ -30,11 +51,13 @@ export const ENEMY_DATA = {
         resistance: [],
         gold: 6,
         manaDrops: 1,
-        color: 0x66BB6A,
-        colorDark: 0x388E3C,
+        color: 0x7AD46A,
+        colorDark: 0x2F8A3A,
     },
     [ENEMY_TYPES.GOLEM]: {
         name: 'Golem',
+        title: 'Sillar',
+        codex: 'Un bloque del templo caido, en pie.',
         hp: 80,
         speed: 32,
         element: 'earth',
@@ -42,12 +65,14 @@ export const ENEMY_DATA = {
         resistance: ['earth'],
         gold: 14,
         manaDrops: 2,
-        color: 0x9E9E9E,
-        colorDark: 0x616161,
+        color: 0x8BA0BC,
+        colorDark: 0x5B6C8C,
         spawns: [{ type: ENEMY_TYPES.SLIME, count: 2 }],
     },
     [ENEMY_TYPES.SPECTER]: {
         name: 'Espectro',
+        title: 'Velador',
+        codex: 'Un vigia que murio sin soltar el farol.',
         hp: 40,
         speed: 85,
         element: 'air',
@@ -55,11 +80,13 @@ export const ENEMY_DATA = {
         resistance: ['air'],
         gold: 9,
         manaDrops: 1,
-        color: 0xCE93D8,
-        colorDark: 0xAB47BC,
+        color: 0x9A86C4,
+        colorDark: 0x5B4A86,
     },
     [ENEMY_TYPES.DRAGON]: {
         name: 'Dragón',
+        title: 'Ascua',
+        codex: 'Lo que dormia bajo el templo de fuego.',
         hp: 200,
         speed: 40,
         element: 'fire',
@@ -67,8 +94,8 @@ export const ENEMY_DATA = {
         resistance: ['fire', 'lava'],
         gold: 45,
         manaDrops: 3,
-        color: 0xEF5350,
-        colorDark: 0xC62828,
+        color: 0xFF8A2B,
+        colorDark: 0xD43D0A,
         spawns: [{ type: ENEMY_TYPES.GOLEM, count: 1 }],
     },
 };

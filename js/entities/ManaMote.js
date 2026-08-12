@@ -10,7 +10,7 @@ export class ManaMote {
         this.elapsed = 0;
 
         this.sprite = scene.add.sprite(x, y, 'mana_mote');
-        this.sprite.setScale(2);
+        this.sprite.setScale(1);
         this.sprite.setDepth(8);
 
         // Scatter outward from spawn point

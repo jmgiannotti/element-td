@@ -9,11 +9,11 @@ const D_ROUTE = 0.7;
 // airiness of the dotting is what makes the line read as faint — the marks
 // themselves have to stay fairly opaque or they dissolve into the road.
 const DOT = 3;
-const GAP = 5;
+const GAP = 9;
 const PERIOD = DOT + GAP;
 
 // Marching ants, crawling toward the exit. Slow enough to read as drift rather
-// than as blinking: the dots cover one full period roughly every ⅔ of a second.
+// than as blinking: the dots cover one full period roughly once a second.
 const SPEED = 12; // px/s
 
 /**

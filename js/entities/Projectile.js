@@ -18,8 +18,12 @@ export class Projectile {
         this.alive = true;
 
         this.sprite = scene.add.sprite(x, y, `proj_${towerData.element}`);
-        this.sprite.setScale(2);
+        this.sprite.setScale(1);
         this.sprite.setDepth(15);
+        // The art is a comet drawn pointing right, with its head at x≈13 of 18.
+        // Hanging the sprite off the head means the head lands on the target
+        // and the tail sweeps behind it, whichever way the shot is going.
+        this.sprite.setOrigin(13 / 18, 0.5);
 
         this._fly();
     }
@@ -35,6 +39,12 @@ export class Projectile {
         );
         const duration = Math.max(60, (dist / 350) * 1000);
 
+        // Turned onto its flight vector once, at launch: the path is a straight
+        // tween, so the angle never changes and this costs nothing per frame.
+        this.sprite.setRotation(Phaser.Math.Angle.Between(
+            this.sprite.x, this.sprite.y, this.target.x, this.target.y
+        ));
+
         this.scene.tweens.add({
             targets: this.sprite,
             x: this.target.x,
@@ -45,8 +55,45 @@ export class Projectile {
         });
     }
 
+    /**
+     * What landing looks like. A shot that simply vanishes on contact reads as
+     * a missed frame; a ring and a few sparks in the element's own colour is
+     * the cheapest possible confirmation that the hit happened.
+     */
+    _burst(x, y) {
+        const col = this.towerData.color;
+
+        const ring = this.scene.add.circle(x, y, 3, col, 0.35).setDepth(16);
+        ring.setStrokeStyle(1, col, 0.9);
+        this.scene.tweens.add({
+            targets: ring,
+            scaleX: 3.2, scaleY: 3.2,
+            alpha: 0,
+            duration: 220,
+            ease: 'Quad.easeOut',
+            onComplete: () => ring.destroy(),
+        });
+
+        for (let i = 0; i < 4; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const d = 6 + Math.random() * 7;
+            const spark = this.scene.add.rectangle(x, y, 2, 2, col).setDepth(16);
+            this.scene.tweens.add({
+                targets: spark,
+                x: x + Math.cos(a) * d,
+                y: y + Math.sin(a) * d,
+                alpha: 0,
+                duration: 200 + Math.random() * 140,
+                ease: 'Quad.easeOut',
+                onComplete: () => spark.destroy(),
+            });
+        }
+    }
+
     _hit() {
         if (!this.alive) return;
+
+        if (this.sprite) this._burst(this.sprite.x, this.sprite.y);
 
         if (this.target && this.target.alive) {
             // Elemental match-up. The effect travels with the damage so the

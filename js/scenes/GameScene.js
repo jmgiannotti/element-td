@@ -108,7 +108,7 @@ export class GameScene extends Phaser.Scene {
 
         // ── Placement preview ───────────────────
         this.previewSprite = this.add.sprite(0, 0, `tower_${ELEMENTS.WATER}`);
-        this.previewSprite.setScale(2).setAlpha(0.55).setVisible(false).setDepth(30);
+        this.previewSprite.setScale(1).setAlpha(0.55).setVisible(false).setDepth(30);
 
         this.previewRange = this.add.circle(0, 0, 100, 0xffffff, 0.06);
         this.previewRange.setStrokeStyle(1, 0xffffff, 0.15);
@@ -316,18 +316,21 @@ export class GameScene extends Phaser.Scene {
             }
         }
 
-        // Entrance / Exit markers
-        const enter = WAYPOINTS[1]; // first visible waypoint
-        this.add.text(
-            8, enter.row * TILE_SIZE + TILE_SIZE / 2,
-            '▶', { fontSize: '16px', color: '#66BB6A' }
-        ).setOrigin(0, 0.5).setDepth(3);
+        // Entrance and exit. Drawn buildings rather than a glyph and an emoji:
+        // the two ends of the route are the most important landmarks on the
+        // board, and a font is the one thing here that cannot match the art.
+        const enter = WAYPOINTS[1];
+        this.add.image(
+            TILE_SIZE / 2, enter.row * TILE_SIZE + TILE_SIZE / 2,
+            safeTexture(this, 'gate_spawn', 'tile_barricade')
+        ).setDepth(D_DECOR);
 
-        const exit = WAYPOINTS[WAYPOINTS.length - 2]; // last visible
-        this.add.text(
-            exit.col * TILE_SIZE + TILE_SIZE, exit.row * TILE_SIZE + TILE_SIZE / 2,
-            '🏠', { fontSize: '16px' }
-        ).setOrigin(0, 0.5).setDepth(3);
+        const exit = WAYPOINTS[WAYPOINTS.length - 2];
+        this.add.image(
+            (exit.col + 2) * TILE_SIZE + TILE_SIZE / 2,
+            exit.row * TILE_SIZE + TILE_SIZE / 2,
+            safeTexture(this, 'gate_exit', 'tile_barricade')
+        ).setDepth(D_DECOR);
     }
 
     _isGrass(col, row) {
