@@ -5,7 +5,3 @@ dist/
 build/
 .DS_Store
 
-# Aseprite scratch files. All the game's art is generated at runtime in
-# BootScene, so nothing here is a build input.
-*.ase
-*.aseprite

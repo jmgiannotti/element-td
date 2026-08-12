@@ -2,6 +2,7 @@ import {
     ramp, ellipse, taper, profile, volume, line, groundShadow,
 } from '../systems/Pixels.js';
 import { GOLD, SOUL } from './Palette.js';
+import { HERO_SPRITE } from './HeroSprite.js';
 
 /**
  * VESPER, DE LA VIGILIA DE CENIZA — who the hero is, and how that gets drawn.
@@ -141,8 +142,20 @@ export const POSE_NAMES = Object.keys(POSES);
  */
 export const WALK_CYCLE = ['walkA', 'walkB'];
 
-export function heroTextureKey(look, pose = 'stand') {
+/** The key of a baked (look × pose) combination, ignoring any imported art. */
+export function composedHeroKey(look, pose = 'stand') {
     return `hero_${look.mantle}_${look.crown}_${look.blade}_${look.lantern}_${pose}`;
+}
+
+/**
+ * The key the hero is actually wearing right now — which is the imported
+ * sprite while that experiment is switched on, and the composed one otherwise.
+ * Everything that shows the hero goes through here, so the swap reaches the
+ * dash ghosts and the codex portrait without either of them knowing about it.
+ */
+export function heroTextureKey(look, pose = 'stand') {
+    if (HERO_SPRITE.enabled) return HERO_SPRITE.key;
+    return composedHeroKey(look, pose);
 }
 
 export const HERO_GLOW_KEY = 'hero_lantern_glow';
@@ -447,8 +460,8 @@ export function drawSlash(g) {
  * asked for and hands back the key; every later call is a cache hit, so an
  * upgrade that changes appearance costs one draw and nothing per frame.
  */
-export function ensureHeroTexture(scene, look, pose = 'stand') {
-    const key = heroTextureKey(look, pose);
+export function bakeHeroTexture(scene, look, pose = 'stand') {
+    const key = composedHeroKey(look, pose);
     if (!scene.textures.exists(key)) {
         const g = scene.add.graphics();
         drawHero(g, look, pose);
@@ -456,4 +469,36 @@ export function ensureHeroTexture(scene, look, pose = 'stand') {
         g.destroy();
     }
     return key;
+}
+
+/**
+ * What to hand a sprite for this (look, pose).
+ *
+ * The imported sprite wins when it is switched on AND actually loaded. That
+ * second condition is the whole safety net: a data URI that fails to decode
+ * would otherwise hand out a key Phaser has never seen, which renders as its
+ * placeholder square with no error anywhere. Falling through to the composed
+ * hero means the worst case is the art you already had.
+ */
+export function ensureHeroTexture(scene, look, pose = 'stand') {
+    if (HERO_SPRITE.enabled && scene.textures.exists(HERO_SPRITE.key)) {
+        return HERO_SPRITE.key;
+    }
+    return bakeHeroTexture(scene, look, pose);
+}
+
+/** True while the hero's art carries its own walk and swing frames. */
+export function heroArtHasPoses() {
+    return !HERO_SPRITE.enabled || HERO_SPRITE.poses;
+}
+
+/**
+ * Where the lantern hangs, relative to the sprite's centre. A fact about the
+ * drawing rather than about the hero, which is why it lives here: on the
+ * composed sprite the lantern is on a hip and swaps sides with the figure, and
+ * on art that has no lantern at all the halo just sits centred as an aura.
+ */
+export function lanternOffset(flipX) {
+    if (HERO_SPRITE.enabled) return { x: HERO_SPRITE.lanternDx, y: HERO_SPRITE.lanternDy };
+    return { x: flipX ? 7 : -7, y: 4 };
 }

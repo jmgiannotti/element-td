@@ -8,8 +8,9 @@ import {
 } from '../data/Palette.js';
 import {
     DEFAULT_LOOK, LANTERN_TIERS, POSE_NAMES, HERO_GLOW_KEY, HERO_SLASH_KEY,
-    ensureHeroTexture, heroTextureKey, drawLanternGlow, drawSlash,
+    bakeHeroTexture, composedHeroKey, drawLanternGlow, drawSlash,
 } from '../data/HeroLook.js';
+import { HERO_SPRITE } from '../data/HeroSprite.js';
 
 /**
  * BootScene — generates ALL pixel-art textures at runtime. No external assets.
@@ -51,13 +52,20 @@ export function expectedTextureKeys() {
         'gate_spawn', 'gate_exit', HERO_GLOW_KEY, HERO_SLASH_KEY,
         'btn_bg', 'btn_bg_sel', 'btn_bg_off', 'btn_build', 'btn_build_sel'];
 
+    // Listed so the boot check catches a data URI that did not decode. The
+    // hero still runs if this is missing — it falls back to the composed
+    // sprite — but silently wearing the wrong art is worth a warning.
+    if (HERO_SPRITE.enabled) keys.push(HERO_SPRITE.key);
+
     // The starting look is pre-baked across every lantern tier and every pose:
     // both change several times a wave, and a first-time bake mid-swing would
     // be a stutter at exactly the wrong moment. Everything the hero grows into
-    // later bakes on demand instead.
+    // later bakes on demand instead. Baked even while the imported sprite is
+    // switched on — they are what it falls back to, and fifteen 32×32 textures
+    // is a cheap price for the swap being free to undo.
     for (const tier of LANTERN_TIERS) {
         for (const pose of POSE_NAMES) {
-            keys.push(heroTextureKey({ ...DEFAULT_LOOK, lantern: tier }, pose));
+            keys.push(composedHeroKey({ ...DEFAULT_LOOK, lantern: tier }, pose));
         }
     }
 
@@ -79,6 +87,19 @@ export function expectedTextureKeys() {
 export class BootScene extends Phaser.Scene {
     constructor() {
         super('BootScene');
+    }
+
+    /**
+     * The one thing in the game that is loaded rather than drawn: the imported
+     * hero sprite, and only while that experiment is switched on. It goes
+     * through the loader as a data URI so there is still no external file —
+     * and so it is decoded and registered before create() runs, which is the
+     * contract everything downstream relies on.
+     */
+    preload() {
+        if (HERO_SPRITE.enabled && !this.textures.exists(HERO_SPRITE.key)) {
+            this.load.image(HERO_SPRITE.key, HERO_SPRITE.png);
+        }
     }
 
     create() {
@@ -1213,7 +1234,7 @@ export class BootScene extends Phaser.Scene {
     _generateHero() {
         for (const tier of LANTERN_TIERS) {
             for (const pose of POSE_NAMES) {
-                ensureHeroTexture(this, { ...DEFAULT_LOOK, lantern: tier }, pose);
+                bakeHeroTexture(this, { ...DEFAULT_LOOK, lantern: tier }, pose);
             }
         }
         this._draw(HERO_GLOW_KEY, 26, 26, (g) => drawLanternGlow(g));

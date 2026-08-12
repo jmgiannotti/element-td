@@ -47,7 +47,8 @@ body {
         0 0 0 1px var(--panel),
         0 0 40px rgba(120, 120, 255, 0.16),
         0 0 90px rgba(120, 120, 255, 0.07);
-    line-height: 0;   /* no descender gap under the canvas */
+    line-height: 0;
+    /* no descender gap under the canvas */
 }
 
 #game-container canvas {
@@ -100,8 +101,13 @@ body {
     color: var(--dim);
 }
 
-#size-readout[data-crisp='yes'] { color: var(--crisp); }
-#size-readout[data-crisp='no']  { color: var(--soft); }
+#size-readout[data-crisp='yes'] {
+    color: var(--crisp);
+}
+
+#size-readout[data-crisp='no'] {
+    color: var(--soft);
+}
 
 #size-range {
     width: 240px;
@@ -112,7 +118,9 @@ body {
 
 /* The tick marks the datalist produces sit at the whole-pixel stops, so the
    crisp sizes are findable by feel while dragging. */
-#size-range::-webkit-slider-runnable-track { height: 4px; }
+#size-range::-webkit-slider-runnable-track {
+    height: 4px;
+}
 
 #size-bar button {
     font-family: inherit;
@@ -132,4 +140,6 @@ body {
     color: var(--accent);
 }
 
-#size-bar button:active { transform: translateY(1px); }
+#size-bar button:active {
+    transform: translateY(1px);
+}

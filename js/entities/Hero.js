@@ -3,7 +3,7 @@ import { GAME_WIDTH, GAME_HEIGHT } from '../systems/GridSystem.js';
 import { HERO_ABILITIES, ABILITY_ORDER, COMBO, comboMultiplier } from '../data/HeroData.js';
 import {
     DEFAULT_LOOK, LANTERNS, HERO_GLOW_KEY, HERO_SLASH_KEY, WALK_CYCLE,
-    ensureHeroTexture, lanternTierFor,
+    ensureHeroTexture, lanternTierFor, heroArtHasPoses, lanternOffset,
 } from '../data/HeroLook.js';
 import { audio } from '../systems/AudioSystem.js';
 import { pointerWorld } from '../systems/Viewport.js';
@@ -53,7 +53,8 @@ export class Hero {
 
         // The lantern's halo. Its own object rather than part of the sprite, so
         // it can breathe on its own clock without rebaking anything.
-        this.lanternGlow = scene.add.image(pos.x - 7, pos.y + 4, HERO_GLOW_KEY)
+        const lo0 = lanternOffset(false);
+        this.lanternGlow = scene.add.image(pos.x + lo0.x, pos.y + lo0.y, HERO_GLOW_KEY)
             .setDepth(19.5).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
 
         this.speed = 155;
@@ -158,7 +159,11 @@ export class Hero {
     _setPose(pose) {
         if (this.pose === pose || !this.sprite) return;
         this.pose = pose;
-        this.sprite.setTexture(ensureHeroTexture(this.scene, this.look, pose));
+        // The pose is tracked even when the art has no frame for it, so that
+        // swapping the art back in mid-run picks up wherever the hero already
+        // was. Only the texture change is skipped.
+        const key = ensureHeroTexture(this.scene, this.look, pose);
+        if (this.sprite.texture.key !== key) this.sprite.setTexture(key);
     }
 
     /**
@@ -585,13 +590,15 @@ export class Hero {
 
     /** Pushes logical position + idle bob + lunge offset onto the sprite. */
     _syncSprite(delta) {
-        this.bobPhase += (delta / 1000) * (this.moving || this.dashing ? 9 : 3.4);
-        const bob = this.moving || this.dashing
-            ? 0                                        // the walk frames do this
+        const walking = this.moving || this.dashing;
+        this.bobPhase += (delta / 1000) * (walking ? 9 : 3.4);
+        // Art with a walk cycle bounces on its own, and two bounces on one body
+        // fight each other — so the hop is spent only on art that has no walk
+        // frames, where without it the figure just slides.
+        const bob = walking
+            ? (heroArtHasPoses() ? 0 : -Math.abs(Math.sin(this.bobPhase)) * 2)
             : Math.sin(this.bobPhase) * 1.5;           // slow float while idle
 
-        // The pose carries its own bounce now, so the idle float stays and the
-        // walking hop goes: two bounces on the same body fight each other.
         this._animate(delta);
 
         this.sprite.x = this.posX + this.lunge.x;
@@ -600,10 +607,10 @@ export class Hero {
         this.shadow.y = this.posY + 14;
         this.shadow.setScale(this.moving || this.dashing ? 0.9 : 1, 1);
 
-        // The halo rides the lantern, which hangs on whichever hip is currently
-        // facing the camera — so it has to flip with the sprite.
-        this.lanternGlow.x = this.sprite.x + (this.sprite.flipX ? 7 : -7);
-        this.lanternGlow.y = this.sprite.y + 4;
+        // The halo rides the lantern, wherever the current art hangs it.
+        const lo = lanternOffset(this.sprite.flipX);
+        this.lanternGlow.x = this.sprite.x + lo.x;
+        this.lanternGlow.y = this.sprite.y + lo.y;
 
         // The pickup field is only drawn when there is something to pick up —
         // a circle trailing the hero at all times is noise the rest of the time.
