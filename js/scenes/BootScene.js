@@ -90,15 +90,20 @@ export class BootScene extends Phaser.Scene {
     }
 
     /**
-     * The one thing in the game that is loaded rather than drawn: the imported
-     * hero sprite, and only while that experiment is switched on. It goes
-     * through the loader as a data URI so there is still no external file —
-     * and so it is decoded and registered before create() runs, which is the
-     * contract everything downstream relies on.
+     * The one thing in the game that is loaded rather than drawn: the hand-drawn
+     * hero strip. It goes through the loader as a data URI so there is still no
+     * external file — and so it is decoded and registered before create() runs,
+     * which is the contract everything downstream relies on.
+     *
+     * As a spritesheet rather than an image, always: `frameCount` is 1 for
+     * single-frame art, and a one-frame sheet behaves exactly like an image
+     * while keeping one code path here.
      */
     preload() {
         if (HERO_SPRITE.enabled && !this.textures.exists(HERO_SPRITE.key)) {
-            this.load.image(HERO_SPRITE.key, HERO_SPRITE.png);
+            this.load.spritesheet(HERO_SPRITE.key, HERO_SPRITE.png, {
+                frameWidth: 32, frameHeight: 32,
+            });
         }
     }
 
@@ -1225,11 +1230,11 @@ export class BootScene extends Phaser.Scene {
 
     // ─── Hero ───────────────────────────────────────────
     /**
-     * Vesper is not drawn here. The hero is a composable look — mantle, crown,
-     * blade, lantern — so its sprite is baked from a recipe by HeroLook, which
-     * is also where the character's fiction and its upgrade slots live. Boot
-     * only has to put the starting recipe and the lantern halo on the atlas;
-     * anything the hero grows into later bakes itself on first use.
+     * Vesper is not drawn here. The figure itself is the hand-drawn strip that
+     * preload() brought in; the composable look — mantle, crown, blade, lantern —
+     * is baked from a recipe by HeroLook, which is also where the character's
+     * fiction and its upgrade slots live. Boot only has to register the walk
+     * animation and put the starting recipe, the halo and the shadow on the atlas.
      */
     _generateHero() {
         for (const tier of LANTERN_TIERS) {
@@ -1237,12 +1242,37 @@ export class BootScene extends Phaser.Scene {
                 bakeHeroTexture(this, { ...DEFAULT_LOOK, lantern: tier }, pose);
             }
         }
+        this._registerHeroAnims();
+
         this._draw(HERO_GLOW_KEY, 26, 26, (g) => drawLanternGlow(g));
         this._draw(HERO_SLASH_KEY, 32, 28, (g) => drawSlash(g));
 
         // Shadow, drawn separately so it can squash while Vesper walks
         this._draw('hero_shadow', 24, 10, (g) => {
             groundShadow(g, 12, 5, 11, 4, 0.34);
+        });
+    }
+
+    /**
+     * The walk cycle of the drawn hero, on the timing the artist set in the .ase.
+     *
+     * Animations live on the game's animation manager rather than on a scene, so
+     * one registration here serves GameScene for the rest of the run. Guarded on
+     * the texture actually existing: if the data URI failed to decode, the hero
+     * falls back to the composed sprite, and an animation pointing at a texture
+     * that is not there throws the moment anything plays it.
+     */
+    _registerHeroAnims() {
+        if (!HERO_SPRITE.enabled || !this.textures.exists(HERO_SPRITE.key)) return;
+        if (HERO_SPRITE.frameCount < 2 || this.anims.exists(HERO_SPRITE.walkAnim)) return;
+
+        this.anims.create({
+            key: HERO_SPRITE.walkAnim,
+            frames: this.anims.generateFrameNumbers(HERO_SPRITE.key, {
+                frames: HERO_SPRITE.walkFrames,
+            }),
+            frameRate: 1000 / HERO_SPRITE.frameMs,
+            repeat: -1,
         });
     }
 

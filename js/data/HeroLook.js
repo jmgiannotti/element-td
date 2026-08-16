@@ -493,12 +493,63 @@ export function heroArtHasPoses() {
 }
 
 /**
+ * True while the hero's art is a strip that animates itself.
+ *
+ * This is the difference between the two ways the hero can be animated. The
+ * composed hero has no animations: it has (look × pose) textures, and Hero swaps
+ * the texture per frame. The drawn strip is the opposite — one texture, and
+ * Phaser's animation manager walks its frames on the artist's own timing. Hero
+ * asks this to know which of the two it is driving.
+ *
+ * Asked of the clip and not of the config on purpose. BootScene only registers
+ * the walk once the strip has actually decoded, so this answers false in exactly
+ * the cases where the hero has quietly fallen back to the composed sprite — and
+ * the pose machine takes over again instead of driving an animation that is not
+ * there.
+ */
+export function heroArtAnimates(scene) {
+    return HERO_SPRITE.enabled && !!scene?.anims?.exists(HERO_SPRITE.walkAnim);
+}
+
+/**
+ * Which way the current art is drawn facing: -1 left, +1 right.
+ *
+ * A fact about the drawing, not about the hero. The composed Vesper is drawn
+ * facing right — everything in `drawHero` is asymmetric in service of that — and
+ * the hand-drawn strip faces left. Nothing else in the game needs to know which,
+ * as long as it turns the hero through `heroFlipX`.
+ */
+export function heroArtDir() {
+    return HERO_SPRITE.enabled && HERO_SPRITE.facing === 'left' ? -1 : 1;
+}
+
+/**
+ * Whether the sprite has to be mirrored to head in `dir` (-1 left, +1 right).
+ *
+ * Mirror when the direction wanted is not the one the art already faces. Writing
+ * that as `flipX = headingLeft` instead — which is what this used to be — is only
+ * correct for art drawn facing right, and on art drawn facing left it turns the
+ * character around exactly when it should not: the hero walks backwards.
+ */
+export function heroFlipX(dir) {
+    return dir !== heroArtDir();
+}
+
+/**
  * Where the lantern hangs, relative to the sprite's centre. A fact about the
  * drawing rather than about the hero, which is why it lives here: on the
- * composed sprite the lantern is on a hip and swaps sides with the figure, and
- * on art that has no lantern at all the halo just sits centred as an aura.
+ * composed sprite the lantern is on a hip, on the imported one it hangs off the
+ * helmet, and on art with no lantern at all the halo just sits centred as an
+ * aura.
+ *
+ * Both mirror with `flipX`, and they have to: the halo is an object of its own,
+ * so nothing flips it for free, and a lamp offset that ignores the flip lights up
+ * the back of the character's head half the time.
  */
 export function lanternOffset(flipX) {
-    if (HERO_SPRITE.enabled) return { x: HERO_SPRITE.lanternDx, y: HERO_SPRITE.lanternDy };
+    if (HERO_SPRITE.enabled) {
+        const dx = HERO_SPRITE.lanternDx;
+        return { x: flipX ? -dx : dx, y: HERO_SPRITE.lanternDy };
+    }
     return { x: flipX ? 7 : -7, y: 4 };
 }

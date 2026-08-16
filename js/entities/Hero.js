@@ -3,8 +3,10 @@ import { GAME_WIDTH, GAME_HEIGHT } from '../systems/GridSystem.js';
 import { HERO_ABILITIES, ABILITY_ORDER, COMBO, comboMultiplier } from '../data/HeroData.js';
 import {
     DEFAULT_LOOK, LANTERNS, HERO_GLOW_KEY, HERO_SLASH_KEY, WALK_CYCLE,
-    ensureHeroTexture, lanternTierFor, heroArtHasPoses, lanternOffset,
+    ensureHeroTexture, lanternTierFor, heroArtHasPoses, heroArtAnimates,
+    heroArtDir, heroFlipX, lanternOffset,
 } from '../data/HeroLook.js';
+import { HERO_SPRITE } from '../data/HeroSprite.js';
 import { audio } from '../systems/AudioSystem.js';
 import { pointerWorld } from '../systems/Viewport.js';
 
@@ -41,6 +43,12 @@ export class Hero {
         // Which frame of which action is showing. Independent of `look`: the
         // two multiply out in HeroLook rather than here.
         this.pose = 'stand';
+        // Which way the hero is turned: -1 left, +1 right. Tracked here rather
+        // than read back off the sprite's `flipX`, because the two are not the
+        // same thing — whether the sprite is mirrored also depends on which way
+        // its art happens to be drawn. Starts facing the way the art already
+        // does, so the first frame on screen is the drawing untouched.
+        this.facingDir = heroArtDir();
         this.walkPhase = 0;
         // Frames left of the current sword swing, in scaled ms. While this runs
         // the walk cycle stands down — one action owns the sprite at a time.
@@ -152,6 +160,19 @@ export class Hero {
     }
 
     /**
+     * Turn to head in `dir` (-1 left, +1 right).
+     *
+     * The one place the hero turns. Every caller passes the direction it wants,
+     * never the mirror flag: which of the two those are depends on the art, and
+     * `heroFlipX` is the only thing that should have to know.
+     */
+    _face(dir) {
+        if (!dir || !this.sprite) return;
+        this.facingDir = dir < 0 ? -1 : 1;
+        this.sprite.flipX = heroFlipX(this.facingDir);
+    }
+
+    /**
      * Show a given animation frame. Cheap enough to call every tick — it bails
      * when the pose has not changed, and the texture behind each (look, pose)
      * is baked once and cached.
@@ -162,8 +183,27 @@ export class Hero {
         // The pose is tracked even when the art has no frame for it, so that
         // swapping the art back in mid-run picks up wherever the hero already
         // was. Only the texture change is skipped.
+        if (heroArtAnimates(this.scene)) return;
         const key = ensureHeroTexture(this.scene, this.look, pose);
         if (this.sprite.texture.key !== key) this.sprite.setTexture(key);
+    }
+
+    /**
+     * Which clip the drawn hero is running: the walk while it moves, the idle
+     * frame otherwise.
+     *
+     * The strip has no attack frames, so a swing deliberately does not interrupt
+     * the cycle — the slash and the lunge are what sell it. `play(key, true)`
+     * ignores the call when that clip is already running; without the flag the
+     * cycle restarts every tick and the hero moonwalks on frame 0 forever.
+     */
+    _playArtClip(walking) {
+        if (walking) {
+            this.sprite.play(HERO_SPRITE.walkAnim, true);
+        } else if (this.sprite.anims.isPlaying) {
+            this.sprite.anims.stop();
+            this.sprite.setFrame(HERO_SPRITE.idleFrame);
+        }
     }
 
     /**
@@ -261,13 +301,13 @@ export class Hero {
         // pointer is in a space several times larger than the world.
         const raw = this.scene.input.activePointer;
         const p = raw ? pointerWorld(this.scene, raw) : null;
-        let dx = (p ? p.x : this.posX + (this.sprite.flipX ? -1 : 1) * 50) - this.posX;
+        let dx = (p ? p.x : this.posX + this.facingDir * 50) - this.posX;
         let dy = (p ? p.y : this.posY) - this.posY;
 
         // Pointer parked on the sidebar, or exactly on the hero: fall back to
         // whichever way he is facing rather than dashing nowhere.
         if (Math.abs(dx) + Math.abs(dy) < 4) {
-            dx = this.sprite.flipX ? -1 : 1;
+            dx = this.facingDir;
             dy = 0;
         }
 
@@ -292,9 +332,11 @@ export class Hero {
 
     _dashTrail(color) {
         for (let i = 0; i < 4; i++) {
-            // Off the live texture, not a fixed key: the trail has to be
-            // whatever Vesper looks like right now.
-            const ghost = this.scene.add.sprite(this.posX, this.posY, this.sprite.texture.key)
+            // Off the live texture AND the live frame, not a fixed key: the
+            // trail has to be whatever Vesper looks like right now, and on a
+            // spritesheet the key alone would freeze every ghost on frame 0.
+            const ghost = this.scene.add
+                .sprite(this.posX, this.posY, this.sprite.texture.key, this.sprite.frame.name)
                 .setScale(1).setDepth(18).setAlpha(0.45).setTint(color);
             ghost.flipX = this.sprite.flipX;
             this.scene.tweens.add({
@@ -499,7 +541,7 @@ export class Hero {
                 // lunged at an enemy behind him while still facing forward and
                 // swung out of his own back — which is exactly what "corre de
                 // espaldas" looked like. Movement sets facing; so must combat.
-                if (Math.abs(dx) > 1) this.sprite.flipX = dx < 0;
+                if (Math.abs(dx) > 1) this._face(dx);
 
                 this.swing = SWING_MS;
                 this._animate(0);
@@ -573,13 +615,13 @@ export class Hero {
         if (dist <= step || dist < 0.001) {
             this.posX = target.x;
             this.posY = target.y;
-            if (Math.abs(dx) > 1) this.sprite.flipX = dx < 0;
+            if (Math.abs(dx) > 1) this._face(dx);
             return true;
         }
 
         this.posX += (dx / dist) * step;
         this.posY += (dy / dist) * step;
-        if (Math.abs(dx) > 1) this.sprite.flipX = dx < 0;
+        if (Math.abs(dx) > 1) this._face(dx);
         return false;
     }
 
@@ -600,6 +642,8 @@ export class Hero {
             : Math.sin(this.bobPhase) * 1.5;           // slow float while idle
 
         this._animate(delta);
+        // Drawn art picks a clip; the pose machine above only picked a name for it.
+        if (heroArtAnimates(this.scene)) this._playArtClip(walking);
 
         this.sprite.x = this.posX + this.lunge.x;
         this.sprite.y = this.posY + this.lunge.y + bob;
@@ -705,6 +749,9 @@ export class Hero {
         this.collectField.setVisible(false);
         this.lanternGlow.setAlpha(0);
 
+        // A clip left running on a hidden sprite resumes mid-stride on respawn
+        if (heroArtAnimates(this.scene)) this.sprite.anims.stop();
+
         // Vesper does not die so much as come apart: the ash lifts, and the
         // lantern light goes with it. Drawn rather than typeset — an emoji is
         // the one thing on this board that cannot match the art.
@@ -749,6 +796,7 @@ export class Hero {
         this.swing = 0;
         this.walkPhase = 0;
         this._setPose('stand');
+        if (heroArtAnimates(this.scene)) this.sprite.setFrame(HERO_SPRITE.idleFrame);
 
         const pos = this.scene.gridSystem.gridToWorld(SPAWN_COL, SPAWN_ROW);
         this.posX = pos.x;
