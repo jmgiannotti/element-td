@@ -11,6 +11,7 @@ import {
     bakeHeroTexture, composedHeroKey, drawLanternGlow, drawSlash,
 } from '../data/HeroLook.js';
 import { HERO_SPRITE } from '../data/HeroSprite.js';
+import { SPELLS, SPELL_ORDER } from '../data/SpellData.js';
 
 /**
  * BootScene — generates ALL pixel-art textures at runtime. No external assets.
@@ -50,7 +51,12 @@ const SIDES = ['top', 'bottom', 'left', 'right'];
 export function expectedTextureKeys() {
     const keys = ['hero_shadow', 'mana_mote', 'tile_barricade',
         'gate_spawn', 'gate_exit', HERO_GLOW_KEY, HERO_SLASH_KEY,
+        'spell_moon', 'spell_moon_ring',
         'btn_bg', 'btn_bg_sel', 'btn_bg_off', 'btn_build', 'btn_build_sel'];
+
+    // One icon per spell, named off the table so a new spell fails the boot
+    // check loudly instead of showing Phaser's placeholder square on a button.
+    for (const key of SPELL_ORDER) keys.push(SPELLS[key].icon);
 
     // Listed so the boot check catches a data URI that did not decode. The
     // hero still runs if this is missing — it falls back to the composed
@@ -140,6 +146,7 @@ export class BootScene extends Phaser.Scene {
         this._generateHero();
         this._generateProjectiles();
         this._generateManaMote();
+        this._generateSpells();
         this._generateGates();
         this._generateUI();
     }
@@ -1379,6 +1386,102 @@ export class BootScene extends Phaser.Scene {
             g.fillRect(5, 0, 2, 2); g.fillRect(5, 10, 2, 2);
             g.fillRect(0, 5, 2, 2); g.fillRect(10, 5, 2, 2);
             g.fillStyle(0xffffff); g.fillRect(4, 4, 2, 1); g.fillRect(4, 5, 1, 1);
+        });
+    }
+
+    // ─── Spells ─────────────────────────────────────────
+    /**
+     * LUNA — the moon that falls, the rings that wrap the hero, and the crescent
+     * on the button.
+     *
+     * Same masonry as the temples, two stops brighter: the moon and the marble
+     * are meant to look like the same white stone, because the fiction says the
+     * monoliths remember the light Vesper carries and this is where it comes
+     * from. The only other colour on any of the three is the maná violet, which
+     * is the resource the spell just spent — so the cast is visibly made of the
+     * thing it cost.
+     */
+    _generateSpells() {
+        // MARBLE lifted two stops. A moon has to out-light the board it lands on.
+        const MOON = ramp(0x2a3550, 0x53637f, 0x8ba0bc, 0xcfdde9, 0xffffff);
+
+        this._draw('spell_moon', 48, 48, (g) => {
+            // Halo first, so the disc sits inside its own light
+            for (let r = 23; r > 18; r--) {
+                g.fillStyle(MOON.light, 0.05 * (24 - r));
+                g.fillCircle(24, 24, r);
+            }
+            g.fillStyle(SOUL.mid, 0.14); g.fillCircle(24, 24, 21);
+
+            volume(g, ellipse(24, 24, 18, 18), MOON, { lu: 0.32, lv: 0.28, spec: 0.2, band: 0.3 });
+
+            // Maria. Two big, three small, none touching the rim — a crater on
+            // the edge breaks the silhouette and the disc stops reading as round.
+            for (const [cx, cy, r] of [[19, 20, 5], [30, 29, 4]]) {
+                g.fillStyle(MOON.mid, 0.75); g.fillCircle(cx, cy, r);
+                g.fillStyle(MOON.dark, 0.5); g.fillCircle(cx, cy + 1, r - 2);
+            }
+            // The small ones are rectangles, not tiny circles: a two-pixel
+            // radius comes out of fillCircle as a plus sign, and three plus
+            // signs on a disc read as stars rather than as pitting.
+            for (const [cx, cy, w, h] of [[27, 16, 3, 2], [15, 29, 3, 2], [33, 21, 2, 2]]) {
+                g.fillStyle(MOON.mid, 0.7); g.fillRect(cx, cy, w, h);
+                g.fillStyle(MOON.dark, 0.45); g.fillRect(cx, cy + 1, w, 1);
+            }
+
+            // Lit limb along the top-left, and the violet the spell is made of
+            // bleeding around the shaded one.
+            g.fillStyle(MOON.glow, 0.85);
+            for (let a = -2.5; a < -0.7; a += 0.06) {
+                g.fillRect(Math.round(24 + Math.cos(a) * 17), Math.round(24 + Math.sin(a) * 17), 2, 2);
+            }
+            g.fillStyle(SOUL.light, 0.5);
+            for (let a = 0.5; a < 2.2; a += 0.06) {
+                g.fillRect(Math.round(24 + Math.cos(a) * 18), Math.round(24 + Math.sin(a) * 18), 2, 2);
+            }
+        });
+
+        // The ring that closes onto the hero. Dashed and squashed on purpose:
+        // a solid circle shows nothing when it spins, and a flat one reads as a
+        // puddle rather than as something being wound around a body.
+        this._draw('spell_moon_ring', 44, 44, (g) => {
+            const RX = 20, RY = 16;
+            for (let i = 0; i < 220; i++) {
+                const a = (i / 220) * Math.PI * 2;
+                // Three arcs, three gaps
+                if (((a * 3) % (Math.PI * 2)) > Math.PI * 1.45) continue;
+                const x = Math.round(22 + Math.cos(a) * RX);
+                const y = Math.round(22 + Math.sin(a) * RY);
+                g.fillStyle(MOON.light, 0.85); g.fillRect(x, y, 2, 2);
+                g.fillStyle(MOON.glow, 0.5); g.fillRect(x, y, 1, 1);
+            }
+            // Four beads on the ring, so the spin has something to count
+            for (let i = 0; i < 4; i++) {
+                const a = (i / 4) * Math.PI * 2 + 0.4;
+                const x = Math.round(22 + Math.cos(a) * RX);
+                const y = Math.round(22 + Math.sin(a) * RY);
+                g.fillStyle(SOUL.light, 0.9); g.fillCircle(x, y, 2);
+                g.fillStyle(MOON.glow); g.fillRect(x, y, 1, 1);
+            }
+        });
+
+        // Button icon: a crescent, carved rather than drawn — the bite is a
+        // second disc's worth of pixels left out, which keeps the inner edge as
+        // clean as the outer one at this size.
+        this._draw('spell_luna', 24, 24, (g) => {
+            const R = 10, BITE = 9.2, OX = 4.5, OY = -0.5;
+            for (let y = -R; y <= R; y++) {
+                for (let x = -R; x <= R; x++) {
+                    const d = Math.hypot(x, y);
+                    if (d > R) continue;
+                    if (Math.hypot(x - OX, y - OY) <= BITE) continue;
+                    // Brightest along the outer rim, falling away inward
+                    const t = d / R;
+                    g.fillStyle(t > 0.86 ? MOON.glow : t > 0.62 ? MOON.light : MOON.mid);
+                    g.fillRect(12 + x, 12 + y, 1, 1);
+                }
+            }
+            g.fillStyle(SOUL.light, 0.55); g.fillRect(4, 10, 1, 4);
         });
     }
 

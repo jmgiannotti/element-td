@@ -7,8 +7,10 @@ import { TempleSystem } from '../systems/TempleSystem.js';
 import { RouteView } from '../systems/RouteView.js';
 import { FloatingText } from '../systems/FloatingText.js';
 import { TutorialSystem } from '../systems/TutorialSystem.js';
+import { SpellSystem } from '../systems/SpellSystem.js';
 import { audio } from '../systems/AudioSystem.js';
 import { ABILITY_ORDER, HERO_ABILITIES } from '../data/HeroData.js';
+import { SPELLS, SPELL_ORDER } from '../data/SpellData.js';
 import { Tower } from '../entities/Tower.js';
 import { Temple } from '../entities/Temple.js';
 import { Hero } from '../entities/Hero.js';
@@ -67,6 +69,9 @@ export class GameScene extends Phaser.Scene {
         this.economySystem = new EconomySystem(this);
         this.waveManager = new WaveManager(this);
         this.fusionSystem = new FusionSystem(this);
+        // Reads the hero and the enemy list lazily, at cast time, so it can be
+        // built before either exists.
+        this.spellSystem = new SpellSystem(this);
 
         // ── Entity lists ────────────────────────
         this.towers = [];
@@ -91,6 +96,9 @@ export class GameScene extends Phaser.Scene {
         this.isBarricadeMode = false;
         this.isTempleMode = false;
         this.sellMode = false;
+        // The spell whose cursor is armed, if any. Same one-at-a-time slot as
+        // the build and sell cursors: all three act on the next click.
+        this.spellMode = null;
         // Set by UIScene while the temple upgrade panel is open, so clicks
         // meant for the panel never fall through onto the map behind it.
         this.uiModalOpen = false;
@@ -117,6 +125,13 @@ export class GameScene extends Phaser.Scene {
         this.previewTile = this.add.rectangle(0, 0, TILE_SIZE - 2, TILE_SIZE - 2, 0x00ff00, 0.2);
         this.previewTile.setStrokeStyle(1, 0x00ff00, 0.4);
         this.previewTile.setVisible(false).setDepth(2);
+
+        // Where a spell would land. Free of the grid on purpose — a spell hits
+        // an area, not a cell, so snapping it to a tile would promise a
+        // precision the effect does not have.
+        this.spellCursor = this.add.circle(0, 0, 90, 0xffffff, 0.07);
+        this.spellCursor.setStrokeStyle(1, 0xffffff, 0.5);
+        this.spellCursor.setVisible(false).setDepth(2);
 
         // What the cell under the cursor is about to cost or pay you, or why it
         // is refused. Said before the click, because an outcome you cannot see
@@ -182,12 +197,26 @@ export class GameScene extends Phaser.Scene {
             this.hero.useAbility(key);
         });
 
+        // Spells. Same shape as the abilities, one difference: a spell arms a
+        // cursor instead of firing, because it needs a place to land.
+        for (const key of SPELL_ORDER) {
+            this.input.keyboard.on(`keydown-${SPELLS[key].hotkey}`, () => {
+                if (this.gameOver || this.gameWon || this.uiModalOpen) return;
+                this._armSpell(key);
+            });
+        }
+        this.events.on('select-spell', (key) => {
+            if (this.gameOver || this.gameWon) return;
+            this._armSpell(key);
+        });
+
         // ── Internal events ─────────────────────
         this.events.on('select-element', (el) => {
             this.selectedElement = el;
             this.isBarricadeMode = false;
             this.isTempleMode = false;
             this._setSellMode(false);
+            this._setSpellMode(null);
             this._clearBarricadeProbe();
             this.placementMode = true;
             this.previewSprite.setTexture(safeTexture(this, `tower_${el}`, 'tower_earth'));
@@ -205,6 +234,7 @@ export class GameScene extends Phaser.Scene {
             this.isBarricadeMode = true;
             this.isTempleMode = false;
             this._setSellMode(false);
+            this._setSpellMode(null);
             this.placementMode = true;
             this.previewSprite.setTexture('tile_barricade');
             this.previewRange.setVisible(false);
@@ -218,6 +248,7 @@ export class GameScene extends Phaser.Scene {
             this.isTempleMode = true;
             this.isBarricadeMode = false;
             this._setSellMode(false);
+            this._setSpellMode(null);
             this._clearBarricadeProbe();
             this.placementMode = true;
             this.previewSprite.setTexture(safeTexture(this, `temple_${el}`, 'temple_earth'));
@@ -238,6 +269,7 @@ export class GameScene extends Phaser.Scene {
             this.previewSprite.setVisible(false);
             this.previewRange.setVisible(false);
             this._setSellMode(true);
+            this._setSpellMode(null);
             this._clearBarricadeProbe();
             this._refreshRouteVisibility();
             this.buildGrid.setVisible(true);
@@ -435,12 +467,66 @@ export class GameScene extends Phaser.Scene {
         this.decor.set(key, s);
     }
 
+    // ─── Spells ─────────────────────────────────────────
+    /**
+     * Put a spell on the cursor, or refuse it out loud.
+     *
+     * Refused here rather than on the click that follows: aiming a spell you
+     * cannot pay for and only being told at the end is the sort of thing that
+     * reads as the button being broken. Pressing the key again disarms, so the
+     * hotkey is a toggle and never a trap.
+     */
+    _armSpell(key) {
+        if (!SPELLS[key]) return;
+        if (this.spellMode === key) { this._setSpellMode(null); return; }
+        if (this.spellSystem.announceRefusal(key)) return;
+
+        this._cancelPlacement();
+        this._setSpellMode(key);
+        audio.play('click');
+    }
+
+    /** Arms or clears the targeting cursor. Null puts it away. */
+    _setSpellMode(key) {
+        if (this.spellMode === key) return;
+        this.spellMode = key ?? null;
+
+        if (!this.spellMode) {
+            this.spellCursor.setVisible(false);
+            this.cursorLabel.setVisible(false);
+            this.events.emit('spell-disarmed');
+            return;
+        }
+
+        const spell = SPELLS[this.spellMode];
+        this.spellCursor.setRadius(spell.radius);
+        this.spellCursor.setFillStyle(spell.color, 0.07);
+        this.spellCursor.setStrokeStyle(1, spell.color, 0.5);
+
+        // Shown where the pointer already is, without waiting for it to move.
+        // Arming from the button or the hotkey and seeing nothing until you
+        // twitch the mouse reads as the spell not having armed at all.
+        const p = pointerWorld(this, this.input.activePointer);
+        if (p.x < GAME_WIDTH) this.spellCursor.setPosition(p.x, p.y).setVisible(true);
+
+        this.events.emit('spell-armed', this.spellMode);
+    }
+
     // ─── Input handling ─────────────────────────────────
     /** `world` is the pointer already resolved through the camera by the caller. */
     _handleClick(pointer, world) {
         if (pointer.button !== 0) return;
         const p = world ?? pointerWorld(this, pointer);
         const { col, row } = this.gridSystem.worldToGrid(p.x, p.y);
+
+        // A spell outranks every other cursor: it was armed most recently, and
+        // it is the one the player is holding a countdown for.
+        if (this.spellMode) {
+            const key = this.spellMode;
+            this._setSpellMode(null);
+            this.spellSystem.cast(key, p.x, p.y);
+            return;
+        }
 
         if (this.sellMode) {
             this._trySell(col, row);
@@ -530,12 +616,25 @@ export class GameScene extends Phaser.Scene {
 
     _handleMove(pointer) {
         const p = pointerWorld(this, pointer);
-        if ((!this.placementMode && !this.sellMode) || p.x >= GAME_WIDTH) {
+        if ((!this.placementMode && !this.sellMode && !this.spellMode) || p.x >= GAME_WIDTH) {
             this.previewSprite.setVisible(false);
             this.previewRange.setVisible(false);
             this.previewTile.setVisible(false);
+            this.spellCursor.setVisible(false);
             this.cursorLabel.setVisible(false);
             this._clearBarricadeProbe();
+            return;
+        }
+
+        // Unsnapped, and priced under the cursor: the two facts a spell has to
+        // show before the click are where it reaches and what it takes.
+        if (this.spellMode) {
+            const spell = SPELLS[this.spellMode];
+            this.spellCursor.setPosition(p.x, p.y).setVisible(true);
+            this._showCursorLabel(
+                { x: p.x, y: p.y - spell.radius + 14 },
+                `${spell.label}  ${spell.cost}✦`, spell.colorHex,
+            );
             return;
         }
 
@@ -827,6 +926,7 @@ export class GameScene extends Phaser.Scene {
         this.isBarricadeMode = false;
         this.isTempleMode = false;
         this._setSellMode(false);
+        this._setSpellMode(null);
         this.previewSprite.setVisible(false);
         this.previewRange.setVisible(false);
         this.previewTile.setVisible(false);
@@ -871,6 +971,9 @@ export class GameScene extends Phaser.Scene {
 
         // Hero
         this.hero.update(time, delta);
+        // After the hero: the channel VFX are pinned to where he ended up this
+        // frame, not to where he was at the start of it.
+        this.spellSystem.update(delta);
 
         // Tutorial — after the hero and the motes, so it reads the state the
         // player is actually looking at this frame.

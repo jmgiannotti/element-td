@@ -65,7 +65,7 @@ export class Hero {
         this.lanternGlow = scene.add.image(pos.x + lo0.x, pos.y + lo0.y, HERO_GLOW_KEY)
             .setDepth(19.5).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
 
-        this.speed = 155;
+        this.speed = 87;
         this.attackDamage = 10;
         this.attackRange = 55;
         this.attackRate = 900;
@@ -93,6 +93,10 @@ export class Hero {
         // Time left in the current cast. While it runs the auto-attack is
         // suppressed: an ability the normal swing talks over is not an ability.
         this.busy = 0;
+        // Time left rooted in a spell channel. Separate from `busy` because the
+        // two answer different questions: `busy` is "can he act", this is "can
+        // he be moved" — and the dash sets the first while moving him.
+        this.channelTimer = 0;
         this.invuln = 0;
         this.dashing = false;
         this.dashTarget = null;
@@ -251,6 +255,48 @@ export class Hero {
             duration: 220,
             ease: 'Quad.easeOut',
         });
+    }
+
+    // ─── Casting ────────────────────────────────────────
+    /** Turn to look at a point, if it is far enough sideways to be worth it. */
+    lookAt(x, y) {
+        const dx = x - this.posX;
+        if (Math.abs(dx) > 1) this._face(dx);
+    }
+
+    /**
+     * Stand still and channel something for `ms`.
+     *
+     * Rooted on purpose, and it is the cheapest honest cost a spell has besides
+     * its maná: the whole read of a cast is that Vesper stopped to do it. It
+     * also keeps the effect anchored — SpellSystem pins its rings to the hero,
+     * and a hero who can stroll out from under them turns the spell into two
+     * unrelated things happening at once.
+     *
+     * `busy` is what suppresses the auto-attack and the abilities, so a channel
+     * borrows the same lock a cast time already uses.
+     */
+    channel(ms) {
+        if (this.isDead) return false;
+
+        this.moving = false;
+        this.targetPos = null;
+        this.channelTimer = Math.max(this.channelTimer, ms);
+        this.busy = Math.max(this.busy, ms);
+
+        // A short rise and settle, off the lunge offset so it can never fight
+        // the movement code for control of the transform.
+        this.scene.tweens.add({
+            targets: this.lunge,
+            y: -4,
+            duration: Math.min(220, ms * 0.4),
+            yoyo: true,
+            hold: Math.max(0, ms - Math.min(440, ms * 0.8)),
+            ease: 'Sine.easeOut',
+            onComplete: () => { this.lunge.y = 0; },
+        });
+
+        return true;
     }
 
     // ─── Abilities ──────────────────────────────────────
@@ -478,8 +524,9 @@ export class Hero {
     moveTo(worldX, worldY) {
         if (this.isDead) return;
         // A dash owns the hero's motion until it lands; queueing a walk on top
-        // of it is how you end up teleporting back to where you started.
-        if (this.dashing) return;
+        // of it is how you end up teleporting back to where you started. A
+        // channel owns it for the same reason — see channel().
+        if (this.dashing || this.channelTimer > 0) return;
 
         const tx = Phaser.Math.Clamp(worldX, 10, GAME_WIDTH - 10);
         const ty = Phaser.Math.Clamp(worldY, 12, GAME_HEIGHT - 10);
@@ -597,6 +644,7 @@ export class Hero {
             }
         }
         if (this.busy > 0) this.busy = Math.max(0, this.busy - delta);
+        if (this.channelTimer > 0) this.channelTimer = Math.max(0, this.channelTimer - delta);
         if (this.invuln > 0) this.invuln = Math.max(0, this.invuln - delta);
 
         if (this.comboTimer > 0) {
@@ -739,6 +787,7 @@ export class Hero {
         this.dashing = false;
         this.dashTarget = null;
         this.busy = 0;
+        this.channelTimer = 0;
         this.invuln = 0;
         this.comboTimer = 0;
         this._endCombo();
@@ -794,6 +843,7 @@ export class Hero {
         this.lunge.x = 0;
         this.lunge.y = 0;
         this.swing = 0;
+        this.channelTimer = 0;
         this.walkPhase = 0;
         this._setPose('stand');
         if (heroArtAnimates(this.scene)) this.sprite.setFrame(HERO_SPRITE.idleFrame);

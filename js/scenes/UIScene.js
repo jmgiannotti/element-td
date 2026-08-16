@@ -12,6 +12,7 @@ import {
     SUPER_MULT, RESIST_MULT, elementSymbol, elementName,
 } from '../data/Elements.js';
 import { HERO_ABILITIES, ABILITY_ORDER, COMBO, abilityHeading } from '../data/HeroData.js';
+import { SPELLS, SPELL_ORDER, spellHeading } from '../data/SpellData.js';
 import { HERO_LORE, DEFAULT_LOOK, heroTextureKey } from '../data/HeroLook.js';
 import { applyViewport } from '../systems/Viewport.js';
 
@@ -47,6 +48,16 @@ const HUD_Y = 455;
 const HUD_SIZE = 30;
 const HUD_GAP = 36;
 
+// Spells sit in their own row above the abilities, left edges aligned with it.
+// Wider cells than an ability: a spell carries a price as well as a key, and a
+// price you cannot see is not a price. Stacked rather than continuing the
+// ability row because the tutorial banner owns the strip at y≈456 to the right.
+const SPELL_W = 60;
+const SPELL_H = 28;
+const SPELL_GAP = 66;
+const SPELL_Y = HUD_Y - 52;
+const SPELL_X = HUD_X - HUD_SIZE / 2 + SPELL_W / 2;
+
 export class UIScene extends Phaser.Scene {
     constructor() {
         super('UIScene');
@@ -74,6 +85,7 @@ export class UIScene extends Phaser.Scene {
         this._buildGlobalControls();
         this._buildWavePreview();
         this._buildWaveButton();
+        this._buildSpellHud();
         this._buildHeroHud();
         this._buildTutorialBanner();
         this._registerEvents();
@@ -86,6 +98,7 @@ export class UIScene extends Phaser.Scene {
     /** Cooldown wipes have to be redrawn every frame; nothing else here does. */
     update() {
         this._refreshHeroHud();
+        this._refreshSpellHud();
     }
 
     // ─── Shared chrome helpers ──────────────────────────
@@ -644,6 +657,106 @@ export class UIScene extends Phaser.Scene {
         });
     }
 
+    // ─── Spell bar ──────────────────────────────────────
+    /**
+     * The maná sink, next to the maná spender it belongs to.
+     *
+     * Beside the ability bar rather than in the sidebar for the same reason the
+     * abilities are: you cast these while watching the lane. The difference is
+     * that a spell has a price, so each cell carries the number — and the number
+     * is what turns "I have 400✦" into a decision instead of a total.
+     */
+    _buildSpellHud() {
+        this.add.text(HUD_X - HUD_SIZE / 2, SPELL_Y - SPELL_H / 2 - 9, 'HECHIZOS', {
+            fontFamily: FONT, fontSize: '8px', color: '#CFDDE9',
+            stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0, 0.5).setDepth(50);
+
+        this.spellBtns = SPELL_ORDER.map((key, i) => {
+            const s = SPELLS[key];
+            const x = SPELL_X + i * SPELL_GAP;
+
+            const bg = this.add.rectangle(x, SPELL_Y, SPELL_W, SPELL_H, 0x12122a, 0.86)
+                .setStrokeStyle(2, s.color)
+                .setDepth(50)
+                .setInteractive({ useHandCursor: true });
+
+            const icon = this.add.image(x - 20, SPELL_Y, safeTexture(this, s.icon, 'mana_mote'))
+                .setScale(0.8)
+                .setDepth(52);
+
+            const hot = this.add.text(x - 3, SPELL_Y - 6, s.hotkey, {
+                fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
+                stroke: '#000000', strokeThickness: 3,
+            }).setOrigin(0, 0.5).setDepth(52);
+
+            const cost = this.add.text(x - 3, SPELL_Y + 6, `${s.cost}`, {
+                fontFamily: FONT, fontSize: '8px', color: '#B388FF',
+                stroke: '#000000', strokeThickness: 3,
+            }).setOrigin(0, 0.5).setDepth(52);
+
+            const wipe = this.add.rectangle(x, SPELL_Y + SPELL_H / 2, SPELL_W - 4, 0, 0x000000, 0.66)
+                .setOrigin(0.5, 1)
+                .setDepth(51);
+
+            // Over the icon, not over the middle of the cell: the right half
+            // already holds the key and the price, and a countdown parked on
+            // top of them makes all three unreadable at once.
+            const timer = this.add.text(x - 20, SPELL_Y, '', {
+                fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
+                stroke: '#000000', strokeThickness: 3,
+            }).setOrigin(0.5).setDepth(53);
+
+            bg.on('pointerdown', (pointer) => {
+                pointer.event.stopPropagation();
+                this.gs.events.emit('select-spell', key);
+            });
+            bg.on('pointerover', () => this._showTooltip(
+                [spellHeading(key), ...s.desc], HUD_X - HUD_SIZE / 2, SPELL_Y - 56, 0
+            ));
+            bg.on('pointerout', () => this._hideTooltip());
+
+            return { key, spell: s, bg, icon, hot, cost, wipe, timer, armed: false };
+        });
+    }
+
+    /**
+     * Three states, and they have to be told apart: charged and affordable,
+     * charged but too expensive, and still recharging. The first two differ by
+     * whether the price is violet or red, the third by the wipe over the cell.
+     */
+    _refreshSpellHud() {
+        if (!this.spellBtns) return;
+        const ss = this.gs.spellSystem;
+        const mana = this.gs.economySystem.mana;
+
+        for (const btn of this.spellBtns) {
+            const pct = ss.cooldownPct(btn.key);
+            btn.wipe.height = (SPELL_H - 4) * pct;
+
+            const cooling = pct > 0;
+            btn.timer.setText(cooling ? `${ss.cooldownSeconds(btn.key)}` : '');
+
+            const affordable = mana >= btn.spell.cost;
+            btn.cost.setColor(affordable ? '#B388FF' : '#FF8A80');
+            btn.icon.setAlpha(cooling || !affordable ? 0.35 : 1);
+
+            // Armed outranks everything: while the cursor is holding this spell
+            // the border is gold, so it matches the build buttons that behave
+            // the same way — one thing on the cursor, and you can see which.
+            const usable = ss.canCast(btn.key);
+            btn.bg.setStrokeStyle(2,
+                btn.armed ? 0xFFD54F : usable ? btn.spell.color : 0x3a3a5a);
+            btn.hot.setColor(usable ? '#ECEFF1' : '#555566');
+        }
+    }
+
+    /** Which spell, if any, is currently sitting on the map cursor. */
+    _setSpellArmed(key) {
+        if (!this.spellBtns) return;
+        for (const btn of this.spellBtns) btn.armed = btn.key === key;
+    }
+
     _refreshHeroHud() {
         if (!this.abilityBtns) return;
         const hero = this.gs.hero;
@@ -768,6 +881,16 @@ export class UIScene extends Phaser.Scene {
         });
 
         this.gs.events.on('lives-changed', () => this._updateStatus());
+
+        // The spell cursor is armed and disarmed by GameScene — from a click
+        // here, from a hotkey, from ESC, or by picking up a build cursor
+        // instead. The button follows that state rather than owning it.
+        this.gs.events.on('spell-armed', (key) => this._setSpellArmed(key));
+        this.gs.events.on('spell-disarmed', () => this._setSpellArmed(null));
+        this.gs.events.on('spell-cast', (key) => {
+            const s = SPELLS[key];
+            if (s) this._flashNotification(`${s.label}  −${s.cost}✦`, s.colorHex);
+        });
 
         this.gs.events.on('wave-started', () => {
             this._updateStatus();
@@ -950,9 +1073,10 @@ export class UIScene extends Phaser.Scene {
      * was barely legible and ate the room every other section needed. As an
      * overlay it can be read at a usable size and costs nothing when closed.
      *
-     * Three tabs now, because there are three sets of rules a player has to be
+     * Four tabs now, because there are four sets of rules a player has to be
      * able to look up mid-game and none of them fit in a tooltip: what fuses
-     * with what, which element beats which, and what the hero can do.
+     * with what, which element beats which, what the hero can do, and what the
+     * maná buys besides temple ranks.
      */
     _openHelpPanel(tab = 'fusion') {
         // Pressing ? again closes; picking the tab you are on does too.
@@ -970,6 +1094,7 @@ export class UIScene extends Phaser.Scene {
 
         if (tab === 'elements') this._buildElementsTab(container);
         else if (tab === 'hero') this._buildHeroTab(container);
+        else if (tab === 'spells') this._buildSpellsTab(container);
         else this._buildFusionTab(container);
 
         this._closeButton(container, 148, () => this._closeHelpPanel());
@@ -981,13 +1106,14 @@ export class UIScene extends Phaser.Scene {
             { key: 'fusion', label: 'FUSIONES' },
             { key: 'elements', label: 'ELEMENTOS' },
             { key: 'hero', label: 'HEROE' },
+            { key: 'spells', label: 'HECHIZOS' },
         ];
 
         TABS.forEach((t, i) => {
-            const x = -148 + i * 148;
+            const x = -177 + i * 118;
             const on = t.key === active;
 
-            const bg = this.add.rectangle(x, -150, 142, 24, on ? 0x2a2a5a : 0x16162a)
+            const bg = this.add.rectangle(x, -150, 112, 24, on ? 0x2a2a5a : 0x16162a)
                 .setStrokeStyle(1, on ? 0xFFD54F : 0x3a3a5a)
                 .setInteractive({ useHandCursor: true });
             const txt = this.add.text(x, -150, t.label, {
@@ -1099,6 +1225,43 @@ export class UIScene extends Phaser.Scene {
                 `${EFFECT_MARK[EFFECT.RESIST]} ${list(d.resistance)}`,
                 { fontFamily: FONT, fontSize: '8px', color: EFFECT_COLOR[EFFECT.RESIST] }
             ).setOrigin(0, 0.5));
+        });
+    }
+
+    /**
+     * What the maná buys that is not a temple rank.
+     *
+     * The first line is the one that matters: until this tab existed, every
+     * mote a player collected had exactly one destination, and the upgrade bar
+     * in the sidebar said so. A spell only becomes a decision once you know it
+     * is competing for the same number.
+     */
+    _buildSpellsTab(container) {
+        container.add(this.add.text(0, -124, `Gastan ${MANA}, el mismo que las mejoras de templo.`, {
+            fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
+        }).setOrigin(0.5));
+        container.add(this.add.text(0, -110, 'Se apuntan con un click en el mapa.', {
+            fontFamily: FONT, fontSize: '8px', color: '#78909C',
+        }).setOrigin(0.5));
+
+        SPELL_ORDER.forEach((key, i) => {
+            const s = SPELLS[key];
+            const y = -70 + i * 74;
+
+            container.add(this.add.rectangle(0, y, 420, 66, 0x0d0d1c, 0.55)
+                .setStrokeStyle(1, 0x22223a));
+
+            container.add(this.add.rectangle(-180, y, 34, 34, 0x12122a)
+                .setStrokeStyle(2, s.color));
+            container.add(this.add.image(-180, y, safeTexture(this, s.icon, 'mana_mote')));
+
+            container.add(this.add.text(-152, y - 22, spellHeading(key), {
+                fontFamily: FONT, fontSize: '8px', color: s.colorHex,
+            }).setOrigin(0, 0.5));
+
+            container.add(this.add.text(-152, y - 12, s.desc.join('\n'), {
+                fontFamily: FONT, fontSize: '8px', color: '#B0BEC5', lineSpacing: 5,
+            }).setOrigin(0, 0));
         });
     }
 

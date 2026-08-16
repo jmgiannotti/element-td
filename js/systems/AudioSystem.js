@@ -208,6 +208,26 @@ class AudioSystem {
         this._noise({ dur: 0.3, gain: 0.15, from: 900, to: 90 });
     }
 
+    /** A spell winding up: light being gathered, so everything rises. */
+    _cast() {
+        this._tone({ type: 'sine', freq: 220, to: 660, dur: 0.5, gain: 0.09 });
+        this._tone({ type: 'triangle', freq: 330, to: 990, dur: 0.44, gain: 0.05, delay: 0.06 });
+        this._noise({ dur: 0.4, gain: 0.05, from: 300, to: 3200 });
+    }
+
+    /**
+     * The moon landing. Bottom-heavy like the quake, because it is an impact —
+     * but with a bell over it, because the thing that hit the ground is made of
+     * the same light the lantern keeps.
+     */
+    _moon() {
+        this._tone({ type: 'triangle', freq: 110, to: 38, dur: 0.5, gain: 0.2 });
+        this._noise({ dur: 0.36, gain: 0.14, from: 1400, to: 70 });
+        [784, 1175].forEach((f, i) => {
+            this._tone({ type: 'sine', freq: f, dur: 0.6, gain: 0.08, delay: 0.04 + i * 0.05 });
+        });
+    }
+
     _deny() {
         this._tone({ type: 'square', freq: 150, to: 100, dur: 0.11, gain: 0.12 });
     }
