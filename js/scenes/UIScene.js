@@ -1131,11 +1131,14 @@ export class UIScene extends Phaser.Scene {
     }
 
     _buildFusionTab(container) {
-        container.add(this.add.text(0, -124, 'Dos vecinas compatibles se pueden fusionar.', {
+        container.add(this.add.text(0, -126, 'Arrastra una torre sobre su vecina.', {
             fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
         }).setOrigin(0.5));
-        container.add(this.add.text(0, -110, 'Vale igual para torres y para templos.', {
-            fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
+        container.add(this.add.text(0, -113, 'Las que brillan tienen con quien fusionar.', {
+            fontFamily: FONT, fontSize: '8px', color: '#78909C',
+        }).setOrigin(0.5));
+        container.add(this.add.text(0, -100, 'Igual para templos. Nace donde la soltaste.', {
+            fontFamily: FONT, fontSize: '8px', color: '#78909C',
         }).setOrigin(0.5));
 
         // Derived from FUSION_MAP so the table can never drift from the rules.

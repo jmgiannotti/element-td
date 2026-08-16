@@ -64,13 +64,19 @@ export class Temple {
         this.sprite.setInteractive({ useHandCursor: true });
         this.sprite.on('pointerover', () => this._hover(true));
         this.sprite.on('pointerout', () => this._hover(false));
-        this.sprite.on('pointerdown', (pointer) => {
+        // On release, not on press. A press on a temple is also the first frame
+        // of a possible fusion drag, and a modal opening under the cursor would
+        // swallow the gesture before it started — so the panel waits until the
+        // release, and stands down when the release turns out to end a drag.
+        this.sprite.on('pointerup', (pointer) => {
             if (pointer.button !== 0) return;
             if (!this.alive) return;
             // While placing something the click belongs to the build cursor,
             // otherwise you could never drop a tower beside a temple. Same for
-            // the sell cursor: there the click is meant to demolish this.
-            if (this.scene.placementMode || this.scene.sellMode) return;
+            // the sell and spell cursors: there the click is aimed at this tile.
+            if (this.scene.placementMode || this.scene.sellMode || this.scene.spellMode) return;
+            const fs = this.scene.fusionSystem;
+            if (fs && (fs.dragging || fs.justDragged)) return;
             pointer.event.stopPropagation();
             this.scene.events.emit('open-temple', this.element);
         });

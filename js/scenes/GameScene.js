@@ -170,14 +170,42 @@ export class GameScene extends Phaser.Scene {
                 return;
             }
 
-            // Only genuine UI overlays (e.g. the fusion badge) swallow the click.
-            // Tower sprites must not, or you cannot build right next to them.
+            // Only genuine UI overlays swallow the click. Tower sprites must
+            // not, or you cannot build right next to them.
             const blocked = gameObjects.some(o => o.getData && o.getData('uiBlocker'));
             if (blocked && !this.sellMode) return;
 
-            this._handleClick(pointer, p);
+            // A press on a fusable building might be the start of a drag. Noted,
+            // not acted on: which gesture this is only becomes knowable once the
+            // pointer either moves or comes back up.
+            this.fusionSystem.onPointerDown(p);
+
+            this._pressConsumed = this._handleClick(pointer, p);
         });
-        this.input.on('pointermove', (pointer) => this._handleMove(pointer));
+
+        this.input.on('pointermove', (pointer) => {
+            const p = pointerWorld(this, pointer);
+            this.fusionSystem.onPointerMove(p);
+            this._handleMove(pointer);
+        });
+
+        // Inspecting a building happens on release, not on press. On press it is
+        // indistinguishable from the first frame of a drag, and pinning a stat
+        // card over the board every time someone reaches for a tower is the kind
+        // of thing that makes a drag feel broken before it has even started.
+        this.input.on('pointerup', (pointer) => {
+            if (this.gameOver || this.gameWon || this.uiModalOpen) return;
+            if (pointer.button !== 0) return;
+
+            const p = pointerWorld(this, pointer);
+            const wasDrag = this.fusionSystem.onPointerUp(p);
+            const consumed = this._pressConsumed;
+            this._pressConsumed = false;
+
+            if (wasDrag || consumed) return;
+            if (p.x >= GAME_WIDTH) return;
+            this._inspectAt(p);
+        });
         this.input.keyboard.on('keydown-ESC', () => {
             this._cancelPlacement();
             this.selectStructure(null);
@@ -513,9 +541,15 @@ export class GameScene extends Phaser.Scene {
     }
 
     // ─── Input handling ─────────────────────────────────
-    /** `world` is the pointer already resolved through the camera by the caller. */
+    /**
+     * What the press does, if anything. `world` is the pointer already resolved
+     * through the camera by the caller.
+     *
+     * Returns true when the press was spent on a cursor mode, so the release
+     * that follows knows not to also read it as an inspection click.
+     */
     _handleClick(pointer, world) {
-        if (pointer.button !== 0) return;
+        if (pointer.button !== 0) return false;
         const p = world ?? pointerWorld(this, pointer);
         const { col, row } = this.gridSystem.worldToGrid(p.x, p.y);
 
@@ -525,23 +559,30 @@ export class GameScene extends Phaser.Scene {
             const key = this.spellMode;
             this._setSpellMode(null);
             this.spellSystem.cast(key, p.x, p.y);
-            return;
+            return true;
         }
 
         if (this.sellMode) {
             this._trySell(col, row);
-            return;
+            return true;
         }
 
         // Left click → place tower
         if (this.placementMode && this.selectedElement) {
             this._tryPlace(col, row);
-            return;
+            return true;
         }
 
-        // Nothing on the cursor: a click is an inspection. Resolved from the
-        // cell rather than from the sprite that was hit, so clicking the grass
-        // beside a tower reliably puts the ring away again.
+        return false;
+    }
+
+    /**
+     * Nothing on the cursor and nothing dragged: the click was a question about
+     * a building. Resolved from the cell rather than from the sprite that was
+     * hit, so clicking the grass beside a tower reliably puts the ring away.
+     */
+    _inspectAt(world) {
+        const { col, row } = this.gridSystem.worldToGrid(world.x, world.y);
         const tower = this.towers.find(t => t.alive && t.col === col && t.row === row);
         this.selectStructure(tower ?? null);
     }
@@ -921,6 +962,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     _cancelPlacement() {
+        // ESC or arming another cursor while a tower is in hand: put it back.
+        this.fusionSystem.abortDrag();
         this.placementMode = false;
         this.selectedElement = null;
         this.isBarricadeMode = false;
@@ -974,6 +1017,9 @@ export class GameScene extends Phaser.Scene {
         // After the hero: the channel VFX are pinned to where he ended up this
         // frame, not to where he was at the start of it.
         this.spellSystem.update(delta);
+        // Unscaled delta: a fusion drag is a cursor, not a thing in the world,
+        // so it must not slow down or speed up with the VEL toggle.
+        this.fusionSystem.update(this.game.loop.delta);
 
         // Tutorial — after the hero and the motes, so it reads the state the
         // player is actually looking at this frame.
