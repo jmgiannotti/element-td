@@ -38,6 +38,49 @@ export const ENEMY_TYPES = {
  * Kept deliberately lopsided: the tutorial enemy has a weakness and no
  * resistance, so the first thing the system teaches is the reward, not the
  * punishment.
+ *
+ * ── AGRO: the two that do not just walk ──────────────────
+ * `agro` is what turns an enemy from a thing on a track into a thing with an
+ * errand. It makes the enemy leave the road entirely and walk in a straight line
+ * at something of yours. Two of the four have one, and in both cases the codex
+ * line above already said they would:
+ *
+ *   VELADOR  hunts Vesper. It is a vigilante that died holding a lantern that
+ *            went out, and Vesper is walking around with a lit one. It breaks
+ *            off when he comes near and goes back to the road if he outruns it.
+ *   SILLAR   sabotages temples. It is a block of a fallen temple, and it goes to
+ *            put a standing one out. It does not destroy the building — it holds
+ *            it shut, and it stays there doing it until something kills it.
+ *
+ * The fields, and why each one exists:
+ *   target   'hero' or 'temple'.
+ *   range    how close the target has to be before it breaks off. This is the
+ *            whole difficulty dial: it is what decides whether a hero farming
+ *            motes in the lane, or a temple parked next to the road, is a
+ *            decision or a free lunch.
+ *   leash    how far the target can get before it gives up and rejoins the road.
+ *            Larger than `range` on purpose, or an enemy at the boundary would
+ *            flicker between the two behaviours every frame.
+ *   reach    how close it has to be to act on the target.
+ *   color / colorHex   the ring under its feet while it is off the road, and
+ *            the same colour as text. Nothing else on the board ever leaves the
+ *            path, so the moment one does has to be legible immediately.
+ *   hitMs / stunMs / maxHits   temple targets only: the wind-up before it
+ *            strikes (and the gap between strikes if it gets more than one), how
+ *            long the temple stays shut afterwards, and how many strikes it gets
+ *            before it rejoins the road.
+ *
+ * `maxHits` started as a deadlock fix — a sillar that sat on a temple until
+ * something killed it could not be outlasted, and a wave does not end until the
+ * board is clear, so a player whose towers could not reach their own temple had
+ * no move left except selling it.
+ *
+ * It is one strike now, and that is a readability fix rather than a balance one.
+ * The temple goes dark on the first hit; the second and third landed on a door
+ * that was already shut, refreshed a timer nobody can see, and left the sillar
+ * standing there looking like it had forgotten what it came for. One strike, one
+ * visible consequence, and it walks on. The whole cost lives in `stunMs`, where
+ * it can be tuned without changing what the animation appears to be doing.
  */
 export const ENEMY_DATA = {
     [ENEMY_TYPES.SLIME]: {
@@ -68,6 +111,22 @@ export const ENEMY_DATA = {
         color: 0x8BA0BC,
         colorDark: 0x5B6C8C,
         spawns: [{ type: ENEMY_TYPES.SLIME, count: 2 }],
+        // Slow enough that the walk across the grass is a warning rather than an
+        // ambush — a sillar that breaks off is on screen, off the road, for
+        // several seconds before it arrives.
+        agro: {
+            target: 'temple',
+            range: 120,
+            leash: 320,
+            leashTiles: 6,
+            reach: 22,
+            hitMs: 1600,
+            stunMs: 6000,
+            maxHits: 1,
+            returnSpeedMult: 2.5,
+            color: 0xCFDDE9,
+            colorHex: '#CFDDE9',
+        },
     },
     [ENEMY_TYPES.SPECTER]: {
         name: 'Espectro',
@@ -82,6 +141,21 @@ export const ENEMY_DATA = {
         manaDrops: 1,
         color: 0x9A86C4,
         colorDark: 0x5B4A86,
+        // The fastest thing on the board, so its range is the shortest: a
+        // velador that noticed Vesper from across the map would be un-outrunnable
+        // and the answer to it would stop being "move" and start being "do not
+        // bring the hero out at all", which is the opposite of the point.
+        agro: {
+            target: 'hero',
+            range: 118,
+            leashTiles: 4.5,       // Max distance (in tiles) from where it left the path (~144px)
+            leash: 144,
+            targetLeash: 220,      // Max distance from target before giving up
+            reach: 20,
+            returnSpeedMult: 2.5,  // 2.5x speed while returning to the road
+            color: 0xB388FF,
+            colorHex: '#B388FF',
+        },
     },
     [ENEMY_TYPES.DRAGON]: {
         name: 'Dragón',

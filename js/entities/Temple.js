@@ -1,5 +1,6 @@
 import { TEMPLE_DATA } from '../data/TempleData.js';
 import { safeTexture } from '../systems/TextureGuard.js';
+import { audio } from '../systems/AudioSystem.js';
 
 /**
  * A temple: the building that harvests life force and, once standing, unlocks
@@ -18,6 +19,8 @@ export class Temple {
         this.fusionHint = false;
         this.alive = true;
         this.absorbed = 0;
+        // Milliseconds left held shut by a sillar. See sabotage().
+        this.disabledTimer = 0;
 
         const pos = scene.gridSystem.gridToWorld(col, row);
 
@@ -91,6 +94,66 @@ export class Temple {
         if (!this.alive) return;
         this.field.setFillStyle(this.data.color, on ? 0.12 : 0.05);
         this.field.setStrokeStyle(1, this.data.color, on ? 0.5 : 0.22);
+    }
+
+    // ─── Sabotage ───────────────────────────────────────
+    /** True while a sillar is holding this temple shut. */
+    get disabled() { return this.disabledTimer > 0; }
+
+    /**
+     * Held shut for `ms`. It is not damage and it does not accumulate — the
+     * timer is refreshed, not stacked, so two sillares on one temple are not
+     * twice as bad as one. They are the same bad for twice as long, which is
+     * what the player can actually act on.
+     *
+     * What it stops is the absorption (see TempleSystem): motes in range stop
+     * being drunk and evaporate on their own clock. The upgrade levels this
+     * element already bought are untouched — those are knowledge, not a service
+     * the building provides, and silently nerfing every tower on the map from a
+     * building the player may not even be looking at would be a cost with no
+     * visible cause.
+     */
+    sabotage(ms) {
+        if (!this.alive) return;
+        const wasOff = this.disabled;
+        this.disabledTimer = Math.max(this.disabledTimer, ms);
+
+        if (!wasOff) {
+            this._applyTint();
+            // The field is the promise "motes in here get drunk". While it is
+            // shut that promise is false, so the ring has to go with it.
+            this.field.setVisible(false);
+            this.glow.setFillStyle(0x000000, 0.25);
+            this.scene.events.emit('temple-sabotaged', this);
+        }
+
+        audio.play('sabotage');
+
+        // A jolt on every strike, so a second hit on an already-dark temple is
+        // still visibly a second hit.
+        this.scene.tweens.add({
+            targets: this.sprite,
+            x: this.sprite.x + 2,
+            duration: 45,
+            yoyo: true,
+            repeat: 2,
+            onComplete: () => {
+                if (this.sprite) this.sprite.x = this.scene.gridSystem.gridToWorld(this.col, this.row).x;
+            },
+        });
+    }
+
+    /** Ticks the shutdown down. Called by GameScene once per frame. */
+    update(delta) {
+        if (!this.alive || this.disabledTimer <= 0) return;
+        this.disabledTimer -= delta;
+        if (this.disabledTimer > 0) return;
+
+        this.disabledTimer = 0;
+        this._applyTint();
+        this.field.setVisible(true);
+        this.glow.setFillStyle(this.data.color, 0.18);
+        this.scene.events.emit('temple-restored', this);
     }
 
     /** Called when a mote finishes its flight into this temple. */
@@ -167,8 +230,18 @@ export class Temple {
     setFusionHint(value) {
         if (this.fusionHint === value) return;
         this.fusionHint = value;
-        if (!this.alive) return;
-        if (value) this.sprite.setTint(0xFFD700);
+        this._applyTint();
+    }
+
+    /**
+     * Single owner of the sprite tint, so the two states cannot clobber each
+     * other. Being shut outranks being fusable: a dark temple that is also
+     * glowing gold reads as neither.
+     */
+    _applyTint() {
+        if (!this.alive || !this.sprite) return;
+        if (this.disabled) this.sprite.setTint(0x4a4a5e);
+        else if (this.fusionHint) this.sprite.setTint(0xFFD700);
         else this.sprite.clearTint();
     }
 

@@ -25,6 +25,25 @@ export class Enemy {
         this.burnTimer = 0;
         this.burnTick = 0;
 
+        // ── Agro ────────────────────────────────
+        // See EnemyData: most enemies have no `agro` and never read any of this.
+        // `mode` is 'road' or 'chase', and it is the only thing that decides
+        // whether the path below or the straight line in _chase is in charge.
+        this.agro = this.data.agro ?? null;
+        this.mode = 'road';
+        this.isReturning = false;
+        this.departPos = null;
+        this.departCell = null;
+        this.agroTarget = null;
+        this.agroRing = null;
+        this.strikeTimer = 0;
+        this.strikes = 0;
+        // Set once an errand has been *finished* rather than merely abandoned.
+        // A velador that loses the hero must be able to pick him up again — that
+        // is the pressure. A sillar that has spent its strikes must not re-lock
+        // on the temple it is still standing next to, or maxHits buys nothing.
+        this.errandDone = false;
+
         // Path and Spawning
         const exitWp = WAYPOINTS[WAYPOINTS.length - 1];
         if (spawnX !== null && spawnY !== null) {
@@ -73,9 +92,25 @@ export class Enemy {
 
     recalculatePath() {
         if (!this.alive) return;
+        const exitWp = WAYPOINTS[WAYPOINTS.length - 1];
+
+        // If chasing or returning, anchor pathfinding to the departure cell on the original track.
+        // This prevents the enemy from shortcutting ahead if it crosses later road tiles during a chase.
+        if ((this.mode === 'chase' || this.isReturning) && this.departCell) {
+            const dep = this.departCell;
+            const validCell = this.scene.gridSystem.isWalkable(dep.col, dep.row)
+                ? dep
+                : this.scene.gridSystem.nearestWalkable(dep.col, dep.row);
+            const newPath = this.scene.gridSystem.findPath(validCell.col, validCell.row, exitWp.col, exitWp.row);
+            if (newPath) {
+                this.path = newPath;
+                this.pathIndex = 0;
+            }
+            return;
+        }
+
         const raw = this.scene.gridSystem.worldToGrid(this.x, this.y);
         const cell = this.scene.gridSystem.nearestWalkable(raw.col, raw.row);
-        const exitWp = WAYPOINTS[WAYPOINTS.length - 1];
         const newPath = this.scene.gridSystem.findPath(cell.col, cell.row, exitWp.col, exitWp.row);
         if (newPath) {
             this.path = newPath;
@@ -114,6 +149,11 @@ export class Enemy {
             if (this.burnTimer <= 0) this.burning = false;
         }
 
+        // ── Agro ────────────────────────────────
+        // Decided before combat and before movement, because it is the thing
+        // that says which of the two is even running this frame.
+        if (this.agro) this._thinkAgro();
+
         // ── Hero combat ─────────────────────────
         const hero = this.scene.hero;
         if (hero && !hero.isDead) {
@@ -134,6 +174,13 @@ export class Enemy {
                     return; // Stop moving to fight hero
                 }
             }
+        }
+
+        // Off the road: the errand replaces the route entirely, so nothing
+        // below this line runs until it goes back to 'road'.
+        if (this.mode === 'chase') {
+            this._chase(delta);
+            return;
         }
 
         // ── Movement & Block breaking ───────────
@@ -161,13 +208,14 @@ export class Enemy {
             return; // Wait until block is broken
         }
 
-        // Normal movement
+        // Normal / Returning movement
         const tx = nextCell.col * TILE_SIZE + TILE_SIZE / 2;
         const ty = nextCell.row * TILE_SIZE + TILE_SIZE / 2;
         const dx = tx - this.x;
         const dy = ty - this.y;
 
-        const effectiveSpeed = this.speed * (1 - this.slowAmount);
+        const returnMult = this.isReturning ? (this.agro?.returnSpeedMult ?? 2.5) : 1;
+        const effectiveSpeed = this.speed * returnMult * (1 - this.slowAmount);
         const step = effectiveSpeed * (delta / 1000);
 
         // Movement is resolved one axis at a time, so the distance a frame has
@@ -179,6 +227,12 @@ export class Enemy {
             this.sprite.x = tx;
             this.sprite.y = ty;
             this.pathIndex++;
+            // Reached the road cell when returning — transition back to normal pace
+            if (this.isReturning && this.pathIndex >= 1) {
+                this.isReturning = false;
+                this.departPos = null;
+                this.departCell = null;
+            }
         } else {
             // Never travel diagonally. The path is 4-connected, so a diagonal
             // component only ever means the enemy is off-lane — scattered
@@ -202,9 +256,225 @@ export class Enemy {
             }
         }
 
+        // Ghosting trail while returning at increased speed
+        if (this.isReturning && Math.random() < 0.35 && this.sprite) {
+            const ghost = this.scene.add.sprite(this.x, this.y, this.sprite.texture.key)
+                .setScale(this.sprite.scaleX, this.sprite.scaleY)
+                .setFlipX(this.sprite.flipX)
+                .setAlpha(0.35)
+                .setTint(this.agro?.color ?? 0x9A86C4)
+                .setDepth(9.5);
+            this.scene.tweens.add({
+                targets: ghost,
+                alpha: 0,
+                scaleX: this.sprite.scaleX * 0.8,
+                scaleY: this.sprite.scaleY * 0.8,
+                duration: 220,
+                onComplete: () => ghost.destroy(),
+            });
+        }
+
         // Keep facing whichever way it last moved horizontally, rather than
         // snapping back to the right on every vertical stretch.
         if (Math.abs(dx) > 0.01) this.sprite.flipX = dx < 0;
+        this._updateHpBar();
+    }
+
+    // ─── Agro ───────────────────────────────────────────
+    /**
+     * Decide whether to be on the road or on an errand this frame.
+     *
+     * Two thresholds: breaks off at `range`, gives up at `leash` from where it
+     * left the road (or if hero is out of reach / sheltered).
+     */
+    _thinkAgro() {
+        if (this.mode === 'chase') {
+            const t = this.agroTarget;
+            const gone = !t || (t.isDead ?? false) || t.alive === false;
+
+            if (this._sheltered(t)) {
+                // Said once by the UI. A hunter that simply turns around is the
+                // kind of rule a player never works out on their own.
+                this.scene.events.emit('hero-sheltered');
+                this._breakOff();
+                return;
+            }
+
+            // Leash limit: distance from where the enemy abandoned the road
+            let leashExceeded = false;
+            if (this.departPos) {
+                const maxLeash = this.agro.leashTiles
+                    ? this.agro.leashTiles * TILE_SIZE
+                    : (this.agro.leash ?? 144);
+                const distFromDepart = Phaser.Math.Distance.Between(this.x, this.y, this.departPos.x, this.departPos.y);
+                if (distFromDepart > maxLeash) {
+                    leashExceeded = true;
+                }
+            }
+
+            // Target out of reach or dead
+            const targetDist = t ? Phaser.Math.Distance.Between(this.x, this.y, t.x, t.y) : Infinity;
+            const targetTooFar = !gone && targetDist > (this.agro.targetLeash ?? 220);
+
+            if (gone || leashExceeded || targetTooFar) {
+                if (leashExceeded && this.scene.floating) {
+                    this.scene.floating.show(this.x, this.y - 24, '?', {
+                        color: this.agro.colorHex ?? '#B388FF', size: 8, rise: 12, duration: 600,
+                    });
+                }
+                this._breakOff();
+            }
+            return;
+        }
+
+        // Do not re-agro while sprinting back to the road or after finishing errand
+        if (this.isReturning || this.errandDone) return;
+
+        const target = this._findAgroTarget();
+        if (!target) return;
+        if (Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y) > this.agro.range) return;
+        // Checked before locking on as well as during the chase: without it a
+        // velador beside a temple would lock on and break off on alternate
+        // frames, strobing the ring and never going anywhere.
+        if (this._sheltered(target)) return;
+
+        this._lockOn(target);
+    }
+
+    /**
+     * Is the target standing on consecrated ground?
+     *
+     * Only the hero can be: a temple does not shelter itself, and a sillar that
+     * dropped its errand every time it arrived would never land a strike.
+     *
+     * Note what this does not do — it drops the *hunt*, not the damage. An enemy
+     * whose road happens to run past the temple can still swing at a hero
+     * standing there, because that block applies to every enemy on the board and
+     * always has. A temple is a place a velador loses interest in you, not a
+     * bubble.
+     */
+    _sheltered(target) {
+        if (this.agro.target !== 'hero' || !target) return false;
+        const ts = this.scene.templeSystem;
+        return !!ts && !!ts.shelterAt(target.x, target.y);
+    }
+
+    /** The thing this enemy has an errand with, if it is on the board right now. */
+    _findAgroTarget() {
+        if (this.agro.target === 'hero') {
+            const h = this.scene.hero;
+            return h && !h.isDead ? h : null;
+        }
+
+        // Nearest standing temple. A temple already held shut is still a valid
+        // target — refusing it would make two sillares gang up on one temple and
+        // then politely take turns.
+        let best = null;
+        let bestDist = Infinity;
+        for (const t of this.scene.temples) {
+            if (!t.alive) continue;
+            const d = Phaser.Math.Distance.Between(this.x, this.y, t.x, t.y);
+            if (d < bestDist) { best = t; bestDist = d; }
+        }
+        return best;
+    }
+
+    _lockOn(target) {
+        this.mode = 'chase';
+        this.isReturning = false;
+        this.departPos = { x: this.x, y: this.y };
+        // Anchor to the road cell where the enemy was standing/heading when the chase started.
+        // This prevents shortcutting to later road loops if the hero kites it across other road tiles.
+        const currentCell = (this.path && this.pathIndex < this.path.length)
+            ? this.path[this.pathIndex]
+            : this.scene.gridSystem.nearestWalkable(
+                Math.floor(this.x / TILE_SIZE),
+                Math.floor(this.y / TILE_SIZE)
+            );
+        this.departCell = { col: currentCell.col, row: currentCell.row };
+        this.agroTarget = target;
+        this.strikeTimer = 0;
+        this.strikes = 0;
+        // Defensive: every path into here goes through 'road', which has no
+        // ring — but a second ring on one enemy is invisible and permanent, so
+        // it is not a leak that would ever get noticed.
+        if (this.agroRing) this.agroRing.destroy();
+
+        // Nothing else on this board ever leaves the road, so the moment one
+        // does has to be legible or it reads as a pathfinding bug.
+        if (this.scene.floating) {
+            this.scene.floating.show(this.x, this.y - 24, '!', {
+                color: this.agro.colorHex, size: 8, rise: 12, duration: 600,
+            });
+        }
+
+        this.agroRing = this.scene.add.circle(this.x, this.y + 10, 9, this.agro.color, 0.16)
+            .setStrokeStyle(1, this.agro.color, 0.7)
+            .setDepth(9);
+        this.scene.tweens.add({
+            targets: this.agroRing,
+            scaleX: 1.25, scaleY: 1.25,
+            duration: 460, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+        });
+    }
+
+    /** Errand over — rejoin the road at its departure checkpoint. */
+    _breakOff() {
+        this.mode = 'road';
+        this.isReturning = true;
+        this.agroTarget = null;
+        this.strikeTimer = 0;
+        this.strikes = 0;
+        if (this.agroRing) { this.agroRing.destroy(); this.agroRing = null; }
+        // Re-anchor to the departure cell and calculate path back to it and to the exit.
+        this.recalculatePath();
+    }
+
+    /**
+     * Straight at the target, and diagonally if that is the shortest way.
+     *
+     * The deliberate opposite of the road movement below, which resolves one
+     * axis at a time precisely so nothing ever cuts a corner. That rule exists
+     * because the path is 4-connected and a diagonal there means the enemy is
+     * off-lane. Here off-lane is the whole point.
+     */
+    _chase(delta) {
+        const t = this.agroTarget;
+        if (!t) { this._breakOff(); return; }
+
+        const dx = t.x - this.x;
+        const dy = t.y - this.y;
+        const dist = Math.hypot(dx, dy);
+        const reach = this.agro.reach ?? 20;
+
+        if (dist > reach) {
+            const step = this.speed * (1 - this.slowAmount) * (delta / 1000);
+            const move = Math.min(step, dist);
+            this.sprite.x += (dx / dist) * move;
+            this.sprite.y += (dy / dist) * move;
+            if (Math.abs(dx) > 0.01) this.sprite.flipX = dx < 0;
+        } else if (this.agro.target === 'temple') {
+            // Arrived. It does not knock the building down, it holds it shut —
+            // a few times, and then it moves on. See maxHits in EnemyData for
+            // why it cannot be allowed to stay forever.
+            this.strikeTimer += delta;
+            if (this.strikeTimer >= this.agro.hitMs) {
+                this.strikeTimer = 0;
+                this.strikes++;
+                t.sabotage(this.agro.stunMs);
+                if (this.strikes >= (this.agro.maxHits ?? Infinity)) {
+                    this.errandDone = true;
+                    this._breakOff();
+                }
+            }
+        }
+        // A hero target needs nothing here: the hero-combat block above already
+        // stops and hits once it is close enough, and does it for every enemy.
+
+        if (this.agroRing) {
+            this.agroRing.x = this.x;
+            this.agroRing.y = this.y + 10;
+        }
         this._updateHpBar();
     }
 
@@ -284,6 +554,11 @@ export class Enemy {
             this.scene.events.off('path-changed', this.pathChangeHandler);
         }
 
+        // The errand ends the instant it dies, so the ring goes now rather than
+        // fading with the body — _cleanup runs off a tween's onComplete, and a
+        // marker that outlives a stalled tween is a marker stuck on the grass.
+        if (this.agroRing) { this.agroRing.destroy(); this.agroRing = null; }
+
         this.scene.events.emit('enemy-died', this);
 
         // Spawn nested enemies
@@ -322,5 +597,8 @@ export class Enemy {
         if (this.sprite) { this.sprite.destroy(); this.sprite = null; }
         if (this.hpBg) { this.hpBg.destroy(); this.hpBg = null; }
         if (this.hpFill) { this.hpFill.destroy(); this.hpFill = null; }
+        // Killed mid-errand: the ring is a separate object and outlives the
+        // sprite unless it is taken down here.
+        if (this.agroRing) { this.agroRing.destroy(); this.agroRing = null; }
     }
 }

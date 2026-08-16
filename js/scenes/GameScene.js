@@ -996,6 +996,10 @@ export class GameScene extends Phaser.Scene {
         // Enemies
         for (const e of this.enemies) e.update(time, delta);
 
+        // Temples, then the motes: a temple whose shutdown expires this frame
+        // should be drinking again on this frame, not on the next one.
+        for (const t of this.temples) t.update(delta);
+
         // Mana motes — only temples harvest them now
         for (const m of this.manaMotes) m.update(time, delta);
         this.templeSystem.updateAbsorption(this.manaMotes);

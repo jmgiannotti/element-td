@@ -228,6 +228,16 @@ class AudioSystem {
         });
     }
 
+    /**
+     * A temple being held shut. The temple cue read backwards and downward: the
+     * same triangle, falling instead of rising, so the two are audibly the same
+     * building doing the opposite thing.
+     */
+    _sabotage() {
+        this._tone({ type: 'triangle', freq: 150, to: 62, dur: 0.34, gain: 0.16 });
+        this._noise({ dur: 0.26, gain: 0.1, from: 700, to: 110 });
+    }
+
     _deny() {
         this._tone({ type: 'square', freq: 150, to: 100, dur: 0.11, gain: 0.12 });
     }

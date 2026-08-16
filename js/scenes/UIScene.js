@@ -577,6 +577,13 @@ export class UIScene extends Phaser.Scene {
         ];
         if (d.weakness?.length) lines.push(`${EFFECT_MARK[EFFECT.SUPER]} debil: ${list(d.weakness)}`);
         if (d.resistance?.length) lines.push(`${EFFECT_MARK[EFFECT.RESIST]} resiste: ${list(d.resistance)}`);
+        // The one thing about an enemy you cannot read off its stat line: that it
+        // is going to leave the road. Worth saying before the wave, not during.
+        if (d.agro?.target === 'hero') {
+            lines.push('! deja el camino por el heroe');
+            lines.push('  lo suelta si entra a un templo');
+        }
+        if (d.agro?.target === 'temple') lines.push('! deja el camino por los templos');
         this._showTooltip(lines, x, y);
     }
 
@@ -881,6 +888,29 @@ export class UIScene extends Phaser.Scene {
         });
 
         this.gs.events.on('lives-changed', () => this._updateStatus());
+
+        // A temple going dark is an economic hit with no number attached to it,
+        // so it is the kind of thing a player misses entirely while watching the
+        // lane. Said once when it happens, and once when it comes back.
+        this.gs.events.on('temple-sabotaged', (t) => {
+            this._flashNotification(
+                `¡${TEMPLE_DATA[t.element].shortName} apagado! no absorbe ${MANA}`, '#FF8A80'
+            );
+            this._updateManaBar();
+        });
+        this.gs.events.on('temple-restored', (t) => {
+            this._flashNotification(`${TEMPLE_DATA[t.element].shortName} de vuelta`, '#4CAF50');
+            this._updateManaBar();
+        });
+
+        // A velador turning around on its own is invisible as a rule. Said the
+        // first time it happens, when the player is watching the thing that just
+        // stopped chasing them.
+        this.gs.events.on('hero-sheltered', () => {
+            if (this.saidOnce.shelter) return;
+            this.saidOnce.shelter = true;
+            this._flashNotification('El circulo del templo ahuyenta veladores', '#B388FF');
+        });
 
         // The spell cursor is armed and disarmed by GameScene — from a click
         // here, from a hotkey, from ESC, or by picking up a build cursor

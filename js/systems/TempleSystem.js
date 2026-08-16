@@ -123,6 +123,34 @@ export class TempleSystem {
         return best;
     }
 
+    // ── Sanctuary ────────────────────────────────
+    /**
+     * The temple sheltering this point, or null. Consecrated ground: a velador
+     * that has Vesper cornered gives up the chase the moment he reaches one.
+     *
+     * ── Why a temple, and why this radius ────────────────
+     * Hunting the hero to the death made the answer to a velador "do not bring
+     * the hero out", which is the opposite of what the hunt is for. A place to
+     * break line of sight turns it back into a question about routes. And the
+     * temple is the right place: it already draws its absorption ring on the
+     * ground at all times, so the safe zone needs no new UI and the player has
+     * been looking at its exact shape since they built it.
+     *
+     * ── Why a shut temple does not shelter ───────────────
+     * The predicate is the same one absorption uses, deliberately. A sabotaged
+     * temple hides its ring — if it still sheltered, the only drawing of the safe
+     * zone on screen would be lying about where the safe zone is. So a sillar
+     * putting a temple out also puts out its sanctuary, and the two Epic 4
+     * enemies end up with something to say to each other.
+     */
+    shelterAt(x, y) {
+        for (const t of this.scene.temples) {
+            if (!t.alive || t.disabled) continue;
+            if (Phaser.Math.Distance.Between(t.x, t.y, x, y) <= t.absorbRadius) return t;
+        }
+        return null;
+    }
+
     // ── Mana absorption ──────────────────────────
     /**
      * Towers never touch motes. Life force flows into temples, and into the
@@ -155,12 +183,19 @@ export class TempleSystem {
         }
     }
 
-    /** Closest covering temple, so order in the list never decides the winner. */
+    /**
+     * Closest covering temple, so order in the list never decides the winner.
+     *
+     * A temple held shut by a sillar is skipped entirely rather than losing a
+     * contest — it has to be as if it were not there, or a working temple two
+     * tiles further away would still lose the mote to it and the sabotage would
+     * cost the player twice.
+     */
     _nearestTemple(mote) {
         let best = null;
         let bestDist = Infinity;
         for (const temple of this.scene.temples) {
-            if (!temple.alive) continue;
+            if (!temple.alive || temple.disabled) continue;
             const d = Phaser.Math.Distance.Between(
                 temple.x, temple.y, mote.sprite.x, mote.sprite.y
             );
