@@ -416,7 +416,8 @@ export class UIScene extends Phaser.Scene {
             return { bg, txt };
         };
 
-        mk(LEFT, 54, 'VEL 1x', (bg, txt) => {
+        const isFast = this.gs.time.timeScale > 1.5;
+        const velBtn = mk(LEFT, 54, isFast ? 'VEL 2x' : 'VEL 1x', (bg, txt) => {
             if (this.gs.time.timeScale === 1) {
                 this.gs.time.timeScale = 2;
                 txt.setText('VEL 2x');
@@ -427,10 +428,10 @@ export class UIScene extends Phaser.Scene {
                 bg.fillColor = 0x333344;
             }
         });
+        if (isFast) velBtn.bg.fillColor = 0xFF9800;
 
-        this.gs.waveManager.autoWave = false;
-        mk(LEFT + 60, 74, 'AUTO: NO', (bg, txt) => {
-            const wm = this.gs.waveManager;
+        const wm = this.gs.waveManager;
+        const autoBtn = mk(LEFT + 60, 74, wm.autoWave ? 'AUTO: SI' : 'AUTO: NO', (bg, txt) => {
             wm.autoWave = !wm.autoWave;
             if (wm.autoWave) {
                 txt.setText('AUTO: SI');
@@ -441,8 +442,9 @@ export class UIScene extends Phaser.Scene {
                 bg.fillColor = 0x333344;
             }
         });
+        if (wm.autoWave) autoBtn.bg.fillColor = 0x2196F3;
 
-        const sound = mk(LEFT + 140, 70, '', (bg, txt) => {
+        const sound = mk(LEFT + 140, 70, audio.enabled ? 'SON: SI' : 'SON: NO', (bg, txt) => {
             const on = audio.toggle();
             txt.setText(on ? 'SON: SI' : 'SON: NO');
             bg.fillColor = on ? 0x333344 : 0x552222;
