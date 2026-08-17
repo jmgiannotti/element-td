@@ -138,8 +138,8 @@ export class UIScene extends Phaser.Scene {
      * Lives and wave are status, so they get one line underneath.
      */
     _buildResourcePanel() {
-        this.goldValue = this._resourceCard(52, 'ORO', '#FFD700', 0x2a2410, 0x5a4a20);
-        this.manaValue = this._resourceCard(88, MANA, '#B388FF', 0x1e1a33, 0x4a3a7a);
+        this.goldValue = this._resourceCard(52, 'icon_coin', '#FFD700', 0x2a2410, 0x5a4a20, 1.0);
+        this.manaValue = this._resourceCard(88, 'mana_mote', '#B388FF', 0x1e1a33, 0x4a3a7a, 1.4);
 
         // Progress toward the cheapest upgrade currently within reach
         this.manaBarBg = this.add.rectangle(CX, 110, INNER_W, 6, 0x1a1a2e);
@@ -157,14 +157,15 @@ export class UIScene extends Phaser.Scene {
         this._divider(152);
     }
 
-    _resourceCard(y, label, color, fill, stroke) {
+    // iconScale: 1.0 for coin (17×17), 1.4 for mana_mote (12×12 → ~17px)
+    _resourceCard(y, iconKey, color, fill, stroke, iconScale = 1.0) {
         const card = this.add.rectangle(CX, y, INNER_W, 32, fill);
         card.setStrokeStyle(1, stroke);
 
-        this.add.text(LEFT + 10, y, label, {
-            fontFamily: FONT, fontSize: '8px', color,
-        }).setOrigin(0, 0.5);
+        // Sprite icon left-aligned inside card
+        this.add.image(LEFT + 14, y, iconKey).setScale(iconScale);
 
+        // Number sits at the right edge — icon is at most 24px wide so no overlap
         return this.add.text(RIGHT - 10, y, '0', {
             fontFamily: FONT, fontSize: '16px', color,
         }).setOrigin(1, 0.5);
@@ -237,12 +238,19 @@ export class UIScene extends Phaser.Scene {
             x, y - 8, safeTexture(this, `tower_${element}`, 'tower_earth')
         ).setScale(1.2);
 
-        const cost = this.add.text(x, y + 20, `${td.cost}`, {
+        // Coin + number centred as a pair under the tower sprite
+        const COIN_PX = 10;  // 17 * 0.6 ≈ 10px
+        const costStr = `${td.cost}`;
+        const costW = costStr.length * 6;  // Press Start 2P 8px ≈ 6px/char
+        const pairW = COIN_PX + 2 + costW;
+        const pairLeft = x - pairW / 2;
+        const coin = this.add.image(pairLeft + COIN_PX / 2, y + 20, 'icon_coin').setScale(0.6);
+        const cost = this.add.text(pairLeft + COIN_PX + 2, y + 20, costStr, {
             fontFamily: FONT, fontSize: '8px', color: '#FFD700',
             stroke: '#000000', strokeThickness: 3,
-        }).setOrigin(0.5);
+        }).setOrigin(0, 0.5);
 
-        const btn = { bg, icon, cost, element, kind: 'tower' };
+        const btn = { bg, icon, coin, cost, element, kind: 'tower' };
 
         bg.on('pointerdown', () => {
             if (this.gs.economySystem.gold < td.cost) { audio.play('deny'); return; }
@@ -264,11 +272,13 @@ export class UIScene extends Phaser.Scene {
         this.add.text(l + 34, y, 'BARRICADA', {
             fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
         }).setOrigin(0, 0.5);
-        const cost = this.add.text(l + w - 8, y, `${BARRICADE_COST}`, {
+        // Coin + number right-aligned: number first (to measure width), then coin to its left
+        const cost = this.add.text(l + w - 6, y, `${BARRICADE_COST}`, {
             fontFamily: FONT, fontSize: '8px', color: '#FFD700',
         }).setOrigin(1, 0.5);
+        const coin = this.add.image(l + w - 6 - cost.width - 8, y, 'icon_coin').setScale(0.65);
 
-        const btn = { bg, icon, cost, kind: 'barricade' };
+        const btn = { bg, icon, coin, cost, kind: 'barricade' };
 
         bg.on('pointerdown', () => {
             if (this.gs.economySystem.gold < BARRICADE_COST) { audio.play('deny'); return; }
@@ -319,9 +329,13 @@ export class UIScene extends Phaser.Scene {
             this.templeBtns.push(this._createTempleBtn(el, this._slotX(i), 328));
         });
 
-        this.templeCostText = this.add.text(CX, 372, '', {
+        this.templeCostLabel = this.add.text(0, 372, 'SIG. TEMPLO:', {
             fontFamily: FONT, fontSize: '8px', color: '#FFD700',
-        }).setOrigin(0.5);
+        }).setOrigin(0, 0.5);
+        this.templeCostCoin = this.add.image(0, 372, 'icon_coin').setScale(0.7);
+        this.templeCostValue = this.add.text(0, 372, '', {
+            fontFamily: FONT, fontSize: '8px', color: '#FFD700',
+        }).setOrigin(0, 0.5);
 
         this._divider(384);
     }
@@ -354,7 +368,7 @@ export class UIScene extends Phaser.Scene {
                 d.name,
                 `Costo: ${ts.nextCost} oro`,
                 `Alcance: ${d.absorbRadius}`,
-                `Refina: +${Math.round(d.absorbBonus * 100)}% ${MANA}`,
+                `Refina: +${Math.round(d.absorbBonus * 100)}% de mana`,
                 ts.hasTemple(element)
                     ? `Mejoras: ${ts.totalLevels(element)} niveles`
                     : 'Abre las mejoras',
@@ -368,7 +382,21 @@ export class UIScene extends Phaser.Scene {
 
     _refreshTempleButtons() {
         const ts = this.gs.templeSystem;
-        this.templeCostText.setText(`SIGUIENTE TEMPLO: ${ts.nextCost}`);
+        const valStr = `${ts.nextCost}`;
+        this.templeCostValue.setText(valStr);
+
+        // Lay out: [label][gap][coin 13px @0.7][gap][value] — centred in sidebar
+        const gap = 4;
+        const coinW = 13;  // 17 * 0.7 ≈ 12px + 1 breathing room
+        const labelW = this.templeCostLabel.width;
+        const valW   = this.templeCostValue.width;
+        const totalW = labelW + gap + coinW + gap + valW;
+        const startX = CX - totalW / 2;
+
+        this.templeCostLabel.setPosition(startX, 372);
+        this.templeCostCoin.setPosition(Math.round(startX + labelW + gap + coinW / 2), 372);
+        this.templeCostValue.setPosition(startX + labelW + gap + coinW + gap, 372);
+
         for (const btn of this.templeBtns) {
             btn.owned.setVisible(ts.hasTemple(btn.element));
         }
@@ -1734,11 +1762,15 @@ export class UIScene extends Phaser.Scene {
         for (const btn of this.templeBtns) {
             this._setAffordable(btn, gold >= templeCost);
         }
-        this.templeCostText.setColor(gold >= templeCost ? '#FFD700' : '#555555');
+        const canAfford = gold >= templeCost;
+        this.templeCostLabel.setColor(canAfford ? '#FFD700' : '#555555');
+        this.templeCostCoin.setAlpha(canAfford ? 1 : 0.3);
+        this.templeCostValue.setColor(canAfford ? '#FFD700' : '#555555');
     }
 
     _setAffordable(btn, can) {
         btn.icon.setAlpha(can ? 1 : 0.3);
+        if (btn.coin) btn.coin.setAlpha(can ? 1 : 0.3);
         if (btn.cost) btn.cost.setColor(can ? '#FFD700' : '#555555');
         if (!can && this.selectedBtn === btn) {
             this._setBtnSelected(btn, false);

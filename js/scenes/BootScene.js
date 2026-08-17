@@ -11,6 +11,7 @@ import {
     bakeHeroTexture, composedHeroKey, drawLanternGlow, drawSlash,
 } from '../data/HeroLook.js';
 import { HERO_SPRITE } from '../data/HeroSprite.js';
+import { COIN_SPRITE } from '../data/CoinSprite.js';
 import { SPELLS, SPELL_ORDER } from '../data/SpellData.js';
 
 /**
@@ -62,6 +63,7 @@ export function expectedTextureKeys() {
     // hero still runs if this is missing — it falls back to the composed
     // sprite — but silently wearing the wrong art is worth a warning.
     if (HERO_SPRITE.enabled) keys.push(HERO_SPRITE.key);
+    keys.push(COIN_SPRITE.key);
 
     // The starting look is pre-baked across every lantern tier and every pose:
     // both change several times a wave, and a first-time bake mid-swing would
@@ -110,6 +112,9 @@ export class BootScene extends Phaser.Scene {
             this.load.spritesheet(HERO_SPRITE.key, HERO_SPRITE.png, {
                 frameWidth: 32, frameHeight: 32,
             });
+        }
+        if (!this.textures.exists(COIN_SPRITE.key)) {
+            this.load.image(COIN_SPRITE.key, COIN_SPRITE.png);
         }
     }
 
