@@ -16,7 +16,7 @@ export class Tower {
         this.paidCost = paidCost;
         this.empowered = false;
         this.fusionHint = false;
-        this.lastFired = 0;
+        this.fireTimer = 0;
         this.alive = true;
         // Hover shows the range for as long as the cursor is there; a click
         // pins it, which is the only way to compare two towers' reach at once.
@@ -113,16 +113,17 @@ export class Tower {
         return 1000 / rate;
     }
 
-    update(time, enemies) {
+    update(delta, enemies) {
         if (!this.alive) return;
 
         const rate = this.empowered ? this.fireRate * 0.75 : this.fireRate;
+        this.fireTimer -= delta;
 
-        if (time - this.lastFired >= rate) {
+        if (this.fireTimer <= 0) {
             const target = this._findTarget(enemies);
             if (target) {
-                this._fire(target, time);
-                this.lastFired = time;
+                this._fire(target);
+                this.fireTimer = rate;
             }
         }
     }
@@ -143,7 +144,7 @@ export class Tower {
         return best;
     }
 
-    _fire(target, _time) {
+    _fire(target) {
         const dmg = this.empowered ? this.damage * 1.5 : this.damage;
         audio.play('shoot', this.element);
         const proj = new Projectile(this.scene, this.x, this.y - 4, target, dmg, this.data);

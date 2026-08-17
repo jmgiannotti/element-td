@@ -1065,7 +1065,7 @@ export class GameScene extends Phaser.Scene {
         this.routeView.update(time);
 
         // Towers
-        for (const t of this.towers) t.update(time, this.enemies);
+        for (const t of this.towers) t.update(delta, this.enemies);
 
         // Enemies
         for (const e of this.enemies) e.update(time, delta);
