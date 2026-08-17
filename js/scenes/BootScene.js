@@ -129,7 +129,7 @@ export class BootScene extends Phaser.Scene {
             }
         }
 
-        this.scene.start('GameScene');
+        this.scene.start('TitleScene');
     }
 
     _generateAll() {

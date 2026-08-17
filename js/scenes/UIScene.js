@@ -15,6 +15,8 @@ import { HERO_ABILITIES, ABILITY_ORDER, COMBO, abilityHeading } from '../data/He
 import { SPELLS, SPELL_ORDER, spellHeading } from '../data/SpellData.js';
 import { HERO_LORE, DEFAULT_LOOK, heroTextureKey } from '../data/HeroLook.js';
 import { applyViewport } from '../systems/Viewport.js';
+import { OptionsModal } from '../systems/OptionsModal.js';
+import { SaveSystem } from '../systems/SaveSystem.js';
 
 const FONT = '"Press Start 2P"';
 const MANA = '✦';
@@ -83,6 +85,7 @@ export class UIScene extends Phaser.Scene {
         this._buildTowerButtons();
         this._buildTempleButtons();
         this._buildGlobalControls();
+        this._buildTopRightGear();
         this._buildWavePreview();
         this._buildWaveButton();
         this._buildSpellHud();
@@ -93,6 +96,7 @@ export class UIScene extends Phaser.Scene {
         this._updateAffordability();
         this._updateManaBar();
         this._refreshWavePreview();
+        this._refreshTempleButtons();
     }
 
     /** Cooldown wipes have to be redrawn every frame; nothing else here does. */
@@ -449,6 +453,68 @@ export class UIScene extends Phaser.Scene {
         mk(LEFT + 216, 40, '?', () => this._openHelpPanel());
     }
 
+    _buildTopRightGear() {
+        const x = 898;
+        const y = 18;
+        const bg = this.add.rectangle(x, y, 26, 24, 0x181830, 0.65)
+            .setStrokeStyle(1, 0x3a3a5a, 0.75)
+            .setDepth(60)
+            .setInteractive({ useHandCursor: true });
+
+        const txt = this.add.text(x, y, '⚙', {
+            fontFamily: FONT, fontSize: '10px', color: '#90CAF9',
+        }).setOrigin(0.5).setDepth(61).setAlpha(0.75);
+
+        bg.on('pointerdown', (p) => {
+            p.event?.stopPropagation();
+            audio.play('click');
+            this._openOptionsModal();
+        });
+        bg.on('pointerover', () => {
+            bg.setFillStyle(0x2a2a50, 0.95);
+            bg.setStrokeStyle(1, 0xFFD54F, 1);
+            txt.setColor('#FFD54F').setAlpha(1);
+        });
+        bg.on('pointerout', () => {
+            bg.setFillStyle(0x181830, 0.65);
+            bg.setStrokeStyle(1, 0x3a3a5a, 0.75);
+            txt.setColor('#90CAF9').setAlpha(0.75);
+        });
+    }
+
+    _openOptionsModal() {
+        if (this.optionsModal) {
+            this.optionsModal.close();
+            this.optionsModal = null;
+            return;
+        }
+        this._closeHelpPanel();
+        this._closeUpgradePanel();
+        this.gs.uiModalOpen = true;
+
+        this.optionsModal = new OptionsModal(this, {
+            mode: 'ingame',
+            gameScene: this.gs,
+            onClose: () => {
+                this.optionsModal = null;
+                this.gs.uiModalOpen = false;
+            },
+            onSaveQuit: () => {
+                this.optionsModal = null;
+                this.scene.stop('UIScene');
+                this.scene.stop('GameScene');
+                this.scene.start('TitleScene');
+            },
+            onRestart: () => {
+                this.optionsModal = null;
+                SaveSystem.clearSave();
+                this.scene.stop('UIScene');
+                this.scene.stop('GameScene');
+                this.scene.start('GameScene', { continueGame: false });
+            },
+        });
+    }
+
     // ─── Next-wave preview ──────────────────────────────
     /**
      * What is coming, and of which element — beside the button that summons it,
@@ -716,6 +782,7 @@ export class UIScene extends Phaser.Scene {
 
             bg.on('pointerdown', (pointer) => {
                 pointer.event.stopPropagation();
+                pointer.event._uiConsumed = true;
                 this.gs.events.emit('select-spell', key);
             });
             bg.on('pointerover', () => this._showTooltip(
@@ -876,29 +943,42 @@ export class UIScene extends Phaser.Scene {
 
     // ─── Events ─────────────────────────────────────────
     _registerEvents() {
-        this.gs.events.on('gold-changed', (g) => {
+        this._gsHandlers = [];
+        const on = (ev, fn) => {
+            this.gs.events.on(ev, fn);
+            this._gsHandlers.push({ ev, fn });
+        };
+
+        this.events.once('shutdown', () => {
+            if (this._gsHandlers) {
+                for (const h of this._gsHandlers) {
+                    this.gs.events.off(h.ev, h.fn);
+                }
+            }
+        });
+        on('gold-changed', (g) => {
             this.goldValue.setText(`${g}`);
             this._updateAffordability();
         });
 
-        this.gs.events.on('mana-changed', (m) => {
+        on('mana-changed', (m) => {
             this.manaValue.setText(`${m}`);
             this._updateManaBar();
             this._refreshUpgradePanel();
         });
 
-        this.gs.events.on('lives-changed', () => this._updateStatus());
+        on('lives-changed', () => this._updateStatus());
 
         // A temple going dark is an economic hit with no number attached to it,
         // so it is the kind of thing a player misses entirely while watching the
         // lane. Said once when it happens, and once when it comes back.
-        this.gs.events.on('temple-sabotaged', (t) => {
+        on('temple-sabotaged', (t) => {
             this._flashNotification(
                 `¡${TEMPLE_DATA[t.element].shortName} apagado! no absorbe ${MANA}`, '#FF8A80'
             );
             this._updateManaBar();
         });
-        this.gs.events.on('temple-restored', (t) => {
+        on('temple-restored', (t) => {
             this._flashNotification(`${TEMPLE_DATA[t.element].shortName} de vuelta`, '#4CAF50');
             this._updateManaBar();
         });
@@ -906,7 +986,7 @@ export class UIScene extends Phaser.Scene {
         // A velador turning around on its own is invisible as a rule. Said the
         // first time it happens, when the player is watching the thing that just
         // stopped chasing them.
-        this.gs.events.on('hero-sheltered', () => {
+        on('hero-sheltered', () => {
             if (this.saidOnce.shelter) return;
             this.saidOnce.shelter = true;
             this._flashNotification('El circulo del templo ahuyenta veladores', '#B388FF');
@@ -915,14 +995,14 @@ export class UIScene extends Phaser.Scene {
         // The spell cursor is armed and disarmed by GameScene — from a click
         // here, from a hotkey, from ESC, or by picking up a build cursor
         // instead. The button follows that state rather than owning it.
-        this.gs.events.on('spell-armed', (key) => this._setSpellArmed(key));
-        this.gs.events.on('spell-disarmed', () => this._setSpellArmed(null));
-        this.gs.events.on('spell-cast', (key) => {
+        on('spell-armed', (key) => this._setSpellArmed(key));
+        on('spell-disarmed', () => this._setSpellArmed(null));
+        on('spell-cast', (key) => {
             const s = SPELLS[key];
             if (s) this._flashNotification(`${s.label}  −${s.cost}✦`, s.colorHex);
         });
 
-        this.gs.events.on('wave-started', () => {
+        on('wave-started', () => {
             this._updateStatus();
             this.waveBtnBg.fillColor = 0x333344;
             this.waveBtnText.setColor('#555555');
@@ -931,7 +1011,7 @@ export class UIScene extends Phaser.Scene {
             this._refreshWavePreview();
         });
 
-        this.gs.events.on('wave-complete', () => {
+        on('wave-complete', () => {
             this._refreshWavePreview();
             if (this.gs.waveManager.isLastWave) return;
 
@@ -950,14 +1030,14 @@ export class UIScene extends Phaser.Scene {
             }
         });
 
-        this.gs.events.on('placement-cancelled', () => {
+        on('placement-cancelled', () => {
             if (this.selectedBtn) {
                 this._setBtnSelected(this.selectedBtn, false);
                 this.selectedBtn = null;
             }
         });
 
-        this.gs.events.on('temple-built', (el) => {
+        on('temple-built', (el) => {
             this._flashNotification(`¡${TEMPLE_DATA[el].name} erigido!`, '#B388FF');
             this._updateAffordability();
             this._updateManaBar();
@@ -965,24 +1045,24 @@ export class UIScene extends Phaser.Scene {
 
         // Selling a temple moves the price of the next one and can empty the
         // maná goal, so the whole sidebar is re-read rather than just the gold.
-        this.gs.events.on('structure-sold', (kind, refund) => {
+        on('structure-sold', (kind, refund) => {
             this._flashNotification(`+${refund} oro`, '#FFD700');
             this._updateAffordability();
             this._updateManaBar();
         });
 
-        this.gs.events.on('fusion-hover', (info) => {
+        on('fusion-hover', (info) => {
             if (info) this._showFusionTooltip(info);
             else this._hideTooltip();
         });
 
-        this.gs.events.on('open-temple', (el) => this._openUpgradePanel(el));
-        this.gs.events.on('hint', (text, color) => this._flashNotification(text, color ?? '#B388FF'));
+        on('open-temple', (el) => this._openUpgradePanel(el));
+        on('hint', (text, color) => this._flashNotification(text, color ?? '#B388FF'));
 
         // Said once, the first time it happens: the floating +N shows that the
         // hero collects, but not that he collects at face value. While the
         // tutorial is up it is teaching exactly this, so the hint stays quiet.
-        this.gs.events.on('hero-collected', () => {
+        on('hero-collected', () => {
             if (this.heroHintShown) return;
             if (this.gs.tutorial && this.gs.tutorial.active) return;
             this.heroHintShown = true;
@@ -992,7 +1072,7 @@ export class UIScene extends Phaser.Scene {
         // ── Elemental match-ups ─────────────────
         // Colour and an arrow only mean something once. Named the first time
         // each kind of hit happens, then never again.
-        this.gs.events.on('damage-effect', (effect) => {
+        on('damage-effect', (effect) => {
             const key = `effect-${effect}`;
             if (this.saidOnce[key]) return;
             this.saidOnce[key] = true;
@@ -1006,7 +1086,7 @@ export class UIScene extends Phaser.Scene {
         });
 
         // ── Hero combo ──────────────────────────
-        this.gs.events.on('hero-combo', (count, mult) => {
+        on('hero-combo', (count, mult) => {
             if (this.saidOnce.combo) return;
             this.saidOnce.combo = true;
             this._flashNotification(
@@ -1016,14 +1096,14 @@ export class UIScene extends Phaser.Scene {
         });
 
         // ── Tutorial ────────────────────────────
-        this.gs.events.on('tutorial-step', (text, highlight) => {
+        on('tutorial-step', (text, highlight) => {
             this._showTutorialStep(text, highlight);
         });
-        this.gs.events.on('tutorial-done', () => {
+        on('tutorial-done', () => {
             this._flashNotification('Tutorial completo. Suerte.', '#4CAF50');
         });
 
-        this.gs.events.on('temple-upgraded', (el, track, lvl) => {
+        on('temple-upgraded', (el, track, lvl) => {
             this._flashNotification(
                 `${TEMPLE_DATA[el].shortName}: ${UPGRADE_TRACKS[track].label} Nv.${lvl}`,
                 '#FFD54F'
@@ -1031,7 +1111,7 @@ export class UIScene extends Phaser.Scene {
             this._updateManaBar();
         });
 
-        this.gs.events.on('fusion-complete', (el, kind) => {
+        on('fusion-complete', (el, kind) => {
             const d = kind === 'temple' ? TEMPLE_DATA[el] : TOWER_DATA[el];
             const what = kind === 'temple' ? `Templo de ${d.shortName}` : d.name;
             this._flashNotification(`¡${d.emoji} ${what} creado!`, '#FFD700');
@@ -1042,13 +1122,13 @@ export class UIScene extends Phaser.Scene {
             }
         });
 
-        this.gs.events.on('game-over', () => {
+        on('game-over', () => {
             this._closeUpgradePanel();
             this._closeHelpPanel();
             this._showTutorialStep(null, null);
             this._showEndScreen('¡DERROTA!', '#EF5350');
         });
-        this.gs.events.on('all-waves-complete', () => {
+        on('all-waves-complete', () => {
             this._closeUpgradePanel();
             this._closeHelpPanel();
             this._showTutorialStep(null, null);
@@ -1586,6 +1666,31 @@ export class UIScene extends Phaser.Scene {
      * pixel row, so each new one lands a line lower and frees its slot on fade.
      */
     _flashNotification(text, color) {
+        // Suppress exact duplicate that was shown within the last 500ms
+        const now = Date.now();
+        if (this._lastNotifs) {
+            for (const entry of this._lastNotifs) {
+                if (entry.text === text && now - entry.time < 500) return;
+            }
+        }
+        if (!this._lastNotifs) this._lastNotifs = [];
+        this._lastNotifs.push({ text, time: now });
+        // Keep the dedup window small
+        if (this._lastNotifs.length > 10) this._lastNotifs.shift();
+
+        // Queue if too many are already showing
+        const MAX_VISIBLE = 3;
+        if (!this._notifQueue) this._notifQueue = [];
+        const activeCount = this.notifSlots.filter(Boolean).length;
+        if (activeCount >= MAX_VISIBLE) {
+            this._notifQueue.push({ text, color });
+            return;
+        }
+
+        this._showNotif(text, color);
+    }
+
+    _showNotif(text, color) {
         let slot = 0;
         while (this.notifSlots[slot]) slot++;
         this.notifSlots[slot] = true;
@@ -1601,6 +1706,11 @@ export class UIScene extends Phaser.Scene {
             onComplete: () => {
                 this.notifSlots[slot] = false;
                 n.destroy();
+                // Show next queued notification if any
+                if (this._notifQueue && this._notifQueue.length > 0) {
+                    const next = this._notifQueue.shift();
+                    this._showNotif(next.text, next.color);
+                }
             },
         });
     }
@@ -1657,20 +1767,40 @@ export class UIScene extends Phaser.Scene {
             lineSpacing: 10, align: 'center',
         }).setOrigin(0.5).setDepth(91);
 
-        const rbg = this.add.rectangle(MAP_CX, 340, 180, 40, 0x2E7D32).setDepth(91);
+        // Restart Button
+        const rbg = this.add.rectangle(MAP_CX - 90, 340, 160, 38, 0x2E7D32).setDepth(91);
         rbg.setStrokeStyle(2, 0x4CAF50);
         rbg.setInteractive({ useHandCursor: true });
 
-        this.add.text(MAP_CX, 340, 'REINICIAR', {
+        this.add.text(MAP_CX - 90, 340, 'REINTENTAR', {
             fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
         }).setOrigin(0.5).setDepth(92);
 
         rbg.on('pointerdown', () => {
+            SaveSystem.clearSave();
             this.scene.stop('UIScene');
             this.scene.stop('GameScene');
-            this.scene.start('GameScene');
+            this.scene.start('GameScene', { continueGame: false });
         });
         rbg.on('pointerover', () => { rbg.fillColor = 0x388E3C; });
         rbg.on('pointerout', () => { rbg.fillColor = 0x2E7D32; });
+
+        // Main Menu Button
+        const mbg = this.add.rectangle(MAP_CX + 90, 340, 160, 38, 0x282848).setDepth(91);
+        mbg.setStrokeStyle(2, 0x90CAF9);
+        mbg.setInteractive({ useHandCursor: true });
+
+        this.add.text(MAP_CX + 90, 340, 'MENÚ PRINCIPAL', {
+            fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
+        }).setOrigin(0.5).setDepth(92);
+
+        mbg.on('pointerdown', () => {
+            SaveSystem.clearSave();
+            this.scene.stop('UIScene');
+            this.scene.stop('GameScene');
+            this.scene.start('TitleScene');
+        });
+        mbg.on('pointerover', () => { mbg.fillColor = 0x3a3a68; });
+        mbg.on('pointerout', () => { mbg.fillColor = 0x282848; });
     }
 }

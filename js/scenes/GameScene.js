@@ -8,6 +8,7 @@ import { RouteView } from '../systems/RouteView.js';
 import { FloatingText } from '../systems/FloatingText.js';
 import { TutorialSystem } from '../systems/TutorialSystem.js';
 import { SpellSystem } from '../systems/SpellSystem.js';
+import { SaveSystem } from '../systems/SaveSystem.js';
 import { audio } from '../systems/AudioSystem.js';
 import { ABILITY_ORDER, HERO_ABILITIES } from '../data/HeroData.js';
 import { SPELLS, SPELL_ORDER } from '../data/SpellData.js';
@@ -15,7 +16,7 @@ import { Tower } from '../entities/Tower.js';
 import { Temple } from '../entities/Temple.js';
 import { Hero } from '../entities/Hero.js';
 import { TOWER_DATA, ELEMENTS } from '../data/TowerData.js';
-import { TEMPLE_DATA, TRACK_ORDER } from '../data/TempleData.js';
+import { TEMPLE_DATA, TRACK_ORDER, upgradeCost } from '../data/TempleData.js';
 import {
     GRASS_VARIANTS, DIRT_VARIANTS, EDGE_VARIANTS, RUT_VARIANTS, BREAKABLE_VARIANTS,
 } from './BootScene.js';
@@ -52,6 +53,10 @@ function cellHash(col, row) {
 export class GameScene extends Phaser.Scene {
     constructor() {
         super('GameScene');
+    }
+
+    init(data) {
+        this.initData = data || {};
     }
 
     create() {
@@ -156,6 +161,7 @@ export class GameScene extends Phaser.Scene {
         // ── Input ───────────────────────────────
         this.input.mouse.disableContextMenu();
         this.input.on('pointerdown', (pointer, gameObjects) => {
+            if (pointer.event._uiConsumed) return;
             if (this.gameOver || this.gameWon) return;
             if (this.uiModalOpen) return;       // upgrade panel has the floor
 
@@ -164,8 +170,18 @@ export class GameScene extends Phaser.Scene {
             const p = pointerWorld(this, pointer);
             if (p.x >= GAME_WIDTH) return;       // sidebar click
 
-            // Right click → move hero exact position, even if clicking on a tower
+            // Right click → cancel active mode, or move hero
             if (pointer.button === 2) {
+                if (this.spellMode) {
+                    this._setSpellMode(null);
+                    audio.play('click');
+                    return;
+                }
+                if (this.placementMode || this.sellMode) {
+                    this._cancelPlacement();
+                    audio.play('click');
+                    return;
+                }
                 this.hero.moveTo(p.x, p.y);
                 return;
             }
@@ -220,7 +236,18 @@ export class GameScene extends Phaser.Scene {
                 this.hero.useAbility(key);
             });
         }
-        this.events.on('use-ability', (key) => {
+        this._customHandlers = [];
+        const onCustom = (ev, fn) => {
+            this.events.on(ev, fn);
+            this._customHandlers.push({ ev, fn });
+        };
+        this.events.once('shutdown', () => {
+            for (const h of this._customHandlers) {
+                this.events.off(h.ev, h.fn);
+            }
+        });
+
+        onCustom('use-ability', (key) => {
             if (this.gameOver || this.gameWon) return;
             this.hero.useAbility(key);
         });
@@ -233,13 +260,13 @@ export class GameScene extends Phaser.Scene {
                 this._armSpell(key);
             });
         }
-        this.events.on('select-spell', (key) => {
+        onCustom('select-spell', (key) => {
             if (this.gameOver || this.gameWon) return;
             this._armSpell(key);
         });
 
         // ── Internal events ─────────────────────
-        this.events.on('select-element', (el) => {
+        onCustom('select-element', (el) => {
             this.selectedElement = el;
             this.isBarricadeMode = false;
             this.isTempleMode = false;
@@ -257,7 +284,7 @@ export class GameScene extends Phaser.Scene {
             this._refreshRouteVisibility();
         });
 
-        this.events.on('select-barricade', () => {
+        onCustom('select-barricade', () => {
             this.selectedElement = 'barricade';
             this.isBarricadeMode = true;
             this.isTempleMode = false;
@@ -271,7 +298,7 @@ export class GameScene extends Phaser.Scene {
             this._barricadeProbeKey = null;
         });
 
-        this.events.on('select-temple', (el) => {
+        onCustom('select-temple', (el) => {
             this.selectedElement = el;
             this.isTempleMode = true;
             this.isBarricadeMode = false;
@@ -289,7 +316,7 @@ export class GameScene extends Phaser.Scene {
         // Selling is a placement mode in reverse: a cursor mode that acts on
         // the cell you click, so it takes the build cursor's slot rather than
         // living inside a per-building menu.
-        this.events.on('select-sell', () => {
+        onCustom('select-sell', () => {
             this.selectedElement = null;
             this.placementMode = false;
             this.isBarricadeMode = false;
@@ -315,30 +342,71 @@ export class GameScene extends Phaser.Scene {
         // one lands, its numbers change under the cursor.
         this.events.on('temple-upgraded', () => this._refreshStatLabel());
 
+        this.waveStartCheckpoint = null;
+
         // The route hides for the duration of a wave and comes back the moment
         // the board is clear again, which is when planning resumes.
-        this.events.on('wave-started', () => this._refreshRouteVisibility());
-        this.events.on('wave-complete', () => this._refreshRouteVisibility());
-
-        this.events.on('game-over', () => { this.gameOver = true; });
-        this.events.on('all-waves-complete', () => {
-            if (!this.gameOver) this.gameWon = true;
+        onCustom('wave-started', () => {
+            this._refreshRouteVisibility();
+            this.waveStartCheckpoint = {
+                waveIndex: Math.max(0, this.waveManager.currentWave - 1),
+                gold: this.economySystem.gold,
+                mana: this.economySystem.mana,
+                lives: this.economySystem.lives,
+                heroPosX: this.hero ? this.hero.posX : null,
+                heroPosY: this.hero ? this.hero.posY : null,
+                heroHp: this.hero ? this.hero.hp : null,
+                heroManaCollected: this.hero ? this.hero.manaCollected : null,
+                towers: this.towers.map(t => ({ col: t.col, row: t.row, element: t.element, paid: t.paidCost })),
+                temples: this.temples.map(t => ({ col: t.col, row: t.row, element: t.element, paid: t.paidCost })),
+                barricades: Array.from(this.barricades.entries()).map(([key, cost]) => {
+                    const [c, r] = key.split(',').map(Number);
+                    return { col: c, row: r, cost };
+                }),
+                breakableBlocks: Array.from(this.breakableBlocks.entries()).map(([key, hp]) => {
+                    const [c, r] = key.split(',').map(Number);
+                    return { col: c, row: r, hp };
+                }),
+                templeLevels: { ...this.templeSystem.levels },
+            };
         });
+        onCustom('wave-complete', () => {
+            this._refreshRouteVisibility();
+            this.waveStartCheckpoint = null;
+            SaveSystem.saveGame(this);
+        });
+
+        onCustom('game-over', () => {
+            this.gameOver = true;
+            this.waveStartCheckpoint = null;
+            SaveSystem.clearSave();
+        });
+        onCustom('all-waves-complete', () => {
+            if (!this.gameOver) this.gameWon = true;
+            this.waveStartCheckpoint = null;
+            SaveSystem.clearSave();
+        });
+
+        // ── Load Saved Game (if continuing) ─────
+        let loaded = false;
+        if (this.initData?.continueGame && SaveSystem.hasSave()) {
+            loaded = SaveSystem.loadGame(this);
+        }
 
         // ── Audio ───────────────────────────────
         // Wired off the events the game already emits, so the systems stay
         // unaware that anything is listening.
         this.audio = audio;
-        const on = (event, cue, arg) => this.events.on(event, () => audio.play(cue, arg));
-        on('enemy-died', 'die');
-        on('enemy-reached-end', 'leak');
-        on('mana-collected', 'mana');
-        on('fusion-complete', 'fusion');
-        on('temple-upgraded', 'upgrade');
-        on('temple-built', 'temple');
-        on('wave-started', 'wave');
-        on('game-over', 'gameOver');
-        on('all-waves-complete', 'victory');
+        const onAudio = (event, cue, arg) => onCustom(event, () => audio.play(cue, arg));
+        onAudio('enemy-died', 'die');
+        onAudio('enemy-reached-end', 'leak');
+        onAudio('mana-collected', 'mana');
+        onAudio('fusion-complete', 'fusion');
+        onAudio('temple-upgraded', 'upgrade');
+        onAudio('temple-built', 'temple');
+        onAudio('wave-started', 'wave');
+        onAudio('game-over', 'gameOver');
+        onAudio('all-waves-complete', 'victory');
 
         // ── Launch parallel UI scene ────────────
         // Before the tutorial, which speaks through events UIScene renders.
@@ -346,6 +414,9 @@ export class GameScene extends Phaser.Scene {
 
         // ── Tutorial ────────────────────────────
         this.tutorial = new TutorialSystem(this);
+        if (loaded || this.waveManager.currentWave > 0 || this.temples.length > 0) {
+            this.tutorial.active = false;
+        }
     }
 
     // ─── Map rendering ──────────────────────────────────
@@ -506,7 +577,10 @@ export class GameScene extends Phaser.Scene {
      */
     _armSpell(key) {
         if (!SPELLS[key]) return;
-        if (this.spellMode === key) { this._setSpellMode(null); return; }
+        if (this.spellMode === key) {
+            this._setSpellMode(null);
+            return;
+        }
         if (this.spellSystem.announceRefusal(key)) return;
 
         this._cancelPlacement();
@@ -1065,5 +1139,34 @@ export class GameScene extends Phaser.Scene {
                 });
             }
         }
+    }
+
+    // ─── Spend tracking for Checkpoint Saves ───────────
+    _totalStructureSpend() {
+        let sum = 0;
+        for (const t of this.towers) {
+            if (t.alive) sum += (t.paidCost ?? 20);
+        }
+        for (const t of this.temples) {
+            if (t.alive) sum += (t.paidCost ?? 60);
+        }
+        for (const [_, cost] of this.barricades) {
+            sum += (cost ?? 10);
+        }
+        return sum;
+    }
+
+    _totalTempleSpend() {
+        let sum = 0;
+        if (!this.templeSystem || !this.templeSystem.levels) return sum;
+        for (const el in this.templeSystem.levels) {
+            for (const track in this.templeSystem.levels[el]) {
+                const lvl = this.templeSystem.levels[el][track];
+                for (let i = 0; i < lvl; i++) {
+                    sum += upgradeCost(track, i);
+                }
+            }
+        }
+        return sum;
     }
 }

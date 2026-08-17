@@ -241,7 +241,6 @@ export class Temple {
     _applyTint() {
         if (!this.alive || !this.sprite) return;
         if (this.disabled) this.sprite.setTint(0x4a4a5e);
-        else if (this.fusionHint) this.sprite.setTint(0xFFD700);
         else this.sprite.clearTint();
     }
 

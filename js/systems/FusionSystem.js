@@ -56,6 +56,10 @@ export class FusionSystem {
         this.scene = scene;
         /** Structures currently lit as "this one has a partner nearby". */
         this.hinted = [];
+        /** Links connecting pairs of fusable buildings. */
+        this.links = [];
+        this.linkGfx = scene.add.graphics().setDepth(2);
+        this.pulsePhase = 0;
         /** Non-null only between a press on a fusable building and its release. */
         this._press = null;
         /** Non-null only while an actual drag is in flight. */
@@ -80,21 +84,40 @@ export class FusionSystem {
      * handful of buildings, and rebuilding from scratch means a highlight can
      * never outlive the neighbour that justified it.
      *
-     * Note what is missing compared to the old version — there is no `paired`
-     * set. Every building that *could* fuse is lit, including all four of a row
-     * of four. Claiming buildings for a pair was the bug, not an optimisation.
+     * Connects all compatible neighbouring towers/temples with glowing lines on the floor.
      */
     refresh() {
         this.clearHints();
 
+        const seenPairs = new Set();
+
         for (const list of [this.scene.temples, this.scene.towers]) {
             for (const b of list) {
                 if (!this._fusable(b)) continue;
-                if (this._partners(b, list).length === 0) continue;
+                const partners = this._partners(b, list);
+                if (partners.length === 0) continue;
                 b.setFusionHint(true);
                 this.hinted.push(b);
+
+                for (const p of partners) {
+                    const other = p.other;
+                    const pairKey = b.col < other.col || (b.col === other.col && b.row < other.row)
+                        ? `${b.col},${b.row}-${other.col},${other.row}`
+                        : `${other.col},${other.row}-${b.col},${b.row}`;
+                    if (!seenPairs.has(pairKey)) {
+                        seenPairs.add(pairKey);
+                        this.links.push({
+                            b1: b,
+                            b2: other,
+                            result: p.result,
+                            kind: this._kindOf(b),
+                        });
+                    }
+                }
             }
         }
+
+        this._redrawLinks();
     }
 
     clearHints() {
@@ -102,6 +125,61 @@ export class FusionSystem {
             if (b.alive) b.setFusionHint(false);
         }
         this.hinted = [];
+        this.links = [];
+        if (this.linkGfx) this.linkGfx.clear();
+    }
+
+    _redrawLinks() {
+        if (!this.linkGfx) return;
+        this.linkGfx.clear();
+        if (!this.links || this.links.length === 0) return;
+
+        const pulse = 0.78 + 0.22 * Math.sin(this.pulsePhase || 0);
+
+        for (const link of this.links) {
+            if (!link.b1.alive || !link.b2.alive) continue;
+            const x1 = link.b1.x;
+            const y1 = link.b1.y;
+            const x2 = link.b2.x;
+            const y2 = link.b2.y;
+
+            const resData = link.kind === 'temple' ? TEMPLE_DATA[link.result] : TOWER_DATA[link.result];
+            const color = resData ? resData.color : 0xFFD54F;
+
+            // 1. Broad soft ambient glow on floor
+            this.linkGfx.lineStyle(8, color, 0.22 * pulse);
+            this.linkGfx.strokeLineShape(new Phaser.Geom.Line(x1, y1, x2, y2));
+
+            // 2. Focused fusion color beam
+            this.linkGfx.lineStyle(4, color, 0.65 * pulse);
+            this.linkGfx.strokeLineShape(new Phaser.Geom.Line(x1, y1, x2, y2));
+
+            // 3. Bright golden/white core line
+            this.linkGfx.lineStyle(1.5, 0xFFFFFF, 0.95 * pulse);
+            this.linkGfx.strokeLineShape(new Phaser.Geom.Line(x1, y1, x2, y2));
+
+            // 4. Energy node pads on the floor beneath both towers
+            this.linkGfx.fillStyle(color, 0.35 * pulse);
+            this.linkGfx.fillCircle(x1, y1, 8);
+            this.linkGfx.fillCircle(x2, y2, 8);
+
+            this.linkGfx.lineStyle(1.5, 0xFFD54F, 0.8 * pulse);
+            this.linkGfx.strokeCircle(x1, y1, 8);
+            this.linkGfx.strokeCircle(x2, y2, 8);
+
+            this.linkGfx.fillStyle(0xFFFFFF, 0.9 * pulse);
+            this.linkGfx.fillCircle(x1, y1, 3);
+            this.linkGfx.fillCircle(x2, y2, 3);
+
+            // 5. Flowing energy particle along the floor line
+            const t = (((this.pulsePhase * 0.45) % 1) + 1) % 1;
+            const px = Phaser.Math.Linear(x1, x2, t);
+            const py = Phaser.Math.Linear(y1, y2, t);
+            this.linkGfx.fillStyle(0xFFFFFF, 0.95 * pulse);
+            this.linkGfx.fillCircle(px, py, 2.5);
+            this.linkGfx.fillStyle(color, 0.5 * pulse);
+            this.linkGfx.fillCircle(px, py, 4.5);
+        }
     }
 
     _fusable(b) {
@@ -293,6 +371,11 @@ export class FusionSystem {
      * only fires when the mouse moves cannot produce it.
      */
     update(delta) {
+        this.pulsePhase = (this.pulsePhase || 0) + (delta || 16) * 0.0035;
+        if (this.links && this.links.length > 0) {
+            this._redrawLinks();
+        }
+
         const d = this._drag;
         if (!d) return;
 
@@ -461,5 +544,13 @@ export class FusionSystem {
         // appeared cannot fuse again, and the tile it came from is now free.
         this.refresh();
         scene.events.emit('fusion-complete', resultElement, kind);
+    }
+
+    destroy() {
+        this.clearHints();
+        if (this.linkGfx) {
+            this.linkGfx.destroy();
+            this.linkGfx = null;
+        }
     }
 }

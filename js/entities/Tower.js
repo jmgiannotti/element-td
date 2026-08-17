@@ -180,11 +180,10 @@ export class Tower {
         this._applyTint();
     }
 
-    /** Single owner of the sprite tint, so the two highlights can't clobber each other. */
+    /** Single owner of the sprite tint, so the highlights can't clobber each other. */
     _applyTint() {
         if (!this.alive) return;
-        if (this.fusionHint) this.sprite.setTint(0xFFD700);
-        else if (this.empowered) this.sprite.setTint(0xFFE082);
+        if (this.empowered) this.sprite.setTint(0xFFE082);
         else this.sprite.clearTint();
     }
 
