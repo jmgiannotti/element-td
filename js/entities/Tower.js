@@ -43,9 +43,13 @@ export class Tower {
         this.rangeGfx.setDepth(1);
         this.rangeGfx.setVisible(false);
 
-        // Empower aura — kept inside the tile so it never bleeds onto a neighbour
+        // Empower aura — kept inside the tile so it never bleeds onto a neighbour.
+        // Storm towers use ambient electric arcs instead of the plain glow.
         this.empowerGfx = scene.add.circle(pos.x, pos.y, 14, 0xFFD700, 0.0);
         this.empowerGfx.setDepth(4);
+
+        // Storm electric-spark emitter timer (null when not active)
+        this._sparkTimer = null;
 
         // Spawn animation – pop in
         this.sprite.setScale(0);
@@ -167,11 +171,162 @@ export class Tower {
         this.empowered = value;
         this._applyTint();
 
-        this.scene.tweens.add({
-            targets: this.empowerGfx,
-            fillAlpha: value ? 0.25 : 0.0,
-            duration: 300,
-        });
+        if (this.element === 'storm') {
+            // Storm tower: ambient, chill electric arcs across the whole structure
+            if (value) {
+                this._sparkTimer = this.scene.time.addEvent({
+                    delay: 220,
+                    loop: true,
+                    callback: this._spawnElectricSpark,
+                    callbackScope: this,
+                });
+            } else {
+                if (this._sparkTimer) { this._sparkTimer.remove(); this._sparkTimer = null; }
+            }
+        } else {
+            // Other towers: simple gold glow
+            this.scene.tweens.add({
+                targets: this.empowerGfx,
+                fillAlpha: value ? 0.25 : 0.0,
+                duration: 300,
+            });
+        }
+    }
+
+    /**
+     * Spawns chill, elegant electric arcs (rayitos) scattered across
+     * all sections of the storm tower (orb, prongs, central shaft, and base).
+     */
+    _spawnElectricSpark() {
+        if (!this.alive) return;
+
+        const ox = this.x - 16;
+        const oy = this.y - 16;
+
+        // Structural anchor points spread across the entire tower height
+        const P_ORB       = { x: ox + 16, y: oy + 4 };
+        const P_ORB_TOP   = { x: ox + 16, y: oy + 1 };
+        const P_PRONG_L   = { x: ox + 10, y: oy + 4 };
+        const P_PRONG_R   = { x: ox + 21, y: oy + 4 };
+        const P_CORNICE_L = { x: ox + 8,  y: oy + 16 };
+        const P_CORNICE_R = { x: ox + 23, y: oy + 16 };
+        const P_SHAFT_L   = { x: ox + 10, y: oy + 21 };
+        const P_SHAFT_R   = { x: ox + 21, y: oy + 21 };
+        const P_BASE_L    = { x: ox + 8,  y: oy + 28 };
+        const P_BASE_R    = { x: ox + 23, y: oy + 28 };
+        const P_BASE_BOT  = { x: ox + 16, y: oy + 29 };
+
+        // Helper to draw a single clean, jagged ray between two points
+        const drawRay = (start, end, jitterAmt = 1.6) => {
+            const ax = start.x + (Math.random() - 0.5) * 1.5;
+            const ay = start.y + (Math.random() - 0.5) * 1.5;
+            const bx = end.x + (Math.random() - 0.5) * 1.5;
+            const by = end.y + (Math.random() - 0.5) * 1.5;
+
+            const totalDx = bx - ax;
+            const totalDy = by - ay;
+            const len = Math.hypot(totalDx, totalDy);
+            if (len < 2) return;
+
+            const perpX = -totalDy / len;
+            const perpY = totalDx / len;
+
+            const numSegments = 3;
+            const pts = [{ x: ax, y: ay }];
+            const initialSide = Math.random() < 0.5 ? 1 : -1;
+
+            for (let i = 1; i < numSegments; i++) {
+                const t = i / numSegments;
+                const side = (i % 2 === 1) ? initialSide : -initialSide;
+                const disp = side * (jitterAmt * (0.7 + Math.random() * 0.7));
+                pts.push({
+                    x: ax + totalDx * t + perpX * disp,
+                    y: ay + totalDy * t + perpY * disp,
+                });
+            }
+            pts.push({ x: bx, y: by });
+
+            const g = this.scene.add.graphics();
+            g.setDepth(7);
+
+            // Soft electric aura (cyan-violet glow)
+            g.lineStyle(2.4, 0x4C82FB, 0.35);
+            g.beginPath();
+            g.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+            g.strokePath();
+
+            // Crisp electric core (white/bright light-cyan)
+            const coreCol = Math.random() < 0.25 ? 0xFEF08A : 0xE0F2FE;
+            g.lineStyle(1.0, coreCol, 0.92);
+            g.beginPath();
+            g.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+            g.strokePath();
+
+            // Anchor spark points
+            g.fillStyle(0x7DD3FC, 0.6);
+            g.fillCircle(ax, ay, 1.1);
+            g.fillStyle(0xFFFFFF, 0.85);
+            g.fillCircle(bx, by, 0.9);
+
+            const duration = 170 + Math.random() * 60;
+            this.scene.tweens.add({
+                targets: g,
+                alpha: 0,
+                duration: duration,
+                ease: 'Quad.easeOut',
+                onComplete: () => { if (g) g.destroy(); },
+            });
+        };
+
+        // Pick 1 or 2 zones to crackle across different parts of the tower
+        const count = Math.random() < 0.4 ? 2 : 1;
+
+        for (let k = 0; k < count; k++) {
+            const zone = Math.random();
+            if (zone < 0.30) {
+                // Top zone: Prongs <-> Orb or top crown
+                if (Math.random() < 0.7) {
+                    const prong = Math.random() < 0.5 ? P_PRONG_L : P_PRONG_R;
+                    drawRay(prong, Math.random() < 0.5 ? P_ORB : P_ORB_TOP, 1.8);
+                } else {
+                    const topStart = { x: P_ORB_TOP.x + (Math.random() - 0.5) * 4, y: P_ORB_TOP.y };
+                    const topEnd = { x: topStart.x + (Math.random() - 0.5) * 6, y: topStart.y - (3 + Math.random() * 4) };
+                    drawRay(topStart, topEnd, 1.4);
+                }
+            } else if (zone < 0.55) {
+                // Mid zone: Cornice to Shaft or horizontal shaft cross-crackle
+                if (Math.random() < 0.5) {
+                    const isLeft = Math.random() < 0.5;
+                    drawRay(isLeft ? P_CORNICE_L : P_CORNICE_R, isLeft ? P_SHAFT_L : P_SHAFT_R, 1.6);
+                } else {
+                    drawRay(P_SHAFT_L, P_SHAFT_R, 1.8);
+                }
+            } else if (zone < 0.80) {
+                // Base / Pedestal zone: Shaft down to Base or ground crackle
+                if (Math.random() < 0.5) {
+                    const isLeft = Math.random() < 0.5;
+                    drawRay(isLeft ? P_SHAFT_L : P_SHAFT_R, isLeft ? P_BASE_L : P_BASE_R, 1.6);
+                } else {
+                    const sideBase = Math.random() < 0.5 ? P_BASE_L : P_BASE_R;
+                    drawRay(sideBase, P_BASE_BOT, 1.5);
+                }
+            } else {
+                // Perimeter discharge into the surrounding air (from corners/edges)
+                const anchors = [P_PRONG_L, P_PRONG_R, P_CORNICE_L, P_CORNICE_R, P_BASE_L, P_BASE_R];
+                const anchor = anchors[Math.floor(Math.random() * anchors.length)];
+                const dx = anchor.x - this.x;
+                const dy = anchor.y - this.y;
+                const ang = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.8;
+                const dist = 5 + Math.random() * 5;
+                const airTarget = {
+                    x: anchor.x + Math.cos(ang) * dist,
+                    y: anchor.y + Math.sin(ang) * dist,
+                };
+                drawRay(anchor, airTarget, 1.5);
+            }
+        }
     }
 
     /** Highlight used by FusionSystem while a fusion is on offer. */
@@ -184,8 +339,16 @@ export class Tower {
     /** Single owner of the sprite tint, so the highlights can't clobber each other. */
     _applyTint() {
         if (!this.alive) return;
-        if (this.empowered) this.sprite.setTint(0xFFE082);
-        else this.sprite.clearTint();
+        if (this.empowered) {
+            if (this.element === 'storm') {
+                // Storm towers don't use the brownish-gold tint — clean original colors
+                this.sprite.clearTint();
+            } else {
+                this.sprite.setTint(0xFFE082);
+            }
+        } else {
+            this.sprite.clearTint();
+        }
     }
 
     destroy() {
@@ -193,5 +356,6 @@ export class Tower {
         if (this.sprite) this.sprite.destroy();
         if (this.rangeGfx) this.rangeGfx.destroy();
         if (this.empowerGfx) this.empowerGfx.destroy();
+        if (this._sparkTimer) { this._sparkTimer.remove(); this._sparkTimer = null; }
     }
 }
