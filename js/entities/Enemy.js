@@ -43,6 +43,7 @@ export class Enemy {
         // is the pressure. A sillar that has spent its strikes must not re-lock
         // on the temple it is still standing next to, or maxHits buys nothing.
         this.errandDone = false;
+        this.distanceTraveled = 0;
 
         // Path and Spawning
         const exitWp = WAYPOINTS[WAYPOINTS.length - 1];
@@ -88,7 +89,7 @@ export class Enemy {
 
     get x() { return this.sprite ? this.sprite.x : 0; }
     get y() { return this.sprite ? this.sprite.y : 0; }
-    get pathProgress() { return this.pathIndex; } // simplified progress
+    get pathProgress() { return this.distanceTraveled || this.pathIndex; }
 
     recalculatePath() {
         if (!this.alive) return;
@@ -109,13 +110,27 @@ export class Enemy {
             return;
         }
 
+        // Forward continuation: if the waypoint the enemy is currently walking towards
+        // is still walkable, find the path from that next waypoint onwards to the exit.
+        // This keeps the enemy walking forward smoothly without turning backwards.
+        const nextWp = (this.path && this.pathIndex < this.path.length) ? this.path[this.pathIndex] : null;
+        if (nextWp && this.scene.gridSystem.isWalkable(nextWp.col, nextWp.row)) {
+            const forwardPath = this.scene.gridSystem.findPath(nextWp.col, nextWp.row, exitWp.col, exitWp.row);
+            if (forwardPath) {
+                this.path = forwardPath;
+                this.pathIndex = 0; // forwardPath[0] is nextWp, which the enemy is ALREADY heading towards!
+                return;
+            }
+        }
+
+        // If next waypoint is blocked or not available, re-path from current cell or nearest walkable
         const raw = this.scene.gridSystem.worldToGrid(this.x, this.y);
-        const cell = this.scene.gridSystem.nearestWalkable(raw.col, raw.row);
+        const cell = this.scene.gridSystem.isWalkable(raw.col, raw.row)
+            ? raw
+            : this.scene.gridSystem.nearestWalkable(raw.col, raw.row);
         const newPath = this.scene.gridSystem.findPath(cell.col, cell.row, exitWp.col, exitWp.row);
         if (newPath) {
             this.path = newPath;
-            // Index 0 is the enemy's own cell. Re-centring on it first keeps
-            // the turn square instead of slicing across it.
             this.pathIndex = 0;
         }
     }
@@ -224,6 +239,7 @@ export class Enemy {
         const remaining = Math.abs(dx) + Math.abs(dy);
 
         if (remaining <= step) {
+            this.distanceTraveled += remaining;
             this.sprite.x = tx;
             this.sprite.y = ty;
             this.pathIndex++;
@@ -252,6 +268,7 @@ export class Enemy {
                 const move = Math.min(budget, mag);
                 if (axis === 'x') this.sprite.x += Math.sign(delta_) * move;
                 else this.sprite.y += Math.sign(delta_) * move;
+                this.distanceTraveled += move;
                 budget -= move;
             }
         }

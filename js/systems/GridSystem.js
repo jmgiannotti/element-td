@@ -102,9 +102,9 @@ export class GridSystem {
 
     /** Cells an enemy is allowed to stand on. Mirrors findPath's filter. */
     isWalkable(col, row) {
-        if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) return false;
-        const tile = this.grid[row][col];
-        return tile !== TILE.GRASS && tile !== TILE.BARRICADE;
+        if (!this.grid || col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) return false;
+        const tile = this.grid[row]?.[col];
+        return tile !== undefined && tile !== TILE.GRASS && tile !== TILE.BARRICADE;
     }
 
     /**
