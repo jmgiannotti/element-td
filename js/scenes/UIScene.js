@@ -76,6 +76,8 @@ export class UIScene extends Phaser.Scene {
         this.upgradePanel = null;
         this.helpPanel = null;
         this.helpTab = null;
+        this.fusionPopup = null;
+        this.fusionPopupTimer = null;
         this.notifSlots = [];
         // One-shot teaching moments, each said the first time it can be seen.
         this.saidOnce = {};
@@ -139,7 +141,7 @@ export class UIScene extends Phaser.Scene {
      */
     _buildResourcePanel() {
         this.goldValue = this._resourceCard(52, 'icon_coin', '#FFD700', 0x2a2410, 0x5a4a20, 1.0);
-        this.manaValue = this._resourceCard(88, 'mana_mote', '#B388FF', 0x1e1a33, 0x4a3a7a, 1.4);
+        this.manaValue = this._resourceCard(88, 'mana_mote', '#B388FF', 0x1e1a33, 0x4a3a7a, 0.8);
 
         // Progress toward the cheapest upgrade currently within reach
         this.manaBarBg = this.add.rectangle(CX, 110, INNER_W, 6, 0x1a1a2e);
@@ -157,7 +159,7 @@ export class UIScene extends Phaser.Scene {
         this._divider(152);
     }
 
-    // iconScale: 1.0 for coin (17×17), 1.4 for mana_mote (12×12 → ~17px)
+    // iconScale: 1.0 for coin (17×17), 0.8 for mana_mote (21×22 → ~17px)
     _resourceCard(y, iconKey, color, fill, stroke, iconScale = 1.0) {
         const card = this.add.rectangle(CX, y, INNER_W, 32, fill);
         card.setStrokeStyle(1, stroke);
@@ -1089,6 +1091,17 @@ export class UIScene extends Phaser.Scene {
         on('open-temple', (el) => this._openUpgradePanel(el));
         on('hint', (text, color) => this._flashNotification(text, color ?? '#B388FF'));
 
+        // Said until the player completes their first fusion
+        on('fusion-available', (link) => {
+            if (this.saidOnce.firstFusionDone) return;
+            this._showFusionPopup(link);
+        });
+        on('fusion-drag-begin', () => this._hideFusionPopup());
+        on('fusion-complete', () => {
+            this.saidOnce.firstFusionDone = true;
+            this._hideFusionPopup();
+        });
+
         // Said once, the first time it happens: the floating +N shows that the
         // hero collects, but not that he collects at face value. While the
         // tutorial is up it is teaching exactly this, so the hint stays quiet.
@@ -1690,6 +1703,98 @@ export class UIScene extends Phaser.Scene {
         if (this.tooltip) { this.tooltip.destroy(); this.tooltip = null; }
     }
 
+    // ─── Floating Fusion Prompt Card ───────────────────
+    /**
+     * Floating popup card placed directly above the two newly connected towers,
+     * teaching new players how to drag and drop to fuse without cluttering the screen.
+     */
+    _showFusionPopup(link) {
+        this._hideFusionPopup();
+        if (!link || !link.b1 || !link.b2) return;
+
+        const isTemple = link.kind === 'temple';
+        const midX = (link.b1.x + link.b2.x) / 2;
+        const minY = Math.min(link.b1.y, link.b2.y);
+
+        // Clamp inside map boundaries
+        const targetX = Phaser.Math.Clamp(midX, 100, 540);
+        const targetY = Phaser.Math.Clamp(minY - 42, 42, 420);
+
+        const container = this.add.container(targetX, targetY).setDepth(120);
+
+        const boxW = 168;
+        const boxH = 58;
+
+        // Glowing background card
+        const bg = this.add.rectangle(0, 0, boxW, boxH, 0x0c0c1e, 0.95);
+        bg.setStrokeStyle(1.5, 0xFFD54F);
+
+        // Little arrow indicator at bottom pointing towards the towers below
+        const arrow = this.add.triangle(0, boxH / 2 + 2, -4, 0, 4, 0, 0, 4, 0xFFD54F);
+
+        const titleText = isTemple ? 'FUSION DISPONIBLE' : 'FUSION DISPONIBLE';
+        const title = this.add.text(0, -16, `✦ ${titleText} ✦`, {
+            fontFamily: FONT,
+            fontSize: '7px',
+            color: '#FFD54F',
+            stroke: '#000000',
+            strokeThickness: 2,
+        }).setOrigin(0.5);
+
+        const bodyText = isTemple
+            ? 'Arrastra un templo\nsobre el otro para\ncrear un hibrido.'
+            : 'Arrastra una torre\nsobre la otra para\ncrear un hibrido.';
+
+        const body = this.add.text(0, 8, bodyText, {
+            fontFamily: FONT,
+            fontSize: '7px',
+            color: '#ECEFF1',
+            align: 'center',
+            lineSpacing: 3,
+        }).setOrigin(0.5);
+
+        container.add([bg, arrow, title, body]);
+
+        // Pop in animation
+        container.setScale(0.8).setAlpha(0);
+        this.tweens.add({
+            targets: container,
+            scaleX: 1,
+            scaleY: 1,
+            alpha: 1,
+            duration: 250,
+            ease: 'Back.easeOut',
+        });
+
+        this.fusionPopup = container;
+
+        // Show for 7.5s before gently fading away
+        this.fusionPopupTimer = this.time.delayedCall(7500, () => {
+            this._hideFusionPopup();
+        });
+    }
+
+    _hideFusionPopup() {
+        if (this.fusionPopupTimer) {
+            this.fusionPopupTimer.remove();
+            this.fusionPopupTimer = null;
+        }
+        if (this.fusionPopup) {
+            const popup = this.fusionPopup;
+            this.fusionPopup = null;
+            this.tweens.add({
+                targets: popup,
+                alpha: 0,
+                y: popup.y - 12,
+                duration: 350,
+                ease: 'Quad.easeOut',
+                onComplete: () => {
+                    popup.destroy();
+                },
+            });
+        }
+    }
+
     // ─── Notifications ──────────────────────────────────
     /**
      * Buying three upgrades in a row used to stack three messages on the same
@@ -1732,7 +1837,7 @@ export class UIScene extends Phaser.Scene {
 
         this.tweens.add({
             targets: n, y: 12 + slot * 18, alpha: 0,
-            duration: 2000, ease: 'Quad.easeOut',
+            duration: 2800, ease: 'Quad.easeOut',
             onComplete: () => {
                 this.notifSlots[slot] = false;
                 n.destroy();

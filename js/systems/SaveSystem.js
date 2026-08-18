@@ -230,7 +230,7 @@ export class SaveSystem {
                 }
             }
 
-            gameScene.fusionSystem.refresh();
+            gameScene.fusionSystem.refresh(true);
             gameScene.events.emit('path-changed');
             gameScene.events.emit('gold-changed', gameScene.economySystem.gold);
             gameScene.events.emit('mana-changed', gameScene.economySystem.mana);

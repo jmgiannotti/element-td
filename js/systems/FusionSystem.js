@@ -86,7 +86,7 @@ export class FusionSystem {
      *
      * Connects all compatible neighbouring towers/temples with glowing lines on the floor.
      */
-    refresh() {
+    refresh(silent = false) {
         this.clearHints();
 
         const seenPairs = new Set();
@@ -118,6 +118,10 @@ export class FusionSystem {
         }
 
         this._redrawLinks();
+
+        if (!silent && this.links.length > 0) {
+            this.scene.events.emit('fusion-available', this.links[0]);
+        }
     }
 
     clearHints() {
@@ -279,6 +283,7 @@ export class FusionSystem {
         const scene = this.scene;
         // The press has become a drag; it must not be able to start a second one.
         this._press = null;
+        this.scene.events.emit('fusion-drag-begin');
 
         // The inspection card would otherwise hang over the board for the whole
         // drag, describing a tower the player is in the middle of spending.

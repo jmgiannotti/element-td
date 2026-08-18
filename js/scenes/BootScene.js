@@ -12,6 +12,7 @@ import {
 } from '../data/HeroLook.js';
 import { HERO_SPRITE } from '../data/HeroSprite.js';
 import { COIN_SPRITE } from '../data/CoinSprite.js';
+import { MANA_SPRITE } from '../data/ManaSprite.js';
 import { SPELLS, SPELL_ORDER } from '../data/SpellData.js';
 
 /**
@@ -115,6 +116,9 @@ export class BootScene extends Phaser.Scene {
         }
         if (!this.textures.exists(COIN_SPRITE.key)) {
             this.load.image(COIN_SPRITE.key, COIN_SPRITE.png);
+        }
+        if (!this.textures.exists(MANA_SPRITE.key)) {
+            this.load.image(MANA_SPRITE.key, MANA_SPRITE.png);
         }
     }
 
@@ -1381,6 +1385,7 @@ export class BootScene extends Phaser.Scene {
     // ─── Mana mote (12×12) — a spark of life force ──────
     // Violet, because every readout that counts maná in the UI is violet.
     _generateManaMote() {
+        if (this.textures.exists('mana_mote')) return;
         const M = ramp(0x2a1060, 0x5b2bb0, 0x8f5ce8, 0xb388ff, 0xf1e6ff);
         this._draw('mana_mote', 12, 12, (g) => {
             g.fillStyle(M.mid, 0.18); g.fillCircle(6, 6, 6);

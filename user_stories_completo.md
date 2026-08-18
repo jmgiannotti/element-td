@@ -59,10 +59,11 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 **Para** identificar de un vistazo claro qué pares de torres puedo combinar sin saturar la pantalla de efectos.
 
 > **Criterios de Aceptación:**
-> - Las torres adyacentes fusionables se conectan visualmente con una línea en el suelo.
+> - Las torres adyacentes fusionables se conectan visualmente con una línea de energía en el suelo.
+> - La primera vez que se colocan dos estructuras compatibles adyacentes, aparece un mensaje explicativo indicando que se pueden arrastrar una sobre otra para fusionarse.
 > - Al arrastrar o inspeccionar, la UI ofrece una vista previa de la torre resultante.
 > 
-> *Estado:* **Implementado** en `FusionSystem.js`.
+> *Estado:* **Implementado** en `FusionSystem.js` y `UIScene.js`.
 
 ### US 0.6: Registro de Rendimiento y Daño por Estructura
 **Como** jugador analítico,  
