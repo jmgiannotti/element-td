@@ -1,4 +1,5 @@
 import * as Phaser from 'phaser';
+import { ManaAuraEffect } from '../systems/ManaAura.js';
 
 export class ManaMote {
     constructor(scene, x, y, value = 12) {
@@ -8,6 +9,9 @@ export class ManaMote {
         this.collecting = false;
         this.lifetime = 8000;
         this.elapsed = 0;
+
+        // Ethereal arcane aura rendered underneath the mote
+        this.aura = new ManaAuraEffect(scene, x, y);
 
         this.sprite = scene.add.sprite(x, y, 'mana_mote');
         this.sprite.setScale(0.6);
@@ -37,7 +41,17 @@ export class ManaMote {
     }
 
     update(_time, delta) {
-        if (!this.alive || this.collecting) return;
+        if (!this.alive) return;
+
+        if (this.aura) {
+            this.aura.update(_time, delta);
+            if (this.sprite) {
+                this.aura.setPosition(this.sprite.x, this.sprite.y);
+                this.aura.setAlpha(this.sprite.alpha);
+            }
+        }
+
+        if (this.collecting) return;
 
         this.elapsed += delta;
 
@@ -85,6 +99,10 @@ export class ManaMote {
         if (this.bobTween) {
             this.bobTween.stop();
             this.bobTween = null;
+        }
+        if (this.aura) {
+            this.aura.destroy();
+            this.aura = null;
         }
         if (this.sprite) {
             this.sprite.destroy();

@@ -1769,7 +1769,7 @@ export class UIScene extends Phaser.Scene {
         this.fusionPopup = container;
 
         // Show for 7.5s before gently fading away
-        this.fusionPopupTimer = this.time.delayedCall(7500, () => {
+        this.fusionPopupTimer = this.time.delayedCall(7000, () => {
             this._hideFusionPopup();
         });
     }
