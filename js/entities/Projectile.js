@@ -2,6 +2,26 @@ import * as Phaser from 'phaser';
 import { effectOf, effectMultiplier } from '../data/Elements.js';
 
 export class Projectile {
+    static pool = [];
+
+    static obtain(scene, x, y, target, damage, towerData) {
+        const p = this.pool.pop();
+        if (p) {
+            p.scene = scene;
+            p.target = target;
+            p.damage = damage;
+            p.towerData = towerData;
+            p.alive = true;
+            p.sprite.setTexture(`proj_${towerData.element}`)
+                .setPosition(x, y)
+                .setActive(true)
+                .setVisible(true);
+            p._fly();
+            return p;
+        }
+        return new Projectile(scene, x, y, target, damage, towerData);
+    }
+
     /**
      * @param {Phaser.Scene} scene
      * @param {number} x – origin x
@@ -45,7 +65,7 @@ export class Projectile {
             this.sprite.x, this.sprite.y, this.target.x, this.target.y
         ));
 
-        this.scene.tweens.add({
+        this.tween = this.scene.tweens.add({
             targets: this.sprite,
             x: this.target.x,
             y: this.target.y,
@@ -57,36 +77,11 @@ export class Projectile {
 
     /**
      * What landing looks like. A shot that simply vanishes on contact reads as
-     * a missed frame; a ring and a few sparks in the element's own colour is
-     * the cheapest possible confirmation that the hit happened.
+     * a missed frame. We emit particles via the centralized particle system.
      */
     _burst(x, y) {
-        const col = this.towerData.color;
-
-        const ring = this.scene.add.circle(x, y, 3, col, 0.35).setDepth(16);
-        ring.setStrokeStyle(1, col, 0.9);
-        this.scene.tweens.add({
-            targets: ring,
-            scaleX: 3.2, scaleY: 3.2,
-            alpha: 0,
-            duration: 220,
-            ease: 'Quad.easeOut',
-            onComplete: () => ring.destroy(),
-        });
-
-        for (let i = 0; i < 4; i++) {
-            const a = Math.random() * Math.PI * 2;
-            const d = 6 + Math.random() * 7;
-            const spark = this.scene.add.rectangle(x, y, 2, 2, col).setDepth(16);
-            this.scene.tweens.add({
-                targets: spark,
-                x: x + Math.cos(a) * d,
-                y: y + Math.sin(a) * d,
-                alpha: 0,
-                duration: 200 + Math.random() * 140,
-                ease: 'Quad.easeOut',
-                onComplete: () => spark.destroy(),
-            });
+        if (this.scene.particleSystem) {
+            this.scene.particleSystem.emitBurst(x, y, this.towerData.color);
         }
     }
 
@@ -190,7 +185,18 @@ export class Projectile {
 
     destroy() {
         this.alive = false;
+        if (this.tween) {
+            this.tween.stop();
+            this.tween = null;
+        }
         if (this.sprite) {
+            this.sprite.setActive(false).setVisible(false);
+        }
+        
+        // Return to pool if not overloaded
+        if (Projectile.pool.length < 500) {
+            Projectile.pool.push(this);
+        } else if (this.sprite) {
             this.sprite.destroy();
             this.sprite = null;
         }

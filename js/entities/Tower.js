@@ -37,12 +37,6 @@ export class Tower {
         this.sprite.setDepth(5 + row * 0.01);
         this.sprite.setData('tower', true);
 
-        // Range indicator (hidden by default)
-        this.rangeGfx = scene.add.circle(pos.x, pos.y, this.range, 0xffffff, 0.07);
-        this.rangeGfx.setStrokeStyle(1, 0xffffff, 0.15);
-        this.rangeGfx.setDepth(1);
-        this.rangeGfx.setVisible(false);
-
         // Empower aura — kept inside the tile so it never bleeds onto a neighbour.
         // Storm towers use ambient electric arcs instead of the plain glow.
         this.empowerGfx = scene.add.circle(pos.x, pos.y, 14, 0xFFD700, 0.0);
@@ -63,9 +57,19 @@ export class Tower {
 
         // Hover interactivity. Leaving the tower dismisses the inspection card.
         this.sprite.setInteractive();
-        this.sprite.on('pointerover', () => this.rangeGfx.setVisible(true));
+        this.sprite.on('pointerover', () => {
+            if (!this.selected) {
+                this.scene.sharedRangeGfx.setPosition(this.x, this.y);
+                this.scene.sharedRangeGfx.setRadius(this.range);
+                this.scene.sharedRangeGfx.setFillStyle(0xffffff, 0.07);
+                this.scene.sharedRangeGfx.setStrokeStyle(1, 0xffffff, 0.15);
+                this.scene.sharedRangeGfx.setVisible(true);
+            }
+        });
         this.sprite.on('pointerout', () => {
-            this.rangeGfx.setVisible(false);
+            if (!this.selected) {
+                this.scene.sharedRangeGfx.setVisible(false);
+            }
             if (this.selected && this.scene.selectStructure) {
                 this.scene.selectStructure(null);
             }
@@ -92,8 +96,10 @@ export class Tower {
 
     /** Called by TempleSystem when this element's upgrade levels change. */
     refreshStats() {
-        if (!this.alive || !this.rangeGfx) return;
-        this.rangeGfx.setRadius(this.range);
+        if (!this.alive) return;
+        if (this.selected) {
+            this.scene.sharedRangeGfx.setRadius(this.range);
+        }
     }
 
     /**
@@ -103,12 +109,17 @@ export class Tower {
     setSelected(value) {
         if (this.selected === value) return;
         this.selected = value;
-        if (!this.alive || !this.rangeGfx) return;
+        if (!this.alive) return;
 
-        this.rangeGfx.setRadius(this.range);
-        this.rangeGfx.setVisible(value);
-        this.rangeGfx.setFillStyle(0xFFD54F, value ? 0.09 : 0.07);
-        this.rangeGfx.setStrokeStyle(1, value ? 0xFFD54F : 0xffffff, value ? 0.55 : 0.15);
+        if (value) {
+            this.scene.sharedRangeGfx.setPosition(this.x, this.y);
+            this.scene.sharedRangeGfx.setRadius(this.range);
+            this.scene.sharedRangeGfx.setFillStyle(0xFFD54F, 0.09);
+            this.scene.sharedRangeGfx.setStrokeStyle(1, 0xFFD54F, 0.55);
+            this.scene.sharedRangeGfx.setVisible(true);
+        } else {
+            this.scene.sharedRangeGfx.setVisible(false);
+        }
     }
 
     /** Shots per second at the stats it actually has right now. */
@@ -151,7 +162,7 @@ export class Tower {
     _fire(target) {
         const dmg = this.empowered ? this.damage * 1.5 : this.damage;
         audio.play('shoot', this.element);
-        const proj = new Projectile(this.scene, this.x, this.y - 4, target, dmg, this.data);
+        const proj = Projectile.obtain(this.scene, this.x, this.y - 4, target, dmg, this.data);
         this.scene.projectiles.push(proj);
 
         // Recoil — a squash, so the sprite never grows past its own tile
@@ -354,8 +365,11 @@ export class Tower {
     destroy() {
         this.alive = false;
         if (this.sprite) this.sprite.destroy();
-        if (this.rangeGfx) this.rangeGfx.destroy();
         if (this.empowerGfx) this.empowerGfx.destroy();
         if (this._sparkTimer) { this._sparkTimer.remove(); this._sparkTimer = null; }
+        
+        if (this.selected) {
+            this.scene.sharedRangeGfx.setVisible(false);
+        }
     }
 }

@@ -5,6 +5,17 @@ import { WAYPOINTS, TILE_SIZE, TILE } from '../systems/GridSystem.js';
 import { audio } from '../systems/AudioSystem.js';
 
 export class Enemy {
+    static pool = [];
+
+    static obtain(scene, type, spawnX = null, spawnY = null) {
+        const e = this.pool.pop();
+        if (e) {
+            e._reset(scene, type, spawnX, spawnY);
+            return e;
+        }
+        return new Enemy(scene, type, spawnX, spawnY);
+    }
+
     constructor(scene, type, spawnX = null, spawnY = null) {
         this.scene = scene;
         this.type = type;
@@ -574,7 +585,10 @@ export class Enemy {
         // The errand ends the instant it dies, so the ring goes now rather than
         // fading with the body — _cleanup runs off a tween's onComplete, and a
         // marker that outlives a stalled tween is a marker stuck on the grass.
-        if (this.agroRing) { this.agroRing.destroy(); this.agroRing = null; }
+        if (this.agroRing) { 
+            this.agroRing.destroy(); 
+            this.agroRing = null; 
+        }
 
         this.scene.events.emit('enemy-died', this);
 
@@ -584,7 +598,7 @@ export class Enemy {
                 for (let i = 0; i < spawn.count; i++) {
                     const ox = (Math.random() - 0.5) * 20;
                     const oy = (Math.random() - 0.5) * 20;
-                    const child = new Enemy(this.scene, spawn.type, this.x + ox, this.y + oy);
+                    const child = Enemy.obtain(this.scene, spawn.type, this.x + ox, this.y + oy);
                     this.scene.enemies.push(child);
                 }
             }
@@ -605,17 +619,116 @@ export class Enemy {
         this.reachedEnd = true;
         if (this.pathChangeHandler) {
             this.scene.events.off('path-changed', this.pathChangeHandler);
+            this.pathChangeHandler = null;
         }
         this.scene.events.emit('enemy-reached-end', this);
         this._cleanup();
     }
 
     _cleanup() {
-        if (this.sprite) { this.sprite.destroy(); this.sprite = null; }
-        if (this.hpBg) { this.hpBg.destroy(); this.hpBg = null; }
-        if (this.hpFill) { this.hpFill.destroy(); this.hpFill = null; }
-        // Killed mid-errand: the ring is a separate object and outlives the
-        // sprite unless it is taken down here.
+        if (this.sprite) {
+            this.sprite.setActive(false).setVisible(false);
+            this.sprite.clearTint();
+        }
+        if (this.hpBg) {
+            this.hpBg.setActive(false).setVisible(false);
+        }
+        if (this.hpFill) {
+            this.hpFill.setActive(false).setVisible(false);
+        }
+        if (this.agroRing) { 
+            this.agroRing.destroy(); 
+            this.agroRing = null; 
+        }
+        
+        if (Enemy.pool.length < 200) {
+            Enemy.pool.push(this);
+        } else {
+            // Hard destroy if pool is full
+            if (this.sprite) { this.sprite.destroy(); this.sprite = null; }
+            if (this.hpBg) { this.hpBg.destroy(); this.hpBg = null; }
+            if (this.hpFill) { this.hpFill.destroy(); this.hpFill = null; }
+        }
+    }
+
+    _reset(scene, type, spawnX = null, spawnY = null) {
+        this.scene = scene;
+        this.type = type;
+        this.data = { ...ENEMY_DATA[type] };
+        this.hp = this.data.hp;
+        this.maxHp = this.data.hp;
+        this.speed = this.data.speed;
+        this.alive = true;
+        this.reachedEnd = false;
+
+        this.slowAmount = 0;
+        this.slowTimer = 0;
+        this.frozen = false;
+        this.freezeTimer = 0;
+        this.burning = false;
+        this.burnDps = 0;
+        this.burnTimer = 0;
+        this.burnTick = 0;
+
+        this.agro = this.data.agro ?? null;
+        this.mode = 'road';
+        this.isReturning = false;
+        this.departPos = null;
+        this.departCell = null;
+        this.agroTarget = null;
         if (this.agroRing) { this.agroRing.destroy(); this.agroRing = null; }
+        this.strikeTimer = 0;
+        this.strikes = 0;
+        this.errandDone = false;
+        this.distanceTraveled = 0;
+        this.heroAttackTimer = 0;
+        this.blockAttackTimer = 0;
+
+        const exitWp = WAYPOINTS[WAYPOINTS.length - 1];
+        if (spawnX !== null && spawnY !== null) {
+            const raw = scene.gridSystem.worldToGrid(spawnX, spawnY);
+            const cell = scene.gridSystem.nearestWalkable(raw.col, raw.row);
+            this.path = scene.gridSystem.findPath(cell.col, cell.row, exitWp.col, exitWp.row);
+            this.pathIndex = 0;
+            this.sprite.setPosition(spawnX, spawnY);
+        } else {
+            const startWp = WAYPOINTS[0];
+            this.path = scene.gridSystem.findPath(startWp.col, startWp.row, exitWp.col, exitWp.row);
+            this.pathIndex = 1;
+            const sx = this.path ? this.path[0].col * TILE_SIZE + TILE_SIZE / 2 : 0;
+            const sy = this.path ? this.path[0].row * TILE_SIZE + TILE_SIZE / 2 : 0;
+            this.sprite.setPosition(sx, sy);
+        }
+
+        if (!this.path) {
+            this.alive = false;
+            return;
+        }
+
+        this.sprite.setTexture(`enemy_${type}`)
+            .setScale(1)
+            .setAlpha(1)
+            .setActive(true)
+            .setVisible(true);
+
+        this.hpBg.setPosition(this.sprite.x, this.sprite.y - 21)
+            .setAlpha(1)
+            .setScale(1)
+            .setActive(true)
+            .setVisible(true);
+            
+        this.hpFill.setPosition(this.sprite.x, this.sprite.y - 21)
+            .setAlpha(1)
+            .setScale(1)
+            .setActive(true)
+            .setVisible(true);
+            
+        this._updateHpBar();
+
+        if (this.pathChangeHandler) {
+            this.scene.events.off('path-changed', this.pathChangeHandler);
+        }
+        this.pathChangeHandler = () => this.recalculatePath();
+        this.scene.events.on('path-changed', this.pathChangeHandler);
     }
 }

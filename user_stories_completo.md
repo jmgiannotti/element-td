@@ -288,18 +288,18 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Pools reutilizables para proyectiles (`Projectile`) y enemigos (`Enemy`).
 > - Reducción en la presión del Garbage Collector del navegador.
 > 
-> *Estado:* **Pendiente** (actualmente solo `FloatingText` tiene pool básico).
+> *Estado:* **Implementado**. Los enemigos y proyectiles utilizan un sistema riguroso de pooling estático que recicla las entidades sin destruir sus GameObjects de Phaser.
 
 ### US 6.2: Optimización de Rendering y Gestión de Tweens
-**Como** desarrollador,  
-**Quiero** minimizar los tweens activos simultáneos y optimizar el redibujado de partículas y rangos,  
+**Como** jugador,  
+**Quiero** que los gráficos que no importan se simplifiquen o eliminen,  
 **Para** asegurar compatibilidad fluida en dispositivos de gama media o navegadores con aceleración gráfica limitada.
 
 > **Criterios de Aceptación:**
 > - Los efectos de chispas y partículas liberan sus tweens inmediatamente tras finalizar.
 > - Los rangos de torres solo se procesan cuando están activos o en hover.
 > 
-> *Estado:* **Pendiente**.
+> *Estado:* **Implementado**. Se reemplazaron los tweens de impactos por un `ParticleSystem` centralizado y se eliminaron los gráficos de rango redundantes de las torres, usando un único gráfico compartido.
 
 ---
 

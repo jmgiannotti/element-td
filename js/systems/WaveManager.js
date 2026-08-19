@@ -43,7 +43,7 @@ export class WaveManager {
             this.spawnTimer -= delta;
             if (this.spawnTimer <= 0) {
                 const spawn = this.spawnQueue.shift();
-                const enemy = new Enemy(this.scene, spawn.type);
+                const enemy = Enemy.obtain(this.scene, spawn.type);
                 this.scene.enemies.push(enemy);
                 this.spawnTimer = this.spawnQueue.length > 0
                     ? this.spawnQueue[0].delay

@@ -9,7 +9,10 @@ import { FloatingText } from '../systems/FloatingText.js';
 import { TutorialSystem } from '../systems/TutorialSystem.js';
 import { SpellSystem } from '../systems/SpellSystem.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
+import { ParticleSystem } from '../systems/ParticleSystem.js';
 import { audio } from '../systems/AudioSystem.js';
+import { Enemy } from '../entities/Enemy.js';
+import { Projectile } from '../entities/Projectile.js';
 import { ABILITY_ORDER, HERO_ABILITIES } from '../data/HeroData.js';
 import { SPELLS, SPELL_ORDER } from '../data/SpellData.js';
 import { Tower } from '../entities/Tower.js';
@@ -127,6 +130,12 @@ export class GameScene extends Phaser.Scene {
         this.previewRange.setStrokeStyle(1, 0xffffff, 0.15);
         this.previewRange.setVisible(false).setDepth(1);
 
+        // A single range circle used by all towers on hover/select, rather than
+        // each tower having its own hidden graphics object.
+        this.sharedRangeGfx = this.add.circle(0, 0, 100, 0xffffff, 0.07);
+        this.sharedRangeGfx.setStrokeStyle(1, 0xffffff, 0.15);
+        this.sharedRangeGfx.setVisible(false).setDepth(1);
+
         this.previewTile = this.add.rectangle(0, 0, TILE_SIZE - 2, TILE_SIZE - 2, 0x00ff00, 0.2);
         this.previewTile.setStrokeStyle(1, 0x00ff00, 0.4);
         this.previewTile.setVisible(false).setDepth(2);
@@ -137,6 +146,9 @@ export class GameScene extends Phaser.Scene {
         this.spellCursor = this.add.circle(0, 0, 90, 0xffffff, 0.07);
         this.spellCursor.setStrokeStyle(1, 0xffffff, 0.5);
         this.spellCursor.setVisible(false).setDepth(2);
+
+        // Particle system for fast visual effects
+        this.particleSystem = new ParticleSystem(this);
 
         // What the cell under the cursor is about to cost or pay you, or why it
         // is refused. Said before the click, because an outcome you cannot see
@@ -328,6 +340,18 @@ export class GameScene extends Phaser.Scene {
             this._clearBarricadeProbe();
             this._refreshRouteVisibility();
             this.buildGrid.setVisible(true);
+        });
+
+        // Shutdown event to clean up static pools and systems
+        this.events.on('shutdown', () => {
+            this.input.keyboard.removeAllListeners();
+            if (this.particleSystem) {
+                this.particleSystem.destroy();
+                this.particleSystem = null;
+            }
+            // Clear static pools so they don't hold destroyed GameObjects
+            Enemy.pool = [];
+            Projectile.pool = [];
         });
 
         // Anything that moves a wall moves the route with it.
