@@ -273,7 +273,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Pausar detiene oleadas, proyectiles, movimiento y temporizadores.
 > - Se muestra un cartel visible de "PAUSA".
 > 
-> *Estado:* **Pendiente** (actualmente el modal de opciones actúa como pausa parcial).
+> *Estado:* **Implementado** en `UIScene.js` con soporte completo de pausa gráfica y control del tiempo.
 
 ---
 

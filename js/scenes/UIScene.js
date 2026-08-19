@@ -93,12 +93,53 @@ export class UIScene extends Phaser.Scene {
         this._buildSpellHud();
         this._buildHeroHud();
         this._buildTutorialBanner();
+        this._buildPauseOverlay();
         this._registerEvents();
 
         this._updateAffordability();
         this._updateManaBar();
         this._refreshWavePreview();
         this._refreshTempleButtons();
+
+        this.input.keyboard.on('keydown-SPACE', () => {
+            if (this.gs.gameOver || this.gs.gameWon || this.gs.uiModalOpen) return;
+            this.togglePause();
+        });
+    }
+
+    togglePause() {
+        if (this.gs.gameOver || this.gs.gameWon) return;
+        this.isPaused = !this.isPaused;
+        
+        if (this.isPaused) {
+            audio.play('click'); // or a distinct pause sound
+            this.gs.scene.pause('GameScene');
+            this.pauseOverlay.setVisible(true);
+        } else {
+            audio.play('click');
+            this.gs.scene.resume('GameScene');
+            this.pauseOverlay.setVisible(false);
+        }
+    }
+
+    _buildPauseOverlay() {
+        this.isPaused = false;
+        this.pauseOverlay = this.add.container(MAP_CX, MAP_CY).setDepth(100).setVisible(false);
+        
+        // Dim the map slightly
+        const bg = this.add.rectangle(0, 0, 640, 480, 0x000000, 0.6)
+            .setInteractive(); // Intercepts clicks on the map while paused
+        
+        const title = this.add.text(0, -20, 'PAUSA', {
+            fontFamily: FONT, fontSize: '24px', color: '#FFFFFF',
+            stroke: '#000000', strokeThickness: 4, letterSpacing: 4
+        }).setOrigin(0.5);
+        
+        const sub = this.add.text(0, 20, 'Presiona ESPACIO para reanudar', {
+            fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
+        }).setOrigin(0.5);
+        
+        this.pauseOverlay.add([bg, title, sub]);
     }
 
     /** Cooldown wipes have to be redrawn every frame; nothing else here does. */
@@ -474,7 +515,7 @@ export class UIScene extends Phaser.Scene {
         });
         if (wm.autoWave) autoBtn.bg.fillColor = 0x2196F3;
 
-        const sound = mk(LEFT + 140, 70, audio.enabled ? 'SON: SI' : 'SON: NO', (bg, txt) => {
+        const sound = mk(LEFT + 138, 70, audio.enabled ? 'SON: SI' : 'SON: NO', (bg, txt) => {
             const on = audio.toggle();
             txt.setText(on ? 'SON: SI' : 'SON: NO');
             bg.fillColor = on ? 0x333344 : 0x552222;
@@ -482,7 +523,10 @@ export class UIScene extends Phaser.Scene {
         sound.txt.setText(audio.enabled ? 'SON: SI' : 'SON: NO');
         sound.bg.fillColor = audio.enabled ? 0x333344 : 0x552222;
 
-        mk(LEFT + 216, 40, '?', () => this._openHelpPanel());
+        mk(LEFT + 212, 22, '||', () => {
+            if (!this.gs.uiModalOpen) this.togglePause();
+        });
+        mk(LEFT + 238, 18, '?', () => this._openHelpPanel());
     }
 
     _buildTopRightGear() {
@@ -524,12 +568,19 @@ export class UIScene extends Phaser.Scene {
         this._closeUpgradePanel();
         this.gs.uiModalOpen = true;
 
+        // Fully pause GameScene while Options are open, restoring previous state on close
+        this._wasPausedBeforeOptions = this.isPaused;
+        this.gs.scene.pause('GameScene');
+
         this.optionsModal = new OptionsModal(this, {
             mode: 'ingame',
             gameScene: this.gs,
             onClose: () => {
                 this.optionsModal = null;
                 this.gs.uiModalOpen = false;
+                if (!this._wasPausedBeforeOptions) {
+                    this.gs.scene.resume('GameScene');
+                }
             },
             onSaveQuit: () => {
                 this.optionsModal = null;
