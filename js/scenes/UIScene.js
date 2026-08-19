@@ -1723,10 +1723,12 @@ export class UIScene extends Phaser.Scene {
     _showTowerTooltip(element, x, y) {
         const td = TOWER_DATA[element];
         const ts = this.gs.templeSystem;
+        const rate = td.fireRate * ts.multiplier(element, 'fireRate');
         const lines = [
             td.name,
             `DMG: ${Math.round(td.damage * ts.multiplier(element, 'damage'))}`,
             `RNG: ${Math.round(td.range * ts.multiplier(element, 'range'))}`,
+            `SPD: ${(1000 / rate).toFixed(2)}/s`,
             td.specialDesc,
         ];
         if (ts.totalLevels(element) > 0) lines.push('mejorada por templo');
@@ -1747,7 +1749,7 @@ export class UIScene extends Phaser.Scene {
             backgroundColor: '#0a0a1af0',
             padding: { x: 10, y: 10 },
             lineSpacing: 7,
-        }).setOrigin(originX, 0.5).setDepth(60);
+        }).setOrigin(originX, 0.5).setDepth(100);
     }
 
     _hideTooltip() {
