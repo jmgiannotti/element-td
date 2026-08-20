@@ -943,27 +943,26 @@ export class UIScene extends Phaser.Scene {
      * looking at, so it never needs more room than this.
      */
     _buildTutorialBanner() {
-        this.tutorialBox = this.add.rectangle(344, 456, 470, 36, 0x0a0a1a, 0.9)
-            .setStrokeStyle(1, 0xB388FF)
+        this.tutorialBox = this.add.rectangle(320, 452, 510, 42, 0x0a0a1a, 0.95)
+            .setStrokeStyle(1.5, 0xB388FF)
             .setDepth(70)
             .setVisible(false);
 
-        // Wrapped narrow enough to leave the skip button its own column: a
-        // three-line instruction must never run underneath the way out of it.
-        this.tutorialText = this.add.text(310, 456, '', {
-            fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
-            align: 'center', lineSpacing: 5,
-            wordWrap: { width: 380 },
+        // Wrapped with comfortable margins leaving the skip button its own column
+        this.tutorialText = this.add.text(285, 452, '', {
+            fontFamily: FONT, fontSize: '7.5px', color: '#ECEFF1',
+            align: 'center', lineSpacing: 4,
+            wordWrap: { width: 410 },
         }).setOrigin(0.5).setDepth(71).setVisible(false);
 
-        this.tutorialSkipBg = this.add.rectangle(548, 456, 52, 20, 0x2a2a4a)
+        this.tutorialSkipBg = this.add.rectangle(530, 452, 54, 22, 0x2a2a4a)
             .setStrokeStyle(1, 0x555577)
             .setDepth(71)
             .setVisible(false)
             .setInteractive({ useHandCursor: true });
 
-        this.tutorialSkip = this.add.text(548, 456, 'SALTAR', {
-            fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
+        this.tutorialSkip = this.add.text(530, 452, 'SALTAR', {
+            fontFamily: FONT, fontSize: '7.5px', color: '#B0BEC5',
         }).setOrigin(0.5).setDepth(72).setVisible(false);
 
         this.tutorialSkipBg.on('pointerdown', (pointer) => {

@@ -21,9 +21,9 @@ export const TUTORIAL_STEP = {
 };
 
 const COLLECT_TEXT = 'Un orbe de fuerza vital. Click derecho para mover al heroe encima y recogerlo.';
-const TEMPLE_TEXT = `El heroe lo bebe en crudo. Un Templo refina +15% y abre mejoras: compra uno (${TEMPLE_BASE_COST} oro) y colocalo sobre el pasto.`;
-const DONE_TEXT = 'El templo cosecha solo dentro de su circulo. Toca el templo para gastar ✦ en mejoras.';
-const SKIP_TEXT = 'Ya tenes un templo cosechando. El heroe sirve para los orbes que ningun templo cubre.';
+const TEMPLE_TEXT = `El heroe lo consume en crudo. Un Templo abre mejoras:\ncompra uno (${TEMPLE_BASE_COST} oro) y colocalo sobre el pasto.`;
+const DONE_TEXT = 'El templo cosecha dentro de su circulo. Toca el templo para gastar ✦ en mejoras.';
+const SKIP_TEXT = 'Ya tenes un templo cosechando. El heroe sirve para los orbes fuera de su alcance.';
 
 export class TutorialSystem {
     constructor(scene) {
