@@ -7,22 +7,28 @@ import { audio } from '../systems/AudioSystem.js';
 export class Enemy {
     static pool = [];
 
-    static obtain(scene, type, spawnX = null, spawnY = null) {
+    static obtain(scene, type, spawnX = null, spawnY = null, hpMultiplier = 1) {
         const e = this.pool.pop();
         if (e) {
-            e._reset(scene, type, spawnX, spawnY);
+            e._reset(scene, type, spawnX, spawnY, hpMultiplier);
             return e;
         }
-        return new Enemy(scene, type, spawnX, spawnY);
+        return new Enemy(scene, type, spawnX, spawnY, hpMultiplier);
     }
 
-    constructor(scene, type, spawnX = null, spawnY = null) {
+    constructor(scene, type, spawnX = null, spawnY = null, hpMultiplier = 1) {
         this.scene = scene;
         this.type = type;
         this.data = { ...ENEMY_DATA[type] };
-        this.hp = this.data.hp;
-        this.maxHp = this.data.hp;
-        this.speed = this.data.speed;
+        
+        // Endless mode scaling
+        this.hpMultiplier = hpMultiplier;
+        this.maxHp = Math.round(this.data.hp * this.hpMultiplier);
+        this.hp = this.maxHp;
+        // Limit speed boost to 150% max
+        const speedMult = Math.min(1.5, 1 + ((this.hpMultiplier - 1) * 0.1));
+        this.speed = this.data.speed * speedMult;
+        
         this.alive = true;
         this.reachedEnd = false;
 
@@ -598,7 +604,8 @@ export class Enemy {
                 for (let i = 0; i < spawn.count; i++) {
                     const ox = (Math.random() - 0.5) * 20;
                     const oy = (Math.random() - 0.5) * 20;
-                    const child = Enemy.obtain(this.scene, spawn.type, this.x + ox, this.y + oy);
+                    // Children inherit the parent's HP multiplier
+                    const child = Enemy.obtain(this.scene, spawn.type, this.x + ox, this.y + oy, this.hpMultiplier);
                     this.scene.enemies.push(child);
                 }
             }
@@ -651,13 +658,17 @@ export class Enemy {
         }
     }
 
-    _reset(scene, type, spawnX = null, spawnY = null) {
+    _reset(scene, type, spawnX = null, spawnY = null, hpMultiplier = 1) {
         this.scene = scene;
         this.type = type;
         this.data = { ...ENEMY_DATA[type] };
-        this.hp = this.data.hp;
-        this.maxHp = this.data.hp;
-        this.speed = this.data.speed;
+        
+        this.hpMultiplier = hpMultiplier;
+        this.maxHp = Math.round(this.data.hp * this.hpMultiplier);
+        this.hp = this.maxHp;
+        const speedMult = Math.min(1.5, 1 + ((this.hpMultiplier - 1) * 0.1));
+        this.speed = this.data.speed * speedMult;
+        
         this.alive = true;
         this.reachedEnd = false;
 

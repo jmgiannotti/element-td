@@ -217,7 +217,8 @@ export class UIScene extends Phaser.Scene {
     _updateStatus() {
         const e = this.gs.economySystem;
         const w = this.gs.waveManager;
-        this.statusText.setText(`♥ ${e.lives}    OLEADA ${w.currentWave}/${w.totalWaves}`);
+        const total = w.currentWave > w.totalWaves ? '∞' : w.totalWaves;
+        this.statusText.setText(`♥ ${e.lives}    OLEADA ${w.currentWave}/${total}`);
         this.statusText.setColor(e.lives <= 5 ? '#FF1744' : '#B0BEC5');
     }
 
@@ -1939,12 +1940,16 @@ export class UIScene extends Phaser.Scene {
 
     // ─── End screen ─────────────────────────────────────
     _showEndScreen(message, color) {
-        this.add.rectangle(460, 240, 920, 480, 0x000000, 0.78).setDepth(90);
+        const c = this.add.container(0, 0).setDepth(90);
+        
+        const shade = this.add.rectangle(460, 240, 920, 480, 0x000000, 0.78);
+        c.add(shade);
 
-        this.add.text(MAP_CX, 130, message, {
+        const title = this.add.text(MAP_CX, 130, message, {
             fontFamily: FONT, fontSize: '24px', color,
             stroke: '#000000', strokeThickness: 5,
-        }).setOrigin(0.5).setDepth(91);
+        }).setOrigin(0.5);
+        c.add(title);
 
         const stats = [
             `Oleadas: ${this.gs.waveManager.currentWave}/${this.gs.waveManager.totalWaves}`,
@@ -1954,19 +1959,24 @@ export class UIScene extends Phaser.Scene {
             `Templos: ${this.gs.temples.length}`,
             `Torres: ${this.gs.towers.length}`,
         ];
-        this.add.text(MAP_CX, 224, stats.join('\n'), {
+        const statsText = this.add.text(MAP_CX, 224, stats.join('\n'), {
             fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
             lineSpacing: 10, align: 'center',
-        }).setOrigin(0.5).setDepth(91);
+        }).setOrigin(0.5);
+        c.add(statsText);
+
+        const isVictory = message === '¡VICTORIA!';
+        const rx = isVictory ? MAP_CX - 150 : MAP_CX - 90;
+        const mx = isVictory ? MAP_CX + 150 : MAP_CX + 90;
 
         // Restart Button
-        const rbg = this.add.rectangle(MAP_CX - 90, 340, 160, 38, 0x2E7D32).setDepth(91);
+        const rbg = this.add.rectangle(rx, 340, 140, 38, 0x2E7D32);
         rbg.setStrokeStyle(2, 0x4CAF50);
         rbg.setInteractive({ useHandCursor: true });
-
-        this.add.text(MAP_CX - 90, 340, 'REINTENTAR', {
+        const rtext = this.add.text(rx, 340, 'REINTENTAR', {
             fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
-        }).setOrigin(0.5).setDepth(92);
+        }).setOrigin(0.5);
+        c.add([rbg, rtext]);
 
         rbg.on('pointerdown', () => {
             SaveSystem.clearSave();
@@ -1978,13 +1988,13 @@ export class UIScene extends Phaser.Scene {
         rbg.on('pointerout', () => { rbg.fillColor = 0x2E7D32; });
 
         // Main Menu Button
-        const mbg = this.add.rectangle(MAP_CX + 90, 340, 160, 38, 0x282848).setDepth(91);
+        const mbg = this.add.rectangle(mx, 340, 140, 38, 0x282848);
         mbg.setStrokeStyle(2, 0x90CAF9);
         mbg.setInteractive({ useHandCursor: true });
-
-        this.add.text(MAP_CX + 90, 340, 'MENÚ PRINCIPAL', {
+        const mtext = this.add.text(mx, 340, 'MENÚ PRINCIPAL', {
             fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
-        }).setOrigin(0.5).setDepth(92);
+        }).setOrigin(0.5);
+        c.add([mbg, mtext]);
 
         mbg.on('pointerdown', () => {
             SaveSystem.clearSave();
@@ -1994,5 +2004,26 @@ export class UIScene extends Phaser.Scene {
         });
         mbg.on('pointerover', () => { mbg.fillColor = 0x3a3a68; });
         mbg.on('pointerout', () => { mbg.fillColor = 0x282848; });
+
+        // Infinite Mode Button (Only on Victory)
+        if (isVictory) {
+            const ibg = this.add.rectangle(MAP_CX, 340, 140, 38, 0x8E24AA);
+            ibg.setStrokeStyle(2, 0xAB47BC);
+            ibg.setInteractive({ useHandCursor: true });
+            const itext = this.add.text(MAP_CX, 340, 'MODO INFINITO', {
+                fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
+            }).setOrigin(0.5);
+            c.add([ibg, itext]);
+
+            ibg.on('pointerdown', () => {
+                audio.play('click');
+                c.destroy();
+                this.gs.gameWon = false; // Unfreeze game
+                // Optionally start the next wave immediately
+                this.gs.events.emit('start-wave');
+            });
+            ibg.on('pointerover', () => { ibg.fillColor = 0x9C27B0; });
+            ibg.on('pointerout', () => { ibg.fillColor = 0x8E24AA; });
+        }
     }
 }
