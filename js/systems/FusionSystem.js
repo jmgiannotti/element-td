@@ -516,6 +516,17 @@ export class FusionSystem {
         // everything that went into it rather than of a list price it never had.
         const paid = (dragged.paidCost ?? 0) + (target.paidCost ?? 0);
 
+        let combinedDamage = 0;
+        let combinedKills = 0;
+        if (kind === 'tower') {
+            combinedDamage = (dragged.totalDamageDealt || 0) + (target.totalDamageDealt || 0);
+            combinedKills = (dragged.enemiesKilled || 0) + (target.enemiesKilled || 0);
+            if (this.scene._archiveTower) {
+                this.scene._archiveTower(dragged);
+                this.scene._archiveTower(target);
+            }
+        }
+
         dragged.destroy();
         target.destroy();
 
@@ -527,7 +538,10 @@ export class FusionSystem {
             scene.temples.push(new Temple(scene, col, row, resultElement, paid));
         } else {
             scene.towers = scene.towers.filter(t => t !== dragged && t !== target);
-            scene.towers.push(new Tower(scene, col, row, resultElement, paid));
+            const newTower = new Tower(scene, col, row, resultElement, paid);
+            newTower.totalDamageDealt = combinedDamage;
+            newTower.enemiesKilled = combinedKills;
+            scene.towers.push(newTower);
         }
 
         // VFX – expanding flash

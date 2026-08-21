@@ -97,7 +97,14 @@ export class SaveSystem {
 
             towersToSave = gameScene.towers
                 .filter(t => t.alive)
-                .map(t => ({ col: t.col, row: t.row, element: t.element, paid: t.paidCost }));
+                .map(t => ({
+                    col: t.col,
+                    row: t.row,
+                    element: t.element,
+                    paid: t.paidCost,
+                    damageDealt: t.totalDamageDealt || 0,
+                    kills: t.enemiesKilled || 0,
+                }));
             templesToSave = gameScene.temples
                 .filter(t => t.alive)
                 .map(t => ({ col: t.col, row: t.row, element: t.element, paid: t.paidCost }));
@@ -122,6 +129,7 @@ export class SaveSystem {
             autoWave: gameScene.waveManager.autoWave ?? false,
             hero: heroData,
             towers: towersToSave,
+            towerHistory: gameScene.towerHistory || [],
             temples: templesToSave,
             barricades: barricadesToSave,
             breakableBlocks: breakableBlocksToSave,
@@ -210,9 +218,14 @@ export class SaveSystem {
             }
 
             // 7. Restore Towers
+            if (data.towerHistory) {
+                gameScene.towerHistory = [...data.towerHistory];
+            }
             if (data.towers) {
                 for (const t of data.towers) {
                     const tower = new Tower(gameScene, t.col, t.row, t.element, t.paid ?? 20);
+                    tower.totalDamageDealt = t.damageDealt || 0;
+                    tower.enemiesKilled = t.kills || 0;
                     tower.sprite.setScale(1);
                     gameScene.towers.push(tower);
                     gameScene.occupiedCells.add(`${t.col},${t.row}`);

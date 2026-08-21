@@ -175,10 +175,13 @@ export class Enemy {
             this.burnTimer -= delta;
             this.burnTick += delta;
             if (this.burnTick >= 500) {
-                this.takeDamage(this.burnDps, { silent: true });
+                this.takeDamage(this.burnDps, { silent: true, source: this.burnSource });
                 this.burnTick -= 500;
             }
-            if (this.burnTimer <= 0) this.burning = false;
+            if (this.burnTimer <= 0) {
+                this.burning = false;
+                this.burnSource = null;
+            }
         }
 
         // ── Agro ────────────────────────────────
@@ -528,16 +531,21 @@ export class Enemy {
 
     /**
      * @param {number} amount
-     * @param {{silent?: boolean, effect?: string, showNumber?: boolean}} [opts]
+     * @param {{silent?: boolean, effect?: string, showNumber?: boolean, source?: object}} [opts]
      *   `silent` suppresses the sound and the flash — burn ticks land twice a
      *   second and would otherwise strobe. `effect` is the elemental match-up,
-     *   which decides the colour and glyph of the floating number.
+     *   which decides the colour and glyph of the floating number. `source` is
+     *   the structure/entity that caused the damage (receives recordDamage/recordKill).
      */
     takeDamage(amount, opts = {}) {
         if (!this.alive) return;
-        const { silent = false, effect = EFFECT.NORMAL, showNumber = !silent } = opts;
+        const { silent = false, effect = EFFECT.NORMAL, showNumber = !silent, source = null } = opts;
 
         this.hp -= amount;
+
+        if (source && source.recordDamage) {
+            source.recordDamage(amount);
+        }
 
         if (showNumber && this.scene.floating && this.sprite) {
             this.scene.floating.damage(this.x, this.y - 17, amount, effect);
@@ -559,7 +567,12 @@ export class Enemy {
             });
         }
 
-        if (this.hp <= 0) this._die();
+        if (this.hp <= 0) {
+            if (source && source.recordKill) {
+                source.recordKill();
+            }
+            this._die();
+        }
     }
 
     applySlow(amount, duration) {
@@ -573,11 +586,12 @@ export class Enemy {
         this.sprite.setTint(0x80DEEA);
     }
 
-    applyBurn(dps, duration) {
+    applyBurn(dps, duration, source = null) {
         this.burning = true;
         this.burnDps = dps;
         this.burnTimer = duration;
         this.burnTick = 0;
+        this.burnSource = source;
     }
 
     _die() {
@@ -680,6 +694,7 @@ export class Enemy {
         this.burnDps = 0;
         this.burnTimer = 0;
         this.burnTick = 0;
+        this.burnSource = null;
 
         this.agro = this.data.agro ?? null;
         this.mode = 'road';

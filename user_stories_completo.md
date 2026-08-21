@@ -65,7 +65,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > 
 > *Estado:* **Implementado** en `FusionSystem.js` y `UIScene.js`.
 
-### US 0.6: Registro de Rendimiento y Daño por Estructura
+### US 0.6: Registro de Rendimiento y Daño por Estructura [✓]
 **Como** jugador analítico,  
 **Quiero** ver el daño total infligido y los enemigos eliminados (*kills*) por cada torre al seleccionarla y en la pantalla de fin de partida,  
 **Para** identificar qué fusiones y posiciones fueron las más eficientes y optimizar mis partidas futuras.
@@ -75,7 +75,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - La tarjeta de inspección de la torre muestra estos números en tiempo real.
 > - La pantalla de Victoria/Derrota destaca la "Torre MVP" de la partida.
 > 
-> *Estado:* **Pendiente**.
+> *Estado:* **Implementado** en `Tower.js`, `Projectile.js`, `Enemy.js`, `FusionSystem.js`, `GameScene.js` y `UIScene.js`.
 
 ---
 

@@ -18,6 +18,8 @@ export class Tower {
         this.fusionHint = false;
         this.fireTimer = 0;
         this.alive = true;
+        this.totalDamageDealt = 0;
+        this.enemiesKilled = 0;
         // Hover shows the range for as long as the cursor is there; a click
         // pins it, which is the only way to compare two towers' reach at once.
         this.selected = false;
@@ -159,10 +161,25 @@ export class Tower {
         return best;
     }
 
+    recordDamage(amount) {
+        if (amount <= 0) return;
+        this.totalDamageDealt += amount;
+        if (this.selected && this.scene._refreshStatLabel) {
+            this.scene._refreshStatLabel();
+        }
+    }
+
+    recordKill() {
+        this.enemiesKilled += 1;
+        if (this.selected && this.scene._refreshStatLabel) {
+            this.scene._refreshStatLabel();
+        }
+    }
+
     _fire(target) {
         const dmg = this.empowered ? this.damage * 1.5 : this.damage;
         audio.play('shoot', this.element);
-        const proj = Projectile.obtain(this.scene, this.x, this.y - 4, target, dmg, this.data);
+        const proj = Projectile.obtain(this.scene, this.x, this.y - 4, target, dmg, this.data, this);
         this.scene.projectiles.push(proj);
 
         // Recoil — a squash, so the sprite never grows past its own tile

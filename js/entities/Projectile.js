@@ -4,13 +4,14 @@ import { effectOf, effectMultiplier } from '../data/Elements.js';
 export class Projectile {
     static pool = [];
 
-    static obtain(scene, x, y, target, damage, towerData) {
+    static obtain(scene, x, y, target, damage, towerData, sourceTower = null) {
         const p = this.pool.pop();
         if (p) {
             p.scene = scene;
             p.target = target;
             p.damage = damage;
             p.towerData = towerData;
+            p.sourceTower = sourceTower;
             p.alive = true;
             p.sprite.setTexture(`proj_${towerData.element}`)
                 .setPosition(x, y)
@@ -19,7 +20,7 @@ export class Projectile {
             p._fly();
             return p;
         }
-        return new Projectile(scene, x, y, target, damage, towerData);
+        return new Projectile(scene, x, y, target, damage, towerData, sourceTower);
     }
 
     /**
@@ -29,12 +30,14 @@ export class Projectile {
      * @param {object} target – Enemy instance
      * @param {number} damage
      * @param {object} towerData – from TOWER_DATA
+     * @param {object} [sourceTower] – Tower instance that fired this shot
      */
-    constructor(scene, x, y, target, damage, towerData) {
+    constructor(scene, x, y, target, damage, towerData, sourceTower = null) {
         this.scene = scene;
         this.target = target;
         this.damage = damage;
         this.towerData = towerData;
+        this.sourceTower = sourceTower;
         this.alive = true;
 
         this.sprite = scene.add.sprite(x, y, `proj_${towerData.element}`);
@@ -96,7 +99,7 @@ export class Projectile {
             const effect = effectOf(this.towerData.element, this.target.data);
             const dmg = this.damage * effectMultiplier(effect);
 
-            this.target.takeDamage(dmg, { effect });
+            this.target.takeDamage(dmg, { effect, source: this.sourceTower });
 
             // Apply specials
             switch (this.towerData.special) {
@@ -109,7 +112,7 @@ export class Projectile {
                     }
                     break;
                 case 'burn':
-                    this.target.applyBurn(this.towerData.specialValue, 3000);
+                    this.target.applyBurn(this.towerData.specialValue, 3000, this.sourceTower);
                     break;
                 case 'splash':
                     this._doSplash();
@@ -137,7 +140,7 @@ export class Projectile {
                 // Splash is the same element as the shot that caused it, so the
                 // match-up is re-read per victim rather than inherited.
                 const effect = effectOf(this.towerData.element, enemy.data);
-                enemy.takeDamage(this.damage * 0.4 * effectMultiplier(effect), { effect });
+                enemy.takeDamage(this.damage * 0.4 * effectMultiplier(effect), { effect, source: this.sourceTower });
             }
         }
     }
@@ -155,7 +158,7 @@ export class Projectile {
             const d = Phaser.Math.Distance.Between(lastX, lastY, enemy.x, enemy.y);
             if (d <= 90) {
                 const effect = effectOf(this.towerData.element, enemy.data);
-                enemy.takeDamage(chainDmg * effectMultiplier(effect), { effect });
+                enemy.takeDamage(chainDmg * effectMultiplier(effect), { effect, source: this.sourceTower });
                 // Visual chain line
                 const line = this.scene.add.line(
                     0, 0, lastX, lastY, enemy.x, enemy.y, 0xFFD54F, 0.7
@@ -185,6 +188,8 @@ export class Projectile {
 
     destroy() {
         this.alive = false;
+        this.sourceTower = null;
+        this.target = null;
         if (this.tween) {
             this.tween.stop();
             this.tween = null;

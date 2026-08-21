@@ -83,6 +83,7 @@ export class GameScene extends Phaser.Scene {
 
         // ── Entity lists ────────────────────────
         this.towers = [];
+        this.towerHistory = [];
         this.temples = [];
         this.enemies = [];
         this.projectiles = [];
@@ -381,7 +382,14 @@ export class GameScene extends Phaser.Scene {
                 heroPosY: this.hero ? this.hero.posY : null,
                 heroHp: this.hero ? this.hero.hp : null,
                 heroManaCollected: this.hero ? this.hero.manaCollected : null,
-                towers: this.towers.map(t => ({ col: t.col, row: t.row, element: t.element, paid: t.paidCost })),
+                towers: this.towers.map(t => ({
+                    col: t.col,
+                    row: t.row,
+                    element: t.element,
+                    paid: t.paidCost,
+                    damageDealt: t.totalDamageDealt || 0,
+                    kills: t.enemiesKilled || 0,
+                })),
                 temples: this.temples.map(t => ({ col: t.col, row: t.row, element: t.element, paid: t.paidCost })),
                 barricades: Array.from(this.barricades.entries()).map(([key, cost]) => {
                     const [c, r] = key.split(',').map(Number);
@@ -732,10 +740,18 @@ export class GameScene extends Phaser.Scene {
             `${t.data.emoji} ${t.data.name}${total > 0 ? `  Nv.${total}` : ''}`,
             `DMG ${Math.round(t.damage)}   RNG ${Math.round(t.range)}`,
             `${t.shotsPerSecond.toFixed(2)}/s   ${t.data.specialDesc}`,
+        ];
+
+        if (t.totalDamageDealt !== undefined) {
+            lines.push(`Daño: ${Math.round(t.totalDamageDealt)}  ·  Bajas: ${t.enemiesKilled || 0}`);
+        }
+
+        lines.push(
             total > 0
                 ? TRACK_ORDER.map(tr => `${TRACK_SHORT[tr]} ${ts.levelOf(t.element, tr)}`).join('  ')
-                : 'sin mejoras de templo',
-        ];
+                : 'sin mejoras de templo'
+        );
+
         if (t.empowered) lines.push('potenciada por el heroe');
 
         this.statLabel.setText(lines.join('\n'));
@@ -751,6 +767,19 @@ export class GameScene extends Phaser.Scene {
             this.statLabel.setOrigin(0.5, 1).setPosition(x, t.y - 20);
         }
         this.statLabel.setVisible(true);
+    }
+
+    _archiveTower(tower) {
+        if (!tower) return;
+        const total = this.templeSystem ? this.templeSystem.totalLevels(tower.element) : 0;
+        this.towerHistory.push({
+            element: tower.element,
+            emoji: tower.data?.emoji || '◈',
+            name: tower.data?.name || tower.element,
+            totalDamageDealt: tower.totalDamageDealt || 0,
+            enemiesKilled: tower.enemiesKilled || 0,
+            level: total,
+        });
     }
 
     _handleMove(pointer) {
@@ -1013,6 +1042,7 @@ export class GameScene extends Phaser.Scene {
             this._setDecor(col, row, null);
             this.events.emit('path-changed');
         } else {
+            if (sale.kind === 'tower') this._archiveTower(sale.target);
             sale.target.destroy();
             if (sale.kind === 'tower') this.towers = this.towers.filter(t => t !== sale.target);
             else this.temples = this.temples.filter(t => t !== sale.target);

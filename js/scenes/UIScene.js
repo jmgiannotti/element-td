@@ -1944,23 +1944,57 @@ export class UIScene extends Phaser.Scene {
         const shade = this.add.rectangle(460, 240, 920, 480, 0x000000, 0.78);
         c.add(shade);
 
-        const title = this.add.text(MAP_CX, 130, message, {
+        const title = this.add.text(MAP_CX, 105, message, {
             fontFamily: FONT, fontSize: '24px', color,
             stroke: '#000000', strokeThickness: 5,
         }).setOrigin(0.5);
         c.add(title);
 
+        // Find MVP Tower from active and archived towers
+        const activeTowers = (this.gs.towers || []).map(t => {
+            const total = this.gs.templeSystem ? this.gs.templeSystem.totalLevels(t.element) : 0;
+            return {
+                element: t.element,
+                emoji: t.data?.emoji || '◈',
+                name: t.data?.name || t.element,
+                totalDamageDealt: t.totalDamageDealt || 0,
+                enemiesKilled: t.enemiesKilled || 0,
+                level: total,
+            };
+        });
+        const historyTowers = this.gs.towerHistory || [];
+        const allCandidates = [...activeTowers, ...historyTowers].filter(
+            t => t.totalDamageDealt > 0 || t.enemiesKilled > 0
+        );
+
+        allCandidates.sort((a, b) => {
+            if (b.totalDamageDealt !== a.totalDamageDealt) {
+                return b.totalDamageDealt - a.totalDamageDealt;
+            }
+            return b.enemiesKilled - a.enemiesKilled;
+        });
+
+        const mvp = allCandidates[0] || null;
+
         const stats = [
             `Oleadas: ${this.gs.waveManager.currentWave}/${this.gs.waveManager.totalWaves}`,
-            `Oro: ${this.gs.economySystem.gold}`,
-            `Fuerza vital: ${this.gs.economySystem.mana}`,
-            `Recogida por el heroe: ${this.gs.hero.manaCollected}`,
-            `Templos: ${this.gs.temples.length}`,
-            `Torres: ${this.gs.towers.length}`,
+            `Oro: ${this.gs.economySystem.gold}   Fuerza vital: ${this.gs.economySystem.mana}`,
+            `Recogida por el heroe: ${this.gs.hero ? this.gs.hero.manaCollected : 0}`,
+            `Templos: ${this.gs.temples.length}   Torres: ${this.gs.towers.length}`,
         ];
-        const statsText = this.add.text(MAP_CX, 224, stats.join('\n'), {
+
+        if (mvp) {
+            stats.push(
+                `👑 Torre MVP: ${mvp.emoji} ${mvp.name}${mvp.level > 0 ? ` (Nv.${mvp.level})` : ''}`,
+                `Daño: ${Math.round(mvp.totalDamageDealt)}  ·  Bajas: ${mvp.enemiesKilled}`
+            );
+        } else {
+            stats.push(`Torre MVP: Ninguna`);
+        }
+
+        const statsText = this.add.text(MAP_CX, 215, stats.join('\n'), {
             fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
-            lineSpacing: 10, align: 'center',
+            lineSpacing: 8, align: 'center',
         }).setOrigin(0.5);
         c.add(statsText);
 
