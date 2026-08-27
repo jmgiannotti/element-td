@@ -796,9 +796,9 @@ export class UIScene extends Phaser.Scene {
                 stroke: '#000000', strokeThickness: 3,
             }).setOrigin(0.5).setDepth(52);
 
-            // Cooldown wipe: anchored at the top and wipes downward as cooldown drains
-            const wipe = this.add.rectangle(x, HUD_Y - (HUD_SIZE - 4) / 2, HUD_SIZE - 4, 0, 0x000000, 0.66)
-                .setOrigin(0.5, 0)
+            // Cooldown wipe: anchored at the bottom so the dark curtain drains from top to bottom
+            const wipe = this.add.rectangle(x, HUD_Y + (HUD_SIZE - 4) / 2, HUD_SIZE - 4, 0, 0x000000, 0.66)
+                .setOrigin(0.5, 1)
                 .setDepth(51);
 
             const timer = this.add.text(x, HUD_Y, '', {
@@ -857,8 +857,8 @@ export class UIScene extends Phaser.Scene {
                 stroke: '#000000', strokeThickness: 3,
             }).setOrigin(0, 0.5).setDepth(52);
 
-            const wipe = this.add.rectangle(x, SPELL_Y - (SPELL_H - 4) / 2, SPELL_W - 4, 0, 0x000000, 0.66)
-                .setOrigin(0.5, 0)
+            const wipe = this.add.rectangle(x, SPELL_Y + (SPELL_H - 4) / 2, SPELL_W - 4, 0, 0x000000, 0.66)
+                .setOrigin(0.5, 1)
                 .setDepth(51);
 
             // Over the icon, not over the middle of the cell: the right half
