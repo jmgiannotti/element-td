@@ -305,7 +305,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 
 ## 📱 Epic 7: Controles Táctiles y Móvil
 
-### US 7.1: Soporte Táctil para Héroe y Construcción [✓]
+### US 7.1: Soporte Táctil para Héroe y Construcción ⏸️
 **Como** jugador en dispositivos móviles o tablets,  
 **Quiero** mover al héroe y colocar estructuras mediante gestos táctiles directos,  
 **Para** disfrutar del juego sin necesidad de periféricos de ratón y teclado.
@@ -316,7 +316,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Botón flotante `[ ✕ CANCELAR ]` para cancelar modos de colocación, venta o hechizos sin clic derecho.
 > - Prevención de gestos nativos del navegador (`touch-action: none`) y escalado automático responsivo.
 > 
-> *Estado:* **Implementado**. Se integró el sistema `TouchControls.js`, joystick virtual dinámico, tap-to-move con ripples de destino, arrastre de estructuras desde la barra lateral, botón flotante de cancelación y soporte de viewport móvil.
+> *Estado:* **En Pausa**. Deshabilitado temporalmente para PC a fin de evitar elementos flotantes o interferencias con el control de ratón/teclado. Se mantendrá el código base para reactivarlo cuando se prepare el build/modo específico para dispositivos móviles.
 
 ---
 

@@ -1,3 +1,5 @@
+import { DEFAULT_LEVEL } from '../data/LevelData.js';
+
 export const TILE = {
     GRASS: 0,
     PATH: 1,
@@ -11,56 +13,48 @@ export const GRID_ROWS = 15;
 export const GAME_WIDTH = GRID_COLS * TILE_SIZE;
 export const GAME_HEIGHT = GRID_ROWS * TILE_SIZE;
 
-// Base waypoints for carving the initial path
-export const WAYPOINTS = [
-    { col: -1, row: 2 },
-    { col: 14, row: 2 },
-    { col: 14, row: 6 },
-    { col: 3, row: 6 },
-    { col: 3, row: 10 },
-    { col: 16, row: 10 },
-    { col: 16, row: 13 },
-    { col: 20, row: 13 },
-];
+// Backward-compatible fallback
+export const WAYPOINTS = DEFAULT_LEVEL.waypoints;
 
 export class GridSystem {
-    constructor() {
+    constructor(levelData = DEFAULT_LEVEL) {
+        this.levelData = levelData || DEFAULT_LEVEL;
+        this.cols = this.levelData.cols ?? GRID_COLS;
+        this.rows = this.levelData.rows ?? GRID_ROWS;
+        this.waypoints = this.levelData.waypoints || WAYPOINTS;
+        this.spawnPoint = this.levelData.spawnPoint || this.waypoints[0];
+        this.exitPoint = this.levelData.exitPoint || this.waypoints[this.waypoints.length - 1];
         this.grid = this._buildGrid();
     }
 
     _buildGrid() {
-        const grid = Array.from({ length: GRID_ROWS }, () =>
-            Array.from({ length: GRID_COLS }, () => TILE.GRASS)
+        const grid = Array.from({ length: this.rows }, () =>
+            Array.from({ length: this.cols }, () => TILE.GRASS)
         );
 
-        // Carve main path
-        for (let i = 0; i < WAYPOINTS.length - 1; i++) {
-            const from = WAYPOINTS[i];
-            const to = WAYPOINTS[i + 1];
+        // Carve main path from level waypoints
+        for (let i = 0; i < this.waypoints.length - 1; i++) {
+            const from = this.waypoints[i];
+            const to = this.waypoints[i + 1];
 
             if (from.row === to.row) {
                 const minC = Math.max(0, Math.min(from.col, to.col));
-                const maxC = Math.min(GRID_COLS - 1, Math.max(from.col, to.col));
+                const maxC = Math.min(this.cols - 1, Math.max(from.col, to.col));
                 for (let c = minC; c <= maxC; c++) grid[from.row][c] = TILE.PATH;
             } else {
                 const minR = Math.min(from.row, to.row);
                 const maxR = Math.max(from.row, to.row);
-                const col = Math.max(0, Math.min(GRID_COLS - 1, from.col));
+                const col = Math.max(0, Math.min(this.cols - 1, from.col));
                 for (let r = minR; r <= maxR; r++) grid[r][col] = TILE.PATH;
             }
         }
 
-        // Add breakable block detours (which are longer)
-        // Detour 1: around the first vertical drop (col 14, row 2 to 6)
-        // Detour goes through cols 16-17
-        this._fillBlocks(grid, 15, 2, 17, 3, TILE.BREAKABLE);
-        this._fillBlocks(grid, 16, 4, 17, 7, TILE.BREAKABLE);
-        this._fillBlocks(grid, 15, 6, 15, 7, TILE.BREAKABLE);
-
-        // Detour 2: around the second vertical drop (col 3, row 6 to 10)
-        // Detour goes left through cols 0-1
-        this._fillBlocks(grid, 1, 6, 2, 7, TILE.BREAKABLE);
-        this._fillBlocks(grid, 1, 8, 2, 11, TILE.BREAKABLE);
+        // Add breakable block detours defined in levelData
+        if (this.levelData.breakableBlocks) {
+            for (const b of this.levelData.breakableBlocks) {
+                this._fillBlocks(grid, b.c1, b.r1, b.c2, b.r2, TILE.BREAKABLE);
+            }
+        }
 
         return grid;
     }
@@ -68,7 +62,7 @@ export class GridSystem {
     _fillBlocks(grid, c1, r1, c2, r2, type) {
         for (let r = r1; r <= r2; r++) {
             for (let c = c1; c <= c2; c++) {
-                if (r >= 0 && r < GRID_ROWS && c >= 0 && c < GRID_COLS) {
+                if (r >= 0 && r < this.rows && c >= 0 && c < this.cols) {
                     grid[r][c] = type;
                 }
             }

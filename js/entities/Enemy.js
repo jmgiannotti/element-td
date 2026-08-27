@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser';
 import { ENEMY_DATA } from '../data/EnemyData.js';
 import { EFFECT } from '../data/Elements.js';
-import { WAYPOINTS, TILE_SIZE, TILE } from '../systems/GridSystem.js';
+import { TILE_SIZE, TILE } from '../systems/GridSystem.js';
 import { audio } from '../systems/AudioSystem.js';
 
 export class Enemy {
@@ -63,7 +63,7 @@ export class Enemy {
         this.distanceTraveled = 0;
 
         // Path and Spawning
-        const exitWp = WAYPOINTS[WAYPOINTS.length - 1];
+        const exitWp = scene.gridSystem.exitPoint;
         if (spawnX !== null && spawnY !== null) {
             this.sprite = scene.add.sprite(spawnX, spawnY, `enemy_${type}`);
 
@@ -77,7 +77,7 @@ export class Enemy {
             this.path = scene.gridSystem.findPath(cell.col, cell.row, exitWp.col, exitWp.row);
             this.pathIndex = 0;
         } else {
-            const startWp = WAYPOINTS[0];
+            const startWp = scene.gridSystem.spawnPoint;
             this.path = scene.gridSystem.findPath(startWp.col, startWp.row, exitWp.col, exitWp.row);
             this.pathIndex = 1;
             const sx = this.path ? this.path[0].col * TILE_SIZE + TILE_SIZE / 2 : 0;
@@ -110,7 +110,7 @@ export class Enemy {
 
     recalculatePath() {
         if (!this.alive) return;
-        const exitWp = WAYPOINTS[WAYPOINTS.length - 1];
+        const exitWp = this.scene.gridSystem.exitPoint;
 
         // If chasing or returning, anchor pathfinding to the departure cell on the original track.
         // This prevents the enemy from shortcutting ahead if it crosses later road tiles during a chase.
@@ -710,7 +710,7 @@ export class Enemy {
         this.heroAttackTimer = 0;
         this.blockAttackTimer = 0;
 
-        const exitWp = WAYPOINTS[WAYPOINTS.length - 1];
+        const exitWp = scene.gridSystem.exitPoint;
         if (spawnX !== null && spawnY !== null) {
             const raw = scene.gridSystem.worldToGrid(spawnX, spawnY);
             const cell = scene.gridSystem.nearestWalkable(raw.col, raw.row);
@@ -718,7 +718,7 @@ export class Enemy {
             this.pathIndex = 0;
             this.sprite.setPosition(spawnX, spawnY);
         } else {
-            const startWp = WAYPOINTS[0];
+            const startWp = scene.gridSystem.spawnPoint;
             this.path = scene.gridSystem.findPath(startWp.col, startWp.row, exitWp.col, exitWp.row);
             this.pathIndex = 1;
             const sx = this.path ? this.path[0].col * TILE_SIZE + TILE_SIZE / 2 : 0;

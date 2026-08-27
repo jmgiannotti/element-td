@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { WAYPOINTS, TILE_SIZE } from './GridSystem.js';
+import { TILE_SIZE } from './GridSystem.js';
 
 // Above the terrain and the build grid so the line is never buried by a
 // boulder, but well under the buildings and the placement cursor.
@@ -44,8 +44,8 @@ export class RouteView {
 
     /** Recompute the canonical spawn → exit route. */
     refresh() {
-        const from = WAYPOINTS[0];
-        const to = WAYPOINTS[WAYPOINTS.length - 1];
+        const from = this.scene.gridSystem.spawnPoint;
+        const to = this.scene.gridSystem.exitPoint;
         this.route = this.scene.gridSystem.findPath(from.col, from.row, to.col, to.row);
         this.routeTrail = this._trail(this.route);
         this._draw();

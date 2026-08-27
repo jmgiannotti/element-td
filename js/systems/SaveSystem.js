@@ -24,6 +24,7 @@ export class SaveSystem {
             const data = JSON.parse(raw);
             if (!data || data.lives <= 0) return null;
             return {
+                levelId: data.levelId || 'valle_sagrado',
                 wave: data.currentWave ?? 0,
                 gold: data.gold ?? 0,
                 mana: data.mana ?? 0,
@@ -122,6 +123,7 @@ export class SaveSystem {
         const data = {
             version: 1,
             timestamp: Date.now(),
+            levelId: gameScene.levelData?.id || 'valle_sagrado',
             gold: goldToSave,
             mana: manaToSave,
             lives: livesToSave,

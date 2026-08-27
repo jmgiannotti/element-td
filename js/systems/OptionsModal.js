@@ -108,26 +108,17 @@ export class OptionsModal {
         const div2 = this.scene.add.rectangle(0, -h / 2 + 144, w - 40, 1, 0x2a2a5a);
         this.container.add(div2);
 
-        // ── 2. Audio & Controles Section ─────────
-        const sec2 = this.scene.add.text(-w / 2 + 24, -h / 2 + 158, 'AUDIO Y CONTROLES', {
+        // ── 2. Audio Section ────────────────────
+        const sec2 = this.scene.add.text(-w / 2 + 24, -h / 2 + 158, 'AUDIO', {
             fontFamily: FONT, fontSize: '8px', color: '#90CAF9',
         });
 
-        this.soundBtn = this._button(-105, -h / 2 + 182, 195, 22, '', 0x1e1e3a, () => {
+        this.soundBtn = this._button(0, -h / 2 + 182, 400, 22, '', 0x1e1e3a, () => {
             const on = audio.toggle();
             this._updateSoundBtn(on);
         });
 
-        this.joystickBtn = this._button(105, -h / 2 + 182, 195, 22, '', 0x1e1e3a, () => {
-            const next = !isJoystickEnabled();
-            setJoystickEnabled(next);
-            if (this.opts.gameScene && this.opts.gameScene.touchControls) {
-                this.opts.gameScene.touchControls.joystickEnabled = next;
-            }
-            this._updateJoystickBtn(next);
-        });
-
-        this.container.add([sec2, this.soundBtn, this.joystickBtn]);
+        this.container.add([sec2, this.soundBtn]);
 
         const div3 = this.scene.add.rectangle(0, -h / 2 + 204, w - 40, 1, 0x2a2a5a);
         this.container.add(div3);
@@ -192,7 +183,6 @@ export class OptionsModal {
         this._refreshInfo();
         this._updateBarBtn(display.isBottomBarVisible());
         this._updateSoundBtn(audio.enabled);
-        this._updateJoystickBtn(isJoystickEnabled());
 
         this.unsubscribeDisplay = display.onChange(() => this._refreshInfo());
     }
@@ -231,12 +221,6 @@ export class OptionsModal {
         if (!this.soundBtn) return;
         this.soundBtn.txt.setText(enabled ? 'SONIDO: ACTIVADO' : 'SONIDO: SILENCIADO');
         this.soundBtn.bg.fillColor = enabled ? 0x2E7D32 : 0x552222;
-    }
-
-    _updateJoystickBtn(enabled) {
-        if (!this.joystickBtn) return;
-        this.joystickBtn.txt.setText(enabled ? 'JOYSTICK: ACTIVADO' : 'JOYSTICK: OCULTO');
-        this.joystickBtn.bg.fillColor = enabled ? 0x2E7D32 : 0x552222;
     }
 
     _updateClearSaveBtn() {

@@ -93,7 +93,6 @@ export class UIScene extends Phaser.Scene {
         this._buildSpellHud();
         this._buildHeroHud();
         this._buildTutorialBanner();
-        this._buildCancelButton();
         this._buildPauseOverlay();
         this._registerEvents();
 
@@ -301,13 +300,6 @@ export class UIScene extends Phaser.Scene {
             if (this.gs.economySystem.gold < td.cost) { audio.play('deny'); return; }
             this._select(btn, () => this.gs.events.emit('select-element', element));
         });
-        bg.on('pointermove', (pointer) => {
-            if (pointer.isDown && pointer.x < BAR_X && this.gs.touchControls) {
-                if (!this.gs.touchControls.isDraggingStructure) {
-                    this.gs.touchControls.startDragStructure('tower', element);
-                }
-            }
-        });
         bg.on('pointerover', () => this._showTowerTooltip(element, x - 34, y));
         bg.on('pointerout', () => this._hideTooltip());
 
@@ -335,13 +327,6 @@ export class UIScene extends Phaser.Scene {
         bg.on('pointerdown', () => {
             if (this.gs.economySystem.gold < BARRICADE_COST) { audio.play('deny'); return; }
             this._select(btn, () => this.gs.events.emit('select-barricade'));
-        });
-        bg.on('pointermove', (pointer) => {
-            if (pointer.isDown && pointer.x < BAR_X && this.gs.touchControls) {
-                if (!this.gs.touchControls.isDraggingStructure) {
-                    this.gs.touchControls.startDragStructure('barricade', null);
-                }
-            }
         });
         bg.on('pointerover', () => this._showTooltip([
             'Barricada', 'Desvia enemigos', 'sin cerrar del', 'todo el camino.',
@@ -419,13 +404,6 @@ export class UIScene extends Phaser.Scene {
             }
             this._select(btn, () => this.gs.events.emit('select-temple', element));
         });
-        bg.on('pointermove', (pointer) => {
-            if (pointer.isDown && pointer.x < BAR_X && this.gs.touchControls) {
-                if (!this.gs.touchControls.isDraggingStructure) {
-                    this.gs.touchControls.startDragStructure('temple', element);
-                }
-            }
-        });
 
         bg.on('pointerover', () => {
             const d = TEMPLE_DATA[element];
@@ -468,46 +446,8 @@ export class UIScene extends Phaser.Scene {
         }
     }
 
-    // ─── Floating Cancel Button for Touch/Mobile ────────
-    _buildCancelButton() {
-        this.cancelContainer = this.add.container(MAP_CX, 34).setDepth(60).setVisible(false);
-
-        const w = 120;
-        const h = 26;
-        const bg = this.add.rectangle(0, 0, w, h, 0x221118, 0.92)
-            .setStrokeStyle(1.5, 0xFF5252)
-            .setInteractive({ useHandCursor: true });
-
-        const icon = this.add.text(-36, 0, '✕', {
-            fontFamily: FONT, fontSize: '9px', color: '#FF5252',
-        }).setOrigin(0.5);
-
-        const txt = this.add.text(8, 0, 'CANCELAR', {
-            fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
-        }).setOrigin(0.5);
-
-        this.cancelContainer.add([bg, icon, txt]);
-
-        bg.on('pointerdown', (pointer) => {
-            pointer.event.stopPropagation();
-            pointer.event._uiConsumed = true;
-            audio.play('click');
-            if (this.selectedBtn) {
-                this._setBtnSelected(this.selectedBtn, false);
-                this.selectedBtn = null;
-            }
-            this.gs._cancelPlacement();
-            this.gs._setSpellMode(null);
-            this._refreshCancelButton();
-        });
-        bg.on('pointerover', () => { bg.fillColor = 0x381822; });
-        bg.on('pointerout', () => { bg.fillColor = 0x221118; });
-    }
-
     _refreshCancelButton() {
-        if (!this.cancelContainer) return;
-        const active = !!(this.selectedBtn || this.gs.placementMode || this.gs.sellMode || this.gs.spellMode);
-        this.cancelContainer.setVisible(active);
+        // No-op for PC
     }
 
     /** Shared select/deselect behaviour for every build button. */
@@ -856,10 +796,9 @@ export class UIScene extends Phaser.Scene {
                 stroke: '#000000', strokeThickness: 3,
             }).setOrigin(0.5).setDepth(52);
 
-            // Cooldown wipe: anchored at the bottom and grown upward, so the
-            // shrinking clear area reads as the ability filling back up.
-            const wipe = this.add.rectangle(x, HUD_Y + HUD_SIZE / 2, HUD_SIZE - 4, 0, 0x000000, 0.66)
-                .setOrigin(0.5, 1)
+            // Cooldown wipe: anchored at the top and wipes downward as cooldown drains
+            const wipe = this.add.rectangle(x, HUD_Y - (HUD_SIZE - 4) / 2, HUD_SIZE - 4, 0, 0x000000, 0.66)
+                .setOrigin(0.5, 0)
                 .setDepth(51);
 
             const timer = this.add.text(x, HUD_Y, '', {
@@ -918,8 +857,8 @@ export class UIScene extends Phaser.Scene {
                 stroke: '#000000', strokeThickness: 3,
             }).setOrigin(0, 0.5).setDepth(52);
 
-            const wipe = this.add.rectangle(x, SPELL_Y + SPELL_H / 2, SPELL_W - 4, 0, 0x000000, 0.66)
-                .setOrigin(0.5, 1)
+            const wipe = this.add.rectangle(x, SPELL_Y - (SPELL_H - 4) / 2, SPELL_W - 4, 0, 0x000000, 0.66)
+                .setOrigin(0.5, 0)
                 .setDepth(51);
 
             // Over the icon, not over the middle of the cell: the right half
@@ -956,7 +895,8 @@ export class UIScene extends Phaser.Scene {
 
         for (const btn of this.spellBtns) {
             const pct = ss.cooldownPct(btn.key);
-            btn.wipe.height = (SPELL_H - 4) * pct;
+            btn.wipe.setSize(SPELL_W - 4, Math.max(0, (SPELL_H - 4) * pct));
+            btn.wipe.setVisible(pct > 0);
 
             const cooling = pct > 0;
             btn.timer.setText(cooling ? `${ss.cooldownSeconds(btn.key)}` : '');
@@ -988,7 +928,8 @@ export class UIScene extends Phaser.Scene {
 
         for (const btn of this.abilityBtns) {
             const pct = hero.cooldownPct(btn.key);
-            btn.wipe.height = (HUD_SIZE - 4) * pct;
+            btn.wipe.setSize(HUD_SIZE - 4, Math.max(0, (HUD_SIZE - 4) * pct));
+            btn.wipe.setVisible(pct > 0);
 
             const cooling = pct > 0;
             btn.timer.setText(cooling ? `${hero.cooldownSeconds(btn.key)}` : '');
