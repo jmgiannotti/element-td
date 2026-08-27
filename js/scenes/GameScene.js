@@ -25,6 +25,7 @@ import {
 } from './BootScene.js';
 import { safeTexture } from '../systems/TextureGuard.js';
 import { applyViewport, pointerWorld } from '../systems/Viewport.js';
+import { TouchControls } from '../systems/TouchControls.js';
 
 // Depth budget for the terrain layers (all below entities at depth ≥ 1).
 const D_BASE = 0;
@@ -77,6 +78,7 @@ export class GameScene extends Phaser.Scene {
         this.economySystem = new EconomySystem(this);
         this.waveManager = new WaveManager(this);
         this.fusionSystem = new FusionSystem(this);
+        this.touchControls = new TouchControls(this);
         // Reads the hero and the enemy list lazily, at cast time, so it can be
         // built before either exists.
         this.spellSystem = new SpellSystem(this);
@@ -204,16 +206,31 @@ export class GameScene extends Phaser.Scene {
             const blocked = gameObjects.some(o => o.getData && o.getData('uiBlocker'));
             if (blocked && !this.sellMode) return;
 
-            // A press on a fusable building might be the start of a drag. Noted,
-            // not acted on: which gesture this is only becomes knowable once the
-            // pointer either moves or comes back up.
-            this.fusionSystem.onPointerDown(p);
+            // Handle active cursor modes (build, sell, spell)
+            if (this.placementMode || this.sellMode || this.spellMode) {
+                this._pressConsumed = this._handleClick(pointer, p);
+                return;
+            }
 
-            this._pressConsumed = this._handleClick(pointer, p);
+            // Check if pointer hit a structure
+            const { col, row } = this.gridSystem.worldToGrid(p.x, p.y);
+            const hasStructure = this.towers.some(t => t.alive && t.col === col && t.row === row) ||
+                                 this.temples.some(t => t.alive && t.col === col && t.row === row);
+
+            if (hasStructure) {
+                // A press on a fusable building might be the start of a drag
+                this.fusionSystem.onPointerDown(p);
+            } else {
+                // Empty ground: initiate touch joystick or tap-to-move
+                this.touchControls.startJoystick(pointer, p);
+            }
         });
 
         this.input.on('pointermove', (pointer) => {
             const p = pointerWorld(this, pointer);
+            if (this.touchControls.joystickActive) {
+                this.touchControls.updateJoystick(pointer, p);
+            }
             this.fusionSystem.onPointerMove(p);
             this._handleMove(pointer);
         });
@@ -224,9 +241,34 @@ export class GameScene extends Phaser.Scene {
         // of thing that makes a drag feel broken before it has even started.
         this.input.on('pointerup', (pointer) => {
             if (this.gameOver || this.gameWon || this.uiModalOpen) return;
-            if (pointer.button !== 0) return;
+            if (pointer.button !== 0 && pointer.button !== undefined) return;
 
             const p = pointerWorld(this, pointer);
+
+            // If dragging a structure from the sidebar onto the map
+            if (this.touchControls.isDraggingStructure) {
+                const { col, row } = this.gridSystem.worldToGrid(p.x, p.y);
+                this._tryPlace(col, row);
+                this.touchControls.stopDragStructure();
+                this._cancelPlacement();
+                return;
+            }
+
+            // If joystick was active
+            if (this.touchControls.joystickActive) {
+                const distMoved = Math.hypot(
+                    p.x - this.touchControls.joystickOrigin.x,
+                    p.y - this.touchControls.joystickOrigin.y
+                );
+                this.touchControls.stopJoystick(pointer);
+
+                // Quick tap without dragging: move hero directly to tap location
+                if (distMoved < 8 && p.x < GAME_WIDTH) {
+                    this._inspectAt(p);
+                }
+                return;
+            }
+
             const wasDrag = this.fusionSystem.onPointerUp(p);
             const consumed = this._pressConsumed;
             this._pressConsumed = false;
@@ -690,7 +732,20 @@ export class GameScene extends Phaser.Scene {
     _inspectAt(world) {
         const { col, row } = this.gridSystem.worldToGrid(world.x, world.y);
         const tower = this.towers.find(t => t.alive && t.col === col && t.row === row);
-        this.selectStructure(tower ?? null);
+        if (tower) {
+            this.selectStructure(tower);
+            return;
+        }
+
+        const temple = this.temples.find(t => t.alive && t.col === col && t.row === row);
+        if (temple) {
+            this.selectStructure(temple);
+            return;
+        }
+
+        // Tapped on empty terrain: deselect structure and command hero to move
+        this.selectStructure(null);
+        this.hero.moveTo(world.x, world.y);
     }
 
     // ─── Inspection ─────────────────────────────────────
@@ -1144,7 +1199,8 @@ export class GameScene extends Phaser.Scene {
         // Wave manager
         this.waveManager.update(time, delta);
 
-        // Hero
+        // Hero & Touch Controls
+        if (this.touchControls) this.touchControls.update(delta);
         this.hero.update(time, delta);
         // After the hero: the channel VFX are pinned to where he ended up this
         // frame, not to where he was at the start of it.

@@ -115,6 +115,7 @@ export class Hero {
 
         this.targetPos = null;
         this.moving = false;
+        this.steering = false;
 
         this.maxHp = 100;
         this.hp = 100;
@@ -521,7 +522,7 @@ export class Hero {
         if (had > 1) this.scene.events.emit('hero-combo-end', had);
     }
 
-    moveTo(worldX, worldY) {
+    moveTo(worldX, worldY, silent = false) {
         if (this.isDead) return;
         // A dash owns the hero's motion until it lands; queueing a walk on top
         // of it is how you end up teleporting back to where you started. A
@@ -532,6 +533,11 @@ export class Hero {
         const ty = Phaser.Math.Clamp(worldY, 12, GAME_HEIGHT - 10);
         this.targetPos = { x: tx, y: ty };
         this.moving = true;
+        this.steering = false;
+
+        if (!silent) {
+            this.scene.events.emit('hero-destination-set', tx, ty);
+        }
 
         // Show movement indicator
         this.moveIndicator.setPosition(tx, ty);
@@ -547,6 +553,35 @@ export class Hero {
                 this.moveIndicator.setScale(1);
             },
         });
+    }
+
+    /**
+     * Steers the hero directly along a vector with a given analog force (0..1).
+     * Used by virtual joysticks and touch drag steering.
+     */
+    steer(dirX, dirY, force = 1, delta) {
+        if (this.isDead || this.dashing || this.channelTimer > 0) return;
+        this.moving = false;
+        this.targetPos = null;
+        this.steering = true;
+
+        const len = Math.hypot(dirX, dirY);
+        if (len < 0.01) {
+            this.steering = false;
+            return;
+        }
+
+        const normX = dirX / len;
+        const normY = dirY / len;
+        const speed = this.speed * Math.min(1, Math.max(0.1, force));
+        const step = speed * (delta / 1000);
+
+        this.posX = Phaser.Math.Clamp(this.posX + normX * step, 10, GAME_WIDTH - 10);
+        this.posY = Phaser.Math.Clamp(this.posY + normY * step, 12, GAME_HEIGHT - 10);
+
+        if (Math.abs(normX) > 0.05) {
+            this._face(normX);
+        }
     }
 
     update(time, delta) {
@@ -572,6 +607,7 @@ export class Hero {
         this.posY = Phaser.Math.Clamp(this.posY, 12, GAME_HEIGHT - 10);
 
         this._syncSprite(delta);
+        this.steering = false;
 
         // ── Auto-attack nearby enemies ──────────
         // Suppressed mid-cast: the ability is the action right now.
@@ -680,7 +716,7 @@ export class Hero {
 
     /** Pushes logical position + idle bob + lunge offset onto the sprite. */
     _syncSprite(delta) {
-        const walking = this.moving || this.dashing;
+        const walking = this.moving || this.dashing || this.steering;
         this.bobPhase += (delta / 1000) * (walking ? 9 : 3.4);
         // Art with a walk cycle bounces on its own, and two bounces on one body
         // fight each other — so the hop is spent only on art that has no walk

@@ -3,6 +3,22 @@ import { audio } from './AudioSystem.js';
 import { SaveSystem } from './SaveSystem.js';
 
 const FONT = '"Press Start 2P"';
+const JOYSTICK_KEY = 'elemental-td:joystick';
+
+export function isJoystickEnabled() {
+    try {
+        const val = localStorage.getItem(JOYSTICK_KEY);
+        return val === null ? true : val === 'true';
+    } catch {
+        return true;
+    }
+}
+
+export function setJoystickEnabled(enabled) {
+    try {
+        localStorage.setItem(JOYSTICK_KEY, enabled ? 'true' : 'false');
+    } catch {}
+}
 
 export class OptionsModal {
     /**
@@ -21,8 +37,8 @@ export class OptionsModal {
     _build() {
         const cx = 460;
         const cy = 240;
-        const w = 520;
-        const h = 360;
+        const w = 530;
+        const h = 400;
 
         // Dim background shade
         this.shade = this.scene.add.rectangle(cx, cy, 920, 480, 0x000000, 0.7)
@@ -36,85 +52,94 @@ export class OptionsModal {
         bg.setStrokeStyle(2, 0xFFD54F);
 
         // Inner header
-        const title = this.scene.add.text(0, -h / 2 + 24, '⚙ OPCIONES', {
-            fontFamily: FONT, fontSize: '12px', color: '#FFD54F',
+        const title = this.scene.add.text(0, -h / 2 + 20, '⚙ OPCIONES', {
+            fontFamily: FONT, fontSize: '11px', color: '#FFD54F',
             stroke: '#000000', strokeThickness: 3,
         }).setOrigin(0.5);
 
-        const div1 = this.scene.add.rectangle(0, -h / 2 + 42, w - 40, 1, 0x2a2a5a);
+        const div1 = this.scene.add.rectangle(0, -h / 2 + 36, w - 40, 1, 0x2a2a5a);
 
         this.container.add([bg, title, div1]);
 
         // ── 1. Display & Scaling Section ─────────
-        const sec1 = this.scene.add.text(-w / 2 + 24, -h / 2 + 58, 'PANTALLA Y ESCALA', {
+        const sec1 = this.scene.add.text(-w / 2 + 24, -h / 2 + 50, 'PANTALLA Y ESCALA', {
             fontFamily: FONT, fontSize: '8px', color: '#90CAF9',
         });
 
-        this.resText = this.scene.add.text(0, -h / 2 + 78, '', {
-            fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
+        this.resText = this.scene.add.text(0, -h / 2 + 68, '', {
+            fontFamily: FONT, fontSize: '7px', color: '#ECEFF1',
         }).setOrigin(0.5);
 
         // Scale action buttons
-        const btnY = -h / 2 + 104;
-        const bCrisp = this._button(-160, btnY, 86, 24, 'NÍTIDO', 0x2a2a5a, () => {
+        const btnY = -h / 2 + 92;
+        const bCrisp = this._button(-160, btnY, 86, 22, 'NÍTIDO', 0x2a2a5a, () => {
             display.setCrisp();
             this._refreshInfo();
         });
-        const bFill = this._button(-64, btnY, 86, 24, 'LLENAR', 0x2a2a5a, () => {
+        const bFill = this._button(-64, btnY, 86, 22, 'LLENAR', 0x2a2a5a, () => {
             display.setFill();
             this._refreshInfo();
         });
-        const b1x = this._button(28, btnY, 44, 24, '1x', 0x2a2a5a, () => {
+        const b1x = this._button(28, btnY, 44, 22, '1x', 0x2a2a5a, () => {
             display.setScale(1);
             this._refreshInfo();
         });
-        const b2x = this._button(78, btnY, 44, 24, '2x', 0x2a2a5a, () => {
+        const b2x = this._button(78, btnY, 44, 22, '2x', 0x2a2a5a, () => {
             display.setScale(2);
             this._refreshInfo();
         });
-        const b3x = this._button(128, btnY, 44, 24, '3x', 0x2a2a5a, () => {
+        const b3x = this._button(128, btnY, 44, 22, '3x', 0x2a2a5a, () => {
             display.setScale(3);
             this._refreshInfo();
         });
-        const b4x = this._button(178, btnY, 44, 24, '4x', 0x2a2a5a, () => {
+        const b4x = this._button(178, btnY, 44, 22, '4x', 0x2a2a5a, () => {
             display.setScale(4);
             this._refreshInfo();
         });
 
         // Bottom size bar toggle
-        this.barBtn = this._button(0, -h / 2 + 138, 380, 24, '', 0x1e1e3a, () => {
+        this.barBtn = this._button(0, -h / 2 + 122, 400, 22, '', 0x1e1e3a, () => {
             const on = display.toggleBottomBar();
             this._updateBarBtn(on);
         });
 
         this.container.add([sec1, this.resText, bCrisp, bFill, b1x, b2x, b3x, b4x, this.barBtn]);
 
-        const div2 = this.scene.add.rectangle(0, -h / 2 + 162, w - 40, 1, 0x2a2a5a);
+        const div2 = this.scene.add.rectangle(0, -h / 2 + 144, w - 40, 1, 0x2a2a5a);
         this.container.add(div2);
 
-        // ── 2. Audio Section ─────────────────────
-        const sec2 = this.scene.add.text(-w / 2 + 24, -h / 2 + 178, 'AUDIO Y SONIDO', {
+        // ── 2. Audio & Controles Section ─────────
+        const sec2 = this.scene.add.text(-w / 2 + 24, -h / 2 + 158, 'AUDIO Y CONTROLES', {
             fontFamily: FONT, fontSize: '8px', color: '#90CAF9',
         });
 
-        this.soundBtn = this._button(0, -h / 2 + 202, 380, 24, '', 0x1e1e3a, () => {
+        this.soundBtn = this._button(-105, -h / 2 + 182, 195, 22, '', 0x1e1e3a, () => {
             const on = audio.toggle();
             this._updateSoundBtn(on);
         });
 
-        this.container.add([sec2, this.soundBtn]);
+        this.joystickBtn = this._button(105, -h / 2 + 182, 195, 22, '', 0x1e1e3a, () => {
+            const next = !isJoystickEnabled();
+            setJoystickEnabled(next);
+            if (this.opts.gameScene && this.opts.gameScene.touchControls) {
+                this.opts.gameScene.touchControls.joystickEnabled = next;
+            }
+            this._updateJoystickBtn(next);
+        });
 
-        const div3 = this.scene.add.rectangle(0, -h / 2 + 226, w - 40, 1, 0x2a2a5a);
+        this.container.add([sec2, this.soundBtn, this.joystickBtn]);
+
+        const div3 = this.scene.add.rectangle(0, -h / 2 + 204, w - 40, 1, 0x2a2a5a);
         this.container.add(div3);
 
         // ── 3. Game Management Section ───────────
-        const sec3 = this.scene.add.text(-w / 2 + 24, -h / 2 + 242, 'PARTIDA', {
+        const sec3 = this.scene.add.text(-w / 2 + 24, -h / 2 + 218, 'PARTIDA', {
             fontFamily: FONT, fontSize: '8px', color: '#90CAF9',
         });
         this.container.add(sec3);
 
         if (this.opts.mode === 'ingame') {
-            const bSaveQuit = this._button(-100, -h / 2 + 270, 180, 26, 'GUARDAR Y SALIR', 0x1565C0, () => {
+            const bSaveQuit = this._button(-105, -h / 2 + 246, 195, 24, 'GUARDAR Y SALIR', 0x1565C0, () => {
                 if (this.opts.gameScene) {
                     SaveSystem.saveGame(this.opts.gameScene);
                 }
@@ -127,7 +152,7 @@ export class OptionsModal {
                 }
             });
 
-            const bRestart = this._button(100, -h / 2 + 270, 180, 26, 'REINICIAR PARTIDA', 0x552222, () => {
+            const bRestart = this._button(105, -h / 2 + 246, 195, 24, 'REINICIAR PARTIDA', 0x552222, () => {
                 this.close();
                 if (this.opts.onRestart) this.opts.onRestart();
                 else {
@@ -140,7 +165,7 @@ export class OptionsModal {
 
             this.container.add([bSaveQuit, bRestart]);
         } else {
-            this.clearSaveBtn = this._button(0, -h / 2 + 270, 380, 26, 'BORRAR PARTIDA GUARDADA', 0x442222, () => {
+            this.clearSaveBtn = this._button(0, -h / 2 + 246, 400, 24, 'BORRAR PARTIDA GUARDADA', 0x442222, () => {
                 SaveSystem.clearSave();
                 this._updateClearSaveBtn();
                 if (this.scene.refreshMenuState) this.scene.refreshMenuState();
@@ -167,6 +192,7 @@ export class OptionsModal {
         this._refreshInfo();
         this._updateBarBtn(display.isBottomBarVisible());
         this._updateSoundBtn(audio.enabled);
+        this._updateJoystickBtn(isJoystickEnabled());
 
         this.unsubscribeDisplay = display.onChange(() => this._refreshInfo());
     }
@@ -205,6 +231,12 @@ export class OptionsModal {
         if (!this.soundBtn) return;
         this.soundBtn.txt.setText(enabled ? 'SONIDO: ACTIVADO' : 'SONIDO: SILENCIADO');
         this.soundBtn.bg.fillColor = enabled ? 0x2E7D32 : 0x552222;
+    }
+
+    _updateJoystickBtn(enabled) {
+        if (!this.joystickBtn) return;
+        this.joystickBtn.txt.setText(enabled ? 'JOYSTICK: ACTIVADO' : 'JOYSTICK: OCULTO');
+        this.joystickBtn.bg.fillColor = enabled ? 0x2E7D32 : 0x552222;
     }
 
     _updateClearSaveBtn() {

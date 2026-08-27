@@ -37,11 +37,13 @@ class DisplaySystem {
 
     maxScale() {
         if (typeof window === 'undefined') return 2;
-        const reserveX = 24;
-        const reserveY = this.isBottomBarVisible() ? 64 : 24;
+        const reserveX = window.innerWidth <= 768 ? 8 : 24;
+        const reserveY = this.isBottomBarVisible() ? 64 : (window.innerHeight <= 600 ? 8 : 24);
+        const availW = Math.max(100, window.innerWidth - reserveX);
+        const availH = Math.max(100, window.innerHeight - reserveY);
         return Math.min(
-            ((window.innerWidth - reserveX) * dpr()) / VIEW_W,
-            ((window.innerHeight - reserveY) * dpr()) / VIEW_H
+            (availW * dpr()) / VIEW_W,
+            (availH * dpr()) / VIEW_H
         );
     }
 
@@ -93,7 +95,7 @@ class DisplaySystem {
     }
 
     setScale(scale) {
-        const clamped = Math.max(1, Math.min(scale, this.maxScale()));
+        const clamped = Math.max(0.1, Math.min(scale, this.maxScale()));
         const quantized = this.quantize(clamped);
         this.setStoredScale(quantized);
         this.applyScale(quantized);

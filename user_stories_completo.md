@@ -305,16 +305,18 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 
 ## 📱 Epic 7: Controles Táctiles y Móvil
 
-### US 7.1: Soporte Táctil para Héroe y Construcción
+### US 7.1: Soporte Táctil para Héroe y Construcción [✓]
 **Como** jugador en dispositivos móviles o tablets,  
 **Quiero** mover al héroe y colocar estructuras mediante gestos táctiles directos,  
 **Para** disfrutar del juego sin necesidad de periféricos de ratón y teclado.
 
 > **Criterios de Aceptación:**
-> - "Tap to move" o joystick virtual para el héroe.
-> - Drag & Drop táctil o selección de celda adaptada a dedos en la sidebar.
+> - "Tap to move" con marcador de onda arcana o joystick virtual flotante/configurable para el héroe.
+> - Drag & Drop táctil directo desde la barra lateral o selección de celda adaptada a dedos.
+> - Botón flotante `[ ✕ CANCELAR ]` para cancelar modos de colocación, venta o hechizos sin clic derecho.
+> - Prevención de gestos nativos del navegador (`touch-action: none`) y escalado automático responsivo.
 > 
-> *Estado:* **Pendiente**.
+> *Estado:* **Implementado**. Se integró el sistema `TouchControls.js`, joystick virtual dinámico, tap-to-move con ripples de destino, arrastre de estructuras desde la barra lateral, botón flotante de cancelación y soporte de viewport móvil.
 
 ---
 
@@ -409,28 +411,41 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 
 ---
 
-## 🏆 Epic 14: Contenido, Modos de Juego y Audio
+## 🗺️ Epic 14: Sistemas de Juego Avanzados y Múltiples Niveles
 
-### US 14.1: Selector de Mapas y Nuevos Trazados
-**Como** jugador,  
-**Quiero** poder elegir entre al menos 2 mapas distintos con obstáculos y bifurcaciones de camino diferentes,  
-**Para** aplicar diversas estrategias de laberinto y aumentar la rejugabilidad.
+### US 14.1: Arquitectura Modular de Niveles y Selector de Mapas (`LevelData`)
+**Como** jugador y desarrollador,  
+**Quiero** que el juego desacople los mapas, rutas y oleadas en estructuras de datos independientes (`LevelData`) y ofrezca un selector de mapas en el menú principal,  
+**Para** poder jugar múltiples niveles con trazados, biomas, puntos de entrada/salida y desafíos únicos, y permitir agregar fácilmente nuevos mapas sin modificar la lógica interna del motor.
 
 > **Criterios de Aceptación:**
-> - Selector de mapa en el menú principal.
-> - Cada mapa define sus propios puntos de spawn, salida y obstáculos rompibles.
+> - **Capa de Datos `LevelData` (`js/data/LevelData.js` o `levels/`)**: Cada nivel define:
+>   - Identificador único (`id`), nombre (`name`) y descripción táctica.
+>   - Bioma visual (`biome`: `'grass'`, `'volcano'`, `'snow'`, `'dungeon'`).
+>   - Dimensiones de cuadrícula, punto de spawn de enemigos y punto de salida hacia el templo central.
+>   - Trazado de `waypoints` propio (soporte para curvas, pasillos y bifurcaciones).
+>   - Bloques rompibles iniciales con vida y coordenadas.
+>   - Recursos iniciales (oro y vidas iniciales configurables por nivel).
+>   - Lista de oleadas o generador procedural asignado al mapa.
+> - **Desacoplamiento del Motor (`GameScene`, `GridSystem`, `Enemy`, `RouteView`)**:
+>   - Se elimina la constante estática `WAYPOINTS` hardcodeada de `GridSystem.js`, `Enemy.js` y `RouteView.js`.
+>   - `GridSystem` construye su matriz de caminos dinámicamente según el `LevelData` recibido.
+>   - `Enemy.js` y `RouteView.js` leen las rutas dinámicamente desde `gridSystem.waypoints`.
+>   - `GameScene` renderiza el suelo y decoraciones basándose en el bioma del nivel.
+> - **Selector de Mapas en `TitleScene`**:
+>   - Interfaz en el menú principal que permite previsualizar y seleccionar el mapa antes de iniciar la partida.
+> - **Persistencia Multimapa (`SaveSystem`)**:
+>   - `SaveSystem` incluye el `levelId` en el guardado para restaurar exactamente el mapa y sus obstáculos guardados.
 > 
 > *Estado:* **Pendiente**.
 
 ### US 14.2: Modo Sin Fin (Endless Mode)
 **Como** jugador veterano,  
-**Quiero** que tras superar la oleada 20 pueda continuar jugando en un modo infinito con dificultad y recompensas crecientes,  
+**Quiero** que tras superar la oleada base de cualquier mapa pueda continuar jugando en un modo infinito con dificultad y recompensas crecientes,  
 **Para** probar mis defensas al límite y registrar puntuaciones récord.
 
 > **Criterios de Aceptación:**
 > - Opción de "Continuar en Modo Sin Fin" en la pantalla de victoria.
-> - Escalado automático de vida y cantidad de enemigos a partir de la oleada 21.
-> 
 > *Estado:* **Pendiente**.
 
 ### US 14.3: Banda Sonora Ambiental y Música Dinámica

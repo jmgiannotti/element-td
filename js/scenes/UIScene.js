@@ -93,6 +93,7 @@ export class UIScene extends Phaser.Scene {
         this._buildSpellHud();
         this._buildHeroHud();
         this._buildTutorialBanner();
+        this._buildCancelButton();
         this._buildPauseOverlay();
         this._registerEvents();
 
@@ -296,9 +297,16 @@ export class UIScene extends Phaser.Scene {
 
         const btn = { bg, icon, coin, cost, element, kind: 'tower' };
 
-        bg.on('pointerdown', () => {
+        bg.on('pointerdown', (pointer) => {
             if (this.gs.economySystem.gold < td.cost) { audio.play('deny'); return; }
             this._select(btn, () => this.gs.events.emit('select-element', element));
+        });
+        bg.on('pointermove', (pointer) => {
+            if (pointer.isDown && pointer.x < BAR_X && this.gs.touchControls) {
+                if (!this.gs.touchControls.isDraggingStructure) {
+                    this.gs.touchControls.startDragStructure('tower', element);
+                }
+            }
         });
         bg.on('pointerover', () => this._showTowerTooltip(element, x - 34, y));
         bg.on('pointerout', () => this._hideTooltip());
@@ -327,6 +335,13 @@ export class UIScene extends Phaser.Scene {
         bg.on('pointerdown', () => {
             if (this.gs.economySystem.gold < BARRICADE_COST) { audio.play('deny'); return; }
             this._select(btn, () => this.gs.events.emit('select-barricade'));
+        });
+        bg.on('pointermove', (pointer) => {
+            if (pointer.isDown && pointer.x < BAR_X && this.gs.touchControls) {
+                if (!this.gs.touchControls.isDraggingStructure) {
+                    this.gs.touchControls.startDragStructure('barricade', null);
+                }
+            }
         });
         bg.on('pointerover', () => this._showTooltip([
             'Barricada', 'Desvia enemigos', 'sin cerrar del', 'todo el camino.',
@@ -404,6 +419,13 @@ export class UIScene extends Phaser.Scene {
             }
             this._select(btn, () => this.gs.events.emit('select-temple', element));
         });
+        bg.on('pointermove', (pointer) => {
+            if (pointer.isDown && pointer.x < BAR_X && this.gs.touchControls) {
+                if (!this.gs.touchControls.isDraggingStructure) {
+                    this.gs.touchControls.startDragStructure('temple', element);
+                }
+            }
+        });
 
         bg.on('pointerover', () => {
             const d = TEMPLE_DATA[element];
@@ -446,6 +468,48 @@ export class UIScene extends Phaser.Scene {
         }
     }
 
+    // ─── Floating Cancel Button for Touch/Mobile ────────
+    _buildCancelButton() {
+        this.cancelContainer = this.add.container(MAP_CX, 34).setDepth(60).setVisible(false);
+
+        const w = 120;
+        const h = 26;
+        const bg = this.add.rectangle(0, 0, w, h, 0x221118, 0.92)
+            .setStrokeStyle(1.5, 0xFF5252)
+            .setInteractive({ useHandCursor: true });
+
+        const icon = this.add.text(-36, 0, '✕', {
+            fontFamily: FONT, fontSize: '9px', color: '#FF5252',
+        }).setOrigin(0.5);
+
+        const txt = this.add.text(8, 0, 'CANCELAR', {
+            fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
+        }).setOrigin(0.5);
+
+        this.cancelContainer.add([bg, icon, txt]);
+
+        bg.on('pointerdown', (pointer) => {
+            pointer.event.stopPropagation();
+            pointer.event._uiConsumed = true;
+            audio.play('click');
+            if (this.selectedBtn) {
+                this._setBtnSelected(this.selectedBtn, false);
+                this.selectedBtn = null;
+            }
+            this.gs._cancelPlacement();
+            this.gs._setSpellMode(null);
+            this._refreshCancelButton();
+        });
+        bg.on('pointerover', () => { bg.fillColor = 0x381822; });
+        bg.on('pointerout', () => { bg.fillColor = 0x221118; });
+    }
+
+    _refreshCancelButton() {
+        if (!this.cancelContainer) return;
+        const active = !!(this.selectedBtn || this.gs.placementMode || this.gs.sellMode || this.gs.spellMode);
+        this.cancelContainer.setVisible(active);
+    }
+
     /** Shared select/deselect behaviour for every build button. */
     _select(btn, onSelect) {
         audio.play('click');
@@ -454,12 +518,14 @@ export class UIScene extends Phaser.Scene {
         if (this.selectedBtn === btn) {
             this.selectedBtn = null;
             this.gs._cancelPlacement();
+            this._refreshCancelButton();
             return;
         }
 
         this.selectedBtn = btn;
         this._setBtnSelected(btn, true);
         onSelect();
+        this._refreshCancelButton();
     }
 
     _setBtnSelected(btn, selected) {
@@ -1078,11 +1144,25 @@ export class UIScene extends Phaser.Scene {
         // The spell cursor is armed and disarmed by GameScene — from a click
         // here, from a hotkey, from ESC, or by picking up a build cursor
         // instead. The button follows that state rather than owning it.
-        on('spell-armed', (key) => this._setSpellArmed(key));
-        on('spell-disarmed', () => this._setSpellArmed(null));
+        on('spell-armed', (key) => {
+            this._setSpellArmed(key);
+            this._refreshCancelButton();
+        });
+        on('spell-disarmed', () => {
+            this._setSpellArmed(null);
+            this._refreshCancelButton();
+        });
+        on('placement-cancelled', () => {
+            if (this.selectedBtn) {
+                this._setBtnSelected(this.selectedBtn, false);
+                this.selectedBtn = null;
+            }
+            this._refreshCancelButton();
+        });
         on('spell-cast', (key) => {
             const s = SPELLS[key];
             if (s) this._flashNotification(`${s.label}  −${s.cost}✦`, s.colorHex);
+            this._refreshCancelButton();
         });
 
         on('wave-started', () => {
