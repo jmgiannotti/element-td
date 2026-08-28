@@ -1980,7 +1980,8 @@ export class UIScene extends Phaser.Scene {
                 name: t.data?.name || t.element,
                 totalDamageDealt: t.totalDamageDealt || 0,
                 enemiesKilled: t.enemiesKilled || 0,
-                level: total,
+                level: t.level || 1,
+                templeLevel: total,
             };
         });
         const historyTowers = this.gs.towerHistory || [];

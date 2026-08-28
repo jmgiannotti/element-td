@@ -1,11 +1,11 @@
 import * as Phaser from 'phaser';
-import { TOWER_DATA } from '../data/TowerData.js';
+import { TOWER_DATA, TOWER_UPGRADE } from '../data/TowerData.js';
 import { Projectile } from './Projectile.js';
 import { safeTexture } from '../systems/TextureGuard.js';
 import { audio } from '../systems/AudioSystem.js';
 
 export class Tower {
-    constructor(scene, col, row, element, paidCost = 0) {
+    constructor(scene, col, row, element, paidCost = 0, level = 1) {
         this.scene = scene;
         this.col = col;
         this.row = row;
@@ -14,6 +14,7 @@ export class Tower {
         // What this building actually cost its owner, which is the only honest
         // basis for a refund: hybrids have no list price at all.
         this.paidCost = paidCost;
+        this.level = level;
         this.empowered = false;
         this.fusionHint = false;
         this.fireTimer = 0;
@@ -47,6 +48,10 @@ export class Tower {
         // Storm electric-spark emitter timer (null when not active)
         this._sparkTimer = null;
 
+        // Individual upgrade rank pips shown over the tower's head
+        this.pips = [];
+        this._buildLevelPips();
+
         // Spawn animation – pop in
         this.sprite.setScale(0);
         scene.tweens.add({
@@ -72,9 +77,6 @@ export class Tower {
             if (!this.selected) {
                 this.scene.sharedRangeGfx.setVisible(false);
             }
-            if (this.selected && this.scene.selectStructure) {
-                this.scene.selectStructure(null);
-            }
         });
     }
 
@@ -83,7 +85,7 @@ export class Tower {
     get isHybrid() { return this.data.isHybrid; }
 
     // ── Effective stats ──────────────────────────
-    // Base value × whatever this element's temple upgrades have unlocked.
+    // Base value × individual level bonus × whatever this element's temple upgrades have unlocked.
     // Read live rather than cached, so an upgrade bought mid-wave takes effect
     // on the very next shot.
     _mult(track) {
@@ -92,8 +94,16 @@ export class Tower {
             : 1;
     }
 
-    get damage() { return this.data.damage * this._mult('damage'); }
-    get range() { return this.data.range * this._mult('range'); }
+    get damage() {
+        const lvlBonus = 1 + (this.level - 1) * TOWER_UPGRADE.DAMAGE_STEP;
+        return this.data.damage * lvlBonus * this._mult('damage');
+    }
+
+    get range() {
+        const lvlBonus = 1 + (this.level - 1) * TOWER_UPGRADE.RANGE_STEP;
+        return this.data.range * lvlBonus * this._mult('range');
+    }
+
     get fireRate() { return this.data.fireRate * this._mult('fireRate'); }
 
     /** Called by TempleSystem when this element's upgrade levels change. */
@@ -379,8 +389,100 @@ export class Tower {
         }
     }
 
+    // ─── Individual Upgrades (Gold Sink) ──────────────────
+    /** Gold cost to upgrade to the next level. */
+    getNextUpgradeCost() {
+        return TOWER_UPGRADE.costFor(this.element, this.level);
+    }
+
+    /** Apply level upgrade with gold and update paidCost for refunds. */
+    upgrade(cost = 0) {
+        if (!this.alive) return;
+        this.level += 1;
+        this.paidCost += cost;
+        this.refreshStats();
+        this._buildLevelPips();
+        this.celebrate();
+    }
+
+    /** Visual & audio feedback when the tower levels up. */
+    celebrate() {
+        if (!this.alive) return;
+        this._buildLevelPips();
+
+        const color = this.data.color || 0xFFD700;
+
+        // Expanding energy ring
+        const ring = this.scene.add.circle(this.x, this.y, 12, color, 0);
+        ring.setStrokeStyle(2, color, 0.9).setDepth(27);
+        this.scene.tweens.add({
+            targets: ring,
+            scaleX: 3.2,
+            scaleY: 3.2,
+            alpha: 0,
+            duration: 480,
+            ease: 'Quad.easeOut',
+            onComplete: () => ring.destroy(),
+        });
+
+        // Floating level notification text
+        const t = this.scene.add.text(this.x, this.y - 20, `+NV.${this.level}!`, {
+            fontFamily: '"Press Start 2P"',
+            fontSize: '8px',
+            color: '#FFD700',
+            stroke: '#000000',
+            strokeThickness: 3,
+        }).setOrigin(0.5).setDepth(28);
+
+        this.scene.tweens.add({
+            targets: t,
+            y: this.y - 38,
+            alpha: 0,
+            duration: 750,
+            ease: 'Quad.easeOut',
+            onComplete: () => t.destroy(),
+        });
+
+        // Subtle sprite squash/pop
+        if (this.sprite) {
+            this.scene.tweens.add({
+                targets: this.sprite,
+                scaleX: 1.25,
+                scaleY: 1.25,
+                duration: 100,
+                yoyo: true,
+                ease: 'Back.easeOut',
+                onComplete: () => {
+                    if (this.sprite) this.sprite.setScale(1);
+                },
+            });
+        }
+    }
+
+    /** Rank pips rendered above the tower head indicating level - 1. */
+    _buildLevelPips() {
+        if (this.pips) {
+            for (const p of this.pips) p.destroy();
+        }
+        this.pips = [];
+        if (!this.alive || this.level <= 1) return;
+
+        const count = Math.min(this.level - 1, 8);
+        const startX = this.x - ((count - 1) * 3) / 2;
+        for (let i = 0; i < count; i++) {
+            const dot = this.scene.add.circle(startX + i * 3, this.y - 18, 1, 0xFFD700, 1);
+            dot.setStrokeStyle(1, 0x000000, 0.8);
+            dot.setDepth(27);
+            this.pips.push(dot);
+        }
+    }
+
     destroy() {
         this.alive = false;
+        if (this.pips) {
+            for (const p of this.pips) p.destroy();
+            this.pips = [];
+        }
         if (this.sprite) this.sprite.destroy();
         if (this.empowerGfx) this.empowerGfx.destroy();
         if (this._sparkTimer) { this._sparkTimer.remove(); this._sparkTimer = null; }

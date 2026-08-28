@@ -19,7 +19,7 @@ import { SPELLS, SPELL_ORDER } from '../data/SpellData.js';
 import { Tower } from '../entities/Tower.js';
 import { Temple } from '../entities/Temple.js';
 import { Hero } from '../entities/Hero.js';
-import { TOWER_DATA, ELEMENTS } from '../data/TowerData.js';
+import { TOWER_DATA, ELEMENTS, TOWER_UPGRADE } from '../data/TowerData.js';
 import { TEMPLE_DATA, TRACK_ORDER, upgradeCost } from '../data/TempleData.js';
 import {
     GRASS_VARIANTS, DIRT_VARIANTS, EDGE_VARIANTS, RUT_VARIANTS, BREAKABLE_VARIANTS,
@@ -163,17 +163,8 @@ export class GameScene extends Phaser.Scene {
             color: '#FFD700', stroke: '#000000', strokeThickness: 3,
         }).setOrigin(0.5, 1).setVisible(false).setDepth(31);
 
-        // The pinned tower's live numbers. Read off the tower rather than off
-        // TOWER_DATA, so a temple upgrade bought afterwards shows up here.
-        // Backed rather than merely stroked: four lines of stats over a busy
-        // grass texture need a surface to sit on, not just an outline.
-        this.statLabel = this.add.text(0, 0, '', {
-            fontFamily: '"Press Start 2P"', fontSize: '8px',
-            color: '#FFD54F',
-            backgroundColor: '#0a0a1ae8',
-            padding: { x: 7, y: 6 },
-            align: 'left', lineSpacing: 4,
-        }).setOrigin(0.5, 1).setVisible(false).setDepth(31);
+        // The pinned tower's live numbers and individual upgrade interface.
+        this._buildStatCard();
 
         // ── Input ───────────────────────────────
         this.input.mouse.disableContextMenu();
@@ -206,7 +197,10 @@ export class GameScene extends Phaser.Scene {
             // Only genuine UI overlays swallow the click. Tower sprites must
             // not, or you cannot build right next to them.
             const blocked = gameObjects.some(o => o.getData && o.getData('uiBlocker'));
-            if (blocked && !this.sellMode) return;
+            if (blocked && !this.sellMode) {
+                this._pressConsumed = true;
+                return;
+            }
 
             // Handle active cursor modes (build, sell, spell)
             if (this.placementMode || this.sellMode || this.spellMode) {
@@ -228,7 +222,7 @@ export class GameScene extends Phaser.Scene {
         // indistinguishable from the first frame of a drag, and pinning a stat
         // card over the board every time someone reaches for a tower is the kind
         // of thing that makes a drag feel broken before it has even started.
-        this.input.on('pointerup', (pointer) => {
+        this.input.on('pointerup', (pointer, gameObjects) => {
             if (this.gameOver || this.gameWon || this.uiModalOpen) return;
             if (pointer.button !== 0 && pointer.button !== undefined) return;
 
@@ -238,12 +232,19 @@ export class GameScene extends Phaser.Scene {
             this._pressConsumed = false;
 
             if (wasDrag || consumed) return;
+            if (gameObjects && gameObjects.some(o => o.getData && o.getData('uiBlocker'))) return;
             if (p.x >= GAME_WIDTH) return;
             this._inspectAt(p);
         });
         this.input.keyboard.on('keydown-ESC', () => {
             this._cancelPlacement();
             this.selectStructure(null);
+        });
+        this.input.keyboard.on('keydown-U', () => {
+            if (this.gameOver || this.gameWon || this.uiModalOpen) return;
+            if (this.selectedStructure && this.selectedStructure instanceof Tower && this.selectedStructure.alive) {
+                this._buyTowerUpgrade();
+            }
         });
 
         // Hero abilities. Bound off the data so adding one to HeroData is the
@@ -393,6 +394,7 @@ export class GameScene extends Phaser.Scene {
                     row: t.row,
                     element: t.element,
                     paid: t.paidCost,
+                    level: t.level || 1,
                     damageDealt: t.totalDamageDealt || 0,
                     kills: t.enemiesKilled || 0,
                 })),
@@ -407,6 +409,11 @@ export class GameScene extends Phaser.Scene {
                 }),
                 templeLevels: { ...this.templeSystem.levels },
             };
+        });
+        onCustom('gold-changed', () => {
+            if (this.selectedStructure && this.selectedStructure.alive) {
+                this._refreshStatLabel();
+            }
         });
         onCustom('wave-complete', () => {
             this._refreshRouteVisibility();
@@ -710,10 +717,49 @@ export class GameScene extends Phaser.Scene {
         this.selectStructure(null);
     }
 
-    // ─── Inspection ─────────────────────────────────────
+    // ─── Inspection & Upgrades ─────────────────────────
+    _buildStatCard() {
+        this.statCard = this.add.container(0, 0).setDepth(31).setVisible(false);
+
+        this.statCardBg = this.add.rectangle(0, 0, 194, 95, 0x0a0a1a, 0.94)
+            .setStrokeStyle(1, 0x3a3a5a)
+            .setInteractive();
+        this.statCardBg.setData('uiBlocker', true);
+        this.statCardBg.on('pointerdown', (pointer) => {
+            if (pointer.button !== 0 && pointer.button !== undefined) return;
+            pointer.event.stopPropagation();
+        });
+
+        this.statText = this.add.text(-88, -40, '', {
+            fontFamily: '"Press Start 2P"',
+            fontSize: '8px',
+            color: '#FFD54F',
+            align: 'left',
+            lineSpacing: 4,
+        }).setOrigin(0, 0);
+
+        this.upgradeBtnBg = this.add.rectangle(0, 30, 178, 22, 0x1e1e3a)
+            .setStrokeStyle(1, 0x3a3a5a)
+            .setInteractive({ useHandCursor: true });
+        this.upgradeBtnBg.setData('uiBlocker', true);
+
+        this.upgradeBtnText = this.add.text(0, 30, '', {
+            fontFamily: '"Press Start 2P"',
+            fontSize: '8px',
+            color: '#FFFFFF',
+        }).setOrigin(0.5);
+
+        this.upgradeBtnBg.on('pointerdown', (pointer) => {
+            if (pointer.button !== 0 && pointer.button !== undefined) return;
+            pointer.event.stopPropagation();
+            this._buyTowerUpgrade();
+        });
+
+        this.statCard.add([this.statCardBg, this.statText, this.upgradeBtnBg, this.upgradeBtnText]);
+    }
+
     /**
-     * Pins one tower's range open and shows what it actually does — the two
-     * things you need to judge whether a global upgrade was worth the maná.
+     * Pins one tower's range open and shows what it actually does and allows upgrading it.
      * Passing null clears it.
      */
     selectStructure(structure) {
@@ -728,7 +774,7 @@ export class GameScene extends Phaser.Scene {
         this.selectedStructure = structure ?? null;
 
         if (!this.selectedStructure) {
-            this.statLabel.setVisible(false);
+            if (this.statCard) this.statCard.setVisible(false);
             return;
         }
 
@@ -738,52 +784,115 @@ export class GameScene extends Phaser.Scene {
     }
 
     /**
-     * The card over a pinned tower: what it is, what rank the temples have
-     * bought it to, what it actually does right now, and what is currently
-     * modifying it. Every number is derived live, so it doubles as the readout
-     * that makes a global upgrade felt the instant it is paid for.
+     * The card over a pinned structure: stats, temple buffs, individual rank,
+     * and direct upgrade button with gold.
      */
     _refreshStatLabel() {
         const t = this.selectedStructure;
         if (!t || !t.alive) {
-            this.statLabel.setVisible(false);
+            if (this.statCard) this.statCard.setVisible(false);
             return;
         }
 
+        const isTower = t instanceof Tower;
         const ts = this.templeSystem;
-        const total = ts.totalLevels(t.element);
+        const templeLvl = ts ? ts.totalLevels(t.element) : 0;
 
-        const lines = [
-            `${t.data.emoji} ${t.data.name}${total > 0 ? `  Nv.${total}` : ''}`,
-            `DMG ${Math.round(t.damage)}   RNG ${Math.round(t.range)}`,
-            `${t.shotsPerSecond.toFixed(2)}/s   ${t.data.specialDesc}`,
-        ];
+        const lines = [];
 
-        if (t.totalDamageDealt !== undefined) {
-            lines.push(`Daño: ${Math.round(t.totalDamageDealt)}  ·  Bajas: ${t.enemiesKilled || 0}`);
-        }
+        if (isTower) {
+            lines.push(`${t.data.emoji} ${t.data.name}  Nv.${t.level}${templeLvl > 0 ? ` (Templo Nv.${templeLvl})` : ''}`);
+            lines.push(`DMG ${Math.round(t.damage)}   RNG ${Math.round(t.range)}`);
+            lines.push(`${t.shotsPerSecond.toFixed(2)}/s   ${t.data.specialDesc}`);
+            lines.push(`Daño: ${Math.round(t.totalDamageDealt || 0)}  ·  Bajas: ${t.enemiesKilled || 0}`);
+            lines.push(
+                templeLvl > 0
+                    ? TRACK_ORDER.map(tr => `${TRACK_SHORT[tr]} ${ts.levelOf(t.element, tr)}`).join('  ')
+                    : 'sin mejoras de templo'
+            );
+            if (t.empowered) lines.push('potenciada por el heroe');
 
-        lines.push(
-            total > 0
-                ? TRACK_ORDER.map(tr => `${TRACK_SHORT[tr]} ${ts.levelOf(t.element, tr)}`).join('  ')
-                : 'sin mejoras de templo'
-        );
+            // Upgrade button logic (US 8.1 Gold sink)
+            this.upgradeBtnBg.setVisible(true);
+            this.upgradeBtnText.setVisible(true);
 
-        if (t.empowered) lines.push('potenciada por el heroe');
-
-        this.statLabel.setText(lines.join('\n'));
-
-        // Towers on the top rows have no room above them, so the card flips
-        // below rather than sliding off the board.
-        const x = Phaser.Math.Clamp(
-            t.x, this.statLabel.width / 2 + 2, GAME_WIDTH - this.statLabel.width / 2 - 2
-        );
-        if (t.y - 20 - this.statLabel.height < 2) {
-            this.statLabel.setOrigin(0.5, 0).setPosition(x, t.y + 18);
+            if (t.level >= TOWER_UPGRADE.MAX_LEVEL) {
+                this.upgradeBtnText.setText('✓ NIVEL MAXIMO');
+                this.upgradeBtnText.setColor('#4CAF50');
+                this.upgradeBtnBg.fillColor = 0x14210f;
+                this.upgradeBtnBg.setStrokeStyle(1, 0x4CAF50);
+            } else {
+                const cost = t.getNextUpgradeCost();
+                const canAfford = this.economySystem.gold >= cost;
+                this.upgradeBtnText.setText(`▲ MEJORAR [U]  ${cost} ORO`);
+                this.upgradeBtnText.setColor(canAfford ? '#FFD700' : '#888899');
+                this.upgradeBtnBg.fillColor = canAfford ? 0x241d3d : 0x16162a;
+                this.upgradeBtnBg.setStrokeStyle(1, canAfford ? 0xFFD700 : 0x3a3a5a);
+            }
         } else {
-            this.statLabel.setOrigin(0.5, 1).setPosition(x, t.y - 20);
+            // Temple
+            lines.push(`${t.data.emoji || '🏛️'} ${t.data.name}${templeLvl > 0 ? `  Nv.${templeLvl}` : ''}`);
+            lines.push(`Alcance: ${t.absorbRadius}px`);
+            lines.push(`Absorbido: ${t.absorbed || 0} mana`);
+            lines.push(templeLvl > 0 ? 'Click para ver arbol de mejoras' : 'Click para abrir mejoras');
+            this.upgradeBtnBg.setVisible(false);
+            this.upgradeBtnText.setVisible(false);
         }
-        this.statLabel.setVisible(true);
+
+        this.statText.setText(lines.join('\n'));
+
+        // Measure content dimensions and adapt card size
+        const textBounds = this.statText.getBounds();
+        const cardW = Math.max(198, textBounds.width + 20);
+        const cardH = isTower ? textBounds.height + 44 : textBounds.height + 18;
+
+        this.statCardBg.setSize(cardW, cardH);
+        if (this.statCardBg.input && this.statCardBg.input.hitArea) {
+            this.statCardBg.input.hitArea.setSize(cardW, cardH);
+        }
+        this.statText.setPosition(-cardW / 2 + 10, -cardH / 2 + 8);
+
+        if (isTower) {
+            const btnW = cardW - 16;
+            const btnH = 22;
+            this.upgradeBtnBg.setSize(btnW, btnH);
+            if (this.upgradeBtnBg.input && this.upgradeBtnBg.input.hitArea) {
+                this.upgradeBtnBg.input.hitArea.setSize(btnW, btnH);
+            }
+            this.upgradeBtnBg.setPosition(0, cardH / 2 - 16);
+            this.upgradeBtnText.setPosition(0, cardH / 2 - 16);
+        }
+
+        // Clamp and position above/below the structure
+        const clampedX = Phaser.Math.Clamp(
+            t.x, cardW / 2 + 4, GAME_WIDTH - cardW / 2 - 4
+        );
+        if (t.y - 20 - cardH < 2) {
+            // Below structure
+            this.statCard.setPosition(clampedX, t.y + 22 + cardH / 2);
+        } else {
+            // Above structure
+            this.statCard.setPosition(clampedX, t.y - 18 - cardH / 2);
+        }
+        this.statCard.setVisible(true);
+    }
+
+    _buyTowerUpgrade() {
+        const t = this.selectedStructure;
+        if (!t || !t.alive || !(t instanceof Tower)) return;
+        if (t.level >= TOWER_UPGRADE.MAX_LEVEL) {
+            audio.play('deny');
+            return;
+        }
+        const cost = t.getNextUpgradeCost();
+        if (this.economySystem.spendGold(cost)) {
+            t.upgrade(cost);
+            audio.play('upgrade');
+            this._refreshStatLabel();
+        } else {
+            audio.play('deny');
+            this.cameras.main.shake(90, 0.003);
+        }
     }
 
     _archiveTower(tower) {
@@ -795,7 +904,8 @@ export class GameScene extends Phaser.Scene {
             name: tower.data?.name || tower.element,
             totalDamageDealt: tower.totalDamageDealt || 0,
             enemiesKilled: tower.enemiesKilled || 0,
-            level: total,
+            level: tower.level || 1,
+            templeLevel: total,
         });
     }
 

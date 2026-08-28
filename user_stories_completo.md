@@ -322,7 +322,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 
 ## 💰 Epic 8: Sumidero de Oro en Oleadas Tardías
 
-### US 8.1: Mejoras Individuales de Estructuras con Oro Excedente
+### US 8.1: Mejoras Individuales de Estructuras con Oro Excedente [✓]
 **Como** jugador en oleadas avanzadas,  
 **Quiero** invertir el oro sobrante en mejorar directamente torres ya construidas (aumentando daño o rango individual),  
 **Para** que el oro siga teniendo valor estratégico una vez que el mapa esté lleno de estructuras.
@@ -331,7 +331,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Al hacer clic en una torre construida, se habilita una opción de "Mejorar nivel" pagando oro.
 > - El costo escala exponencialmente por nivel.
 > 
-> *Estado:* **Pendiente**.
+> *Estado:* **Implementado** en `Tower.js`, `TowerData.js`, `GameScene.js`, `SaveSystem.js` y `UIScene.js`.
 
 ---
 

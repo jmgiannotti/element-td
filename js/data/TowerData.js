@@ -159,3 +159,25 @@ export const TOWER_DATA = {
         emoji: '🌀',
     },
 };
+
+/**
+ * Configuration and exponential scaling formula for individual tower upgrades with gold.
+ * US 8.1 (Sumidero de Oro en Oleadas Tardías).
+ */
+export const TOWER_UPGRADE = {
+    MAX_LEVEL: 10,
+    DAMAGE_STEP: 0.25, // +25% base damage per level above 1
+    RANGE_STEP: 0.08,   // +8% base range per level above 1
+    EXP_BASE: 1.5,      // Exponential scaling factor
+
+    /**
+     * Calculates the gold cost to upgrade a tower from currentLevel to currentLevel + 1.
+     * @param {string} element 
+     * @param {number} currentLevel 
+     * @returns {number}
+     */
+    costFor(element, currentLevel) {
+        const base = TOWER_DATA[element]?.cost > 0 ? TOWER_DATA[element].cost : 50;
+        return Math.round(base * Math.pow(this.EXP_BASE, currentLevel));
+    },
+};

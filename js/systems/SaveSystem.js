@@ -103,6 +103,7 @@ export class SaveSystem {
                     row: t.row,
                     element: t.element,
                     paid: t.paidCost,
+                    level: t.level || 1,
                     damageDealt: t.totalDamageDealt || 0,
                     kills: t.enemiesKilled || 0,
                 }));
@@ -225,7 +226,7 @@ export class SaveSystem {
             }
             if (data.towers) {
                 for (const t of data.towers) {
-                    const tower = new Tower(gameScene, t.col, t.row, t.element, t.paid ?? 20);
+                    const tower = new Tower(gameScene, t.col, t.row, t.element, t.paid ?? 20, t.level ?? 1);
                     tower.totalDamageDealt = t.damageDealt || 0;
                     tower.enemiesKilled = t.kills || 0;
                     tower.sprite.setScale(1);
