@@ -17,6 +17,8 @@ export class Tower {
         this.level = level;
         this.empowered = false;
         this.fusionHint = false;
+        this.stunTimer = 0;
+        this.stunGfx = null;
         this.fireTimer = 0;
         this.alive = true;
         this.totalDamageDealt = 0;
@@ -143,6 +145,18 @@ export class Tower {
     update(delta, enemies) {
         if (!this.alive) return;
 
+        if (this.stunTimer > 0) {
+            this.stunTimer -= delta;
+            if (this.stunGfx) {
+                this.stunGfx.rotation += 0.05;
+            }
+            if (this.stunTimer <= 0) {
+                this.stunTimer = 0;
+                this._clearStun();
+            }
+            return; // Cannot attack while stunned
+        }
+
         const rate = this.empowered ? this.fireRate * 0.75 : this.fireRate;
         this.fireTimer -= delta;
 
@@ -153,6 +167,44 @@ export class Tower {
                 this.fireTimer = rate;
             }
         }
+    }
+
+    /** Stun tower, disabling attacks for durationMs */
+    stun(durationMs) {
+        if (!this.alive) return;
+        const wasStunned = this.stunTimer > 0;
+        this.stunTimer = Math.max(this.stunTimer, durationMs);
+        this._applyStunVisual(!wasStunned);
+    }
+
+    _applyStunVisual(showFloating = true) {
+        if (!this.alive) return;
+        this.sprite.setTint(0x78909C);
+        
+        if (!this.stunGfx) {
+            // Rotating little stun stars over the tower head
+            this.stunGfx = this.scene.add.text(this.x, this.y - 20, '⚡', {
+                fontFamily: '"Press Start 2P"',
+                fontSize: '9px',
+                color: '#FFD54F',
+                stroke: '#000000',
+                strokeThickness: 2,
+            }).setOrigin(0.5).setDepth(28);
+        }
+
+        if (showFloating && this.scene.floating) {
+            this.scene.floating.show(this.x, this.y - 22, '¡ATURDIDA!', {
+                color: '#FFD54F', size: 8, rise: 14, duration: 800,
+            });
+        }
+    }
+
+    _clearStun() {
+        if (this.stunGfx) {
+            this.stunGfx.destroy();
+            this.stunGfx = null;
+        }
+        this._applyTint();
     }
 
     _findTarget(enemies) {
@@ -485,6 +537,7 @@ export class Tower {
         }
         if (this.sprite) this.sprite.destroy();
         if (this.empowerGfx) this.empowerGfx.destroy();
+        if (this.stunGfx) { this.stunGfx.destroy(); this.stunGfx = null; }
         if (this._sparkTimer) { this._sparkTimer.remove(); this._sparkTimer = null; }
         
         if (this.selected) {

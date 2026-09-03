@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "sprite": "node update_sprite.cjs",
-    "coin": "node update_coin.cjs"
+    "coin": "node update_coin.cjs",
+    "bosses": "node update_bosses.cjs",
+    "export-bosses": "node export_bosses.cjs"
   },
   "dependencies": {
     "phaser": "^4.2.1",

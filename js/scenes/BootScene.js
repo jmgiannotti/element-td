@@ -13,6 +13,7 @@ import {
 import { HERO_SPRITE } from '../data/HeroSprite.js';
 import { COIN_SPRITE } from '../data/CoinSprite.js';
 import { MANA_SPRITE } from '../data/ManaSprite.js';
+import { BOSS_SPRITES } from '../data/BossSprites.js';
 import { SPELLS, SPELL_ORDER } from '../data/SpellData.js';
 
 /**
@@ -46,7 +47,7 @@ export const RUT_VARIANTS = 2;
 export const BREAKABLE_VARIANTS = 3;
 
 export const TOWER_KEYS = ['water', 'air', 'fire', 'earth', 'ice', 'storm', 'lava', 'mud'];
-const ENEMY_KEYS = ['slime', 'golem', 'specter', 'dragon'];
+const ENEMY_KEYS = ['slime', 'golem', 'specter', 'dragon', 'boss_titan', 'boss_dragon', 'boss_specter'];
 const SIDES = ['top', 'bottom', 'left', 'right'];
 
 /** Every texture key the game can request once BootScene has finished. */
@@ -119,6 +120,11 @@ export class BootScene extends Phaser.Scene {
         }
         if (!this.textures.exists(MANA_SPRITE.key)) {
             this.load.image(MANA_SPRITE.key, MANA_SPRITE.png);
+        }
+        for (const [key, sprite] of Object.entries(BOSS_SPRITES)) {
+            if (sprite?.dataUri && !this.textures.exists(key)) {
+                this.load.image(key, sprite.dataUri);
+            }
         }
     }
 
@@ -940,6 +946,9 @@ export class BootScene extends Phaser.Scene {
         this._enemyGolem();
         this._enemySpecter();
         this._enemyDragon();
+        if (!this.textures.exists('enemy_boss_titan')) this._enemyBossTitan();
+        if (!this.textures.exists('enemy_boss_dragon')) this._enemyBossDragon();
+        if (!this.textures.exists('enemy_boss_specter')) this._enemyBossSpecter();
     }
 
     /** Two glowing eyes on a dark plate — the one feature every enemy shares. */
@@ -1240,6 +1249,256 @@ export class BootScene extends Phaser.Scene {
             for (const [x, y] of [[9, 12], [9, 16], [10, 20], [21, 12], [21, 16], [20, 20]]) {
                 g.fillStyle(R.deep);  g.fillRect(x, y, 2, 2);
                 g.fillStyle(R.light); g.fillRect(x, y, 1, 1);
+            }
+        });
+    }
+
+    /**
+     * TITÁN DE SILLAR — Coloso Ancestral.
+     * Ancient colossal marble titan adorned with golden runes and stone crown.
+     */
+    _enemyBossTitan() {
+        const RUNE = EL.earth;
+        this._draw('enemy_boss_titan', 32, 32, (g) => {
+            groundShadow(g, 16, 29, 14, 3, 0.4);
+
+            // Aura of earth/gold power around base
+            g.fillStyle(RUNE.mid, 0.14); g.fillRect(4, 22, 24, 8);
+
+            // Heavy stone fists / pillars at sides
+            for (const [cx, lit] of [[3, 1], [28, 0]]) {
+                volume(g, taper(8, 27, 4, 4, cx, 1.2), MARBLE,
+                    { lu: lit ? 0.28 : 0.68, lv: 0.2, spec: 0.15 });
+                g.fillStyle(MARBLE.deep); g.fillRect(cx - 4, 16, 8, 2);
+                g.fillStyle(RUNE.mid, 0.85); g.fillRect(cx - 2, 20, 4, 4);
+                g.fillStyle(RUNE.glow); g.fillRect(cx - 1, 21, 2, 2);
+            }
+
+            // Massive temple torso
+            volume(g, profile(7, [
+                [5, 26], [4, 27], [4, 27], [5, 26],
+                [7, 24], [7, 24], [7, 24], [7, 24], [7, 24], [7, 24],
+                [7, 24], [7, 24], [7, 24], [6, 25], [6, 25],
+            ]), MARBLE, { lu: 0.3, lv: 0.2, spec: 0.18 });
+
+            // Columns and gold seams in torso
+            for (const x of [9, 13, 18, 22]) {
+                g.fillStyle(MARBLE.deep, 0.6); g.fillRect(x, 12, 1, 11);
+                g.fillStyle(MARBLE.glow, 0.3); g.fillRect(x + 1, 12, 1, 11);
+            }
+
+            // Glowing central heart rune
+            g.fillStyle(RUNE.dark); g.fillRect(13, 14, 6, 6);
+            g.fillStyle(RUNE.mid);  g.fillRect(14, 15, 4, 4);
+            g.fillStyle(RUNE.glow); g.fillRect(15, 16, 2, 2);
+            g.fillStyle(0xffffff, 0.9); g.fillRect(15, 16, 1, 1);
+
+            // Head and crown
+            volume(g, profile(1, [
+                [11, 20], [10, 21], [9, 22], [9, 22], [10, 21], [11, 20],
+            ]), MARBLE, { lu: 0.3, lv: 0.3, spec: 0.2 });
+
+            // Golden stone crown
+            g.fillStyle(GOLD.deep);  g.fillRect(9, 0, 14, 2);
+            g.fillStyle(GOLD.mid);   g.fillRect(9, 0, 14, 1);
+            for (const cx of [9, 13, 16, 19, 22]) {
+                g.fillStyle(GOLD.light); g.fillRect(cx, -1, 1, 2);
+                g.fillStyle(GOLD.glow);  g.fillRect(cx, -1, 1, 1);
+            }
+
+            this._eyes(g, 12, 18, 4, RUNE.light, RUNE.glow);
+
+            // Heavy legs
+            for (const x of [7, 19]) {
+                g.fillStyle(MARBLE.deep);  g.fillRect(x, 22, 6, 7);
+                g.fillStyle(MARBLE.mid);   g.fillRect(x, 23, 6, 5);
+                g.fillStyle(MARBLE.light); g.fillRect(x, 23, 1, 5);
+                g.fillStyle(RUNE.mid, 0.6); g.fillRect(x + 2, 25, 2, 2);
+            }
+        });
+    }
+
+    /**
+     * ASCUA PRIMORDIAL — Señor del Magma.
+     * Fierce elder magma dragon with sweeping draconic wings, basalt hide and blazing hearth.
+     */
+    _enemyBossDragon() {
+        const BASALT = ramp(0x180808, 0x2e1212, 0x4c1e1e, 0x72322a, 0x9e4c40);
+        const MEMBRANE = ramp(0x200404, 0x480c0c, 0x7c1610, 0xba2e14, 0xf65c1e);
+        const MAGMA = EL.lava;
+
+        this._draw('enemy_boss_dragon', 32, 32, (g) => {
+            groundShadow(g, 16, 29, 14, 3, 0.4);
+            // Ambient molten heat pool on ground
+            g.fillStyle(MAGMA.mid, 0.16); g.fillRect(4, 23, 24, 7);
+            g.fillStyle(MAGMA.light, 0.28); g.fillRect(8, 25, 16, 4);
+
+            // ── Grand Draconic Wings (swept high behind back) ──
+            const WING = [
+                [9, 12], [6, 12], [4, 12], [2, 12], [1, 12], [0, 12],
+                [0, 12], [1, 12], [2, 12], [3, 12], [5, 12], [7, 12],
+                [9, 12],
+            ];
+            for (const dir of [-1, 1]) {
+                const at = (x) => (dir < 0 ? x : 31 - x);
+                const spans = WING.map(([a, b]) => (dir < 0 ? [a, b] : [at(b), at(a)]));
+                volume(g, profile(3, spans), MEMBRANE, { lu: 0.5, lv: 0.12, spec: 0.1, band: 0.35 });
+
+                // Wing bones: main spar sweeping up to wingtip, then 3 finger spines
+                line(g, at(14), 10, at(1), 3, BASALT.dark);
+                line(g, at(14), 11, at(0), 8, BASALT.mid);
+                line(g, at(14), 12, at(2), 13, MAGMA.dark);
+
+                // Sharp obsidian wing claw at the apex
+                g.fillStyle(BASALT.glow); g.fillRect(at(1), 2, 2, 2);
+                g.fillStyle(MAGMA.glow);  g.fillRect(at(2), 3, 1, 1);
+            }
+
+            // ── Tail curling behind ──────────────────
+            for (const [x, y, w] of [[13, 26, 6], [9, 27, 6], [5, 28, 5], [2, 29, 4]]) {
+                g.fillStyle(BASALT.deep); g.fillRect(x - 1, y - 1, w + 2, 3);
+                g.fillStyle(BASALT.mid);  g.fillRect(x, y, w, 1);
+                g.fillStyle(MAGMA.glow);  g.fillRect(x + 1, y, 1, 1);
+            }
+
+            // ── Muscular Hind Limbs ──────────────────
+            for (const [x, lit] of [[6, 1], [21, 0]]) {
+                g.fillStyle(BASALT.deep);  g.fillRect(x - 1, 20, 7, 9);
+                g.fillStyle(BASALT.dark);  g.fillRect(x, 20, 5, 8);
+                g.fillStyle(lit ? BASALT.mid : BASALT.dark); g.fillRect(x, 21, 3, 7);
+                // Basalt talons with glowing magma joints
+                g.fillStyle(MAGMA.light); g.fillRect(x, 28, 2, 1); g.fillRect(x + 3, 28, 2, 1);
+                g.fillStyle(MAGMA.glow);  g.fillRect(x + 1, 28, 1, 1); g.fillRect(x + 4, 28, 1, 1);
+            }
+
+            // ── Massive Basalt Body & Chest (unified profile) ──
+            volume(g, profile(7, [
+                [12, 19], [11, 20], [10, 21], [9, 22], [8, 23], [8, 23],
+                [8, 23], [8, 23], [8, 23], [9, 22], [9, 22], [9, 22],
+                [10, 21], [10, 21], [11, 20], [11, 20], [12, 19],
+            ]), BASALT, { lu: 0.3, lv: 0.22, spec: 0.18 });
+
+            // ── Dragon Head & Jaws ───────────────────
+            volume(g, profile(1, [
+                [13, 18], [11, 20], [10, 21], [9, 22], [9, 22], [9, 22],
+                [10, 21], [11, 20], [12, 19],
+            ]), BASALT, { lu: 0.3, lv: 0.3, spec: 0.22 });
+
+            // Muzzle snout
+            g.fillStyle(BASALT.dark); g.fillRect(12, 7, 8, 3);
+            g.fillStyle(0x140404);    g.fillRect(13, 8, 6, 2);
+            g.fillStyle(MAGMA.glow);  g.fillRect(13, 8, 1, 1); g.fillRect(18, 8, 1, 1); // Nostril sparks
+
+            // Swept-back Obsidian Horns with fiery tips
+            for (const [x, d] of [[8, -2], [23, 2]]) {
+                g.fillStyle(0x100404);     g.fillRect(x, 0, 2, 4);
+                g.fillStyle(BASALT.dark);   g.fillRect(x + d, 0, 2, 3);
+                g.fillStyle(MAGMA.light);  g.fillRect(x + d, 0, 1, 2);
+                g.fillStyle(MAGMA.glow);   g.fillRect(x + d, 0, 1, 1);
+            }
+
+            // Piercing Fiery Slit Eyes
+            this._eyes(g, 11, 19, 4, MAGMA.light, 0xffffff);
+
+            // ── Magma Hearth in the Chest ────────────
+            g.fillStyle(MAGMA.mid, 0.4); g.fillRect(10, 10, 12, 13);
+            for (let y = 10; y <= 21; y += 2) {
+                const w = y < 15 ? 8 : (y < 18 ? 6 : 4);
+                const hx = 16 - (w >> 1);
+                g.fillStyle(MAGMA.deep);  g.fillRect(hx - 1, y, w + 2, 2);
+                g.fillStyle(MAGMA.dark);  g.fillRect(hx, y, w, 2);
+                g.fillStyle(MAGMA.light); g.fillRect(hx + 1, y, Math.max(1, w - 2), 1);
+                if (w >= 4) {
+                    g.fillStyle(MAGMA.glow); g.fillRect(hx + 2, y, w - 4, 1);
+                    g.fillStyle(0xffffff, 0.9); g.fillRect(15, y, 2, 1);
+                }
+            }
+
+            // Magma fissures across the shoulder plates
+            for (const [x, y, w] of [[9, 12, 4], [19, 12, 4], [8, 16, 3], [21, 16, 3], [10, 22, 5], [17, 22, 5]]) {
+                g.fillStyle(MAGMA.dark); g.fillRect(x, y, w, 1);
+                g.fillStyle(MAGMA.glow); g.fillRect(x + 1, y, Math.max(1, w - 2), 1);
+            }
+        });
+    }
+
+    /**
+     * REY VELADOR — Sombra de la Linterna.
+     * Spectral wraith monarch in a unified royal cowl, crowned in gold with an ancient soul reliquary.
+     */
+    _enemyBossSpecter() {
+        const ROBE = ramp(0x120a22, 0x241640, 0x3e2468, 0x623a9e, 0x905cd6);
+        const TRIM = ramp(0x0c2538, 0x144560, 0x226c92, 0x3ca6cb, 0x82e2fa);
+
+        this._draw('enemy_boss_specter', 32, 32, (g) => {
+            // Ethereal hovering pool on ground
+            g.fillStyle(ROBE.mid, 0.14); g.fillRect(6, 25, 20, 5);
+            g.fillStyle(TRIM.light, 0.12); g.fillRect(8, 24, 16, 5);
+
+            // ── Flowing Soul Tatters at Base ─────────
+            for (const [cx, top, len] of [[8, 19, 8], [12, 21, 7], [16, 22, 6], [20, 21, 7], [24, 19, 8]]) {
+                volume(g, taper(top, top + len, 3, 0, cx, 1.8), ROBE,
+                    { lu: 0.3, lv: 0.2, spec: 0.2, alpha: 0.92 });
+                g.fillStyle(TRIM.glow, 0.6); g.fillRect(cx - 1, top + len - 2, 2, 2);
+            }
+
+            // ── Continuous Royal Robe Profile (Pointed Cowl to Sweeping Cloak) ──
+            volume(g, profile(1, [
+                [15, 16], [14, 17], [13, 18], [12, 19], [11, 20], [10, 21],
+                [9, 22],  [8, 23],  [7, 24],  [7, 24],  [6, 25],  [6, 25],
+                [6, 25],  [6, 25],  [7, 24],  [7, 24],  [8, 23],  [8, 23],
+                [9, 22],  [10, 21], [11, 20], [12, 19],
+            ]), ROBE, { lu: 0.3, lv: 0.2, spec: 0.18 });
+
+            // ── Deep Hollow Face Abyss ───────────────
+            g.fillStyle(0x06020c); g.fillRect(10, 6, 12, 8);
+            g.fillStyle(0x0e051a); g.fillRect(11, 5, 10, 2);
+            g.fillStyle(TRIM.glow, 0.15); g.fillRect(10, 8, 12, 5);
+
+            // Piercing Soul Eyes (dual cold cyan stars)
+            for (const x of [11, 18]) {
+                g.fillStyle(0x00e5ff, 0.65); g.fillRect(x - 1, 8, 4, 3);
+                g.fillStyle(0xdff6ff);        g.fillRect(x, 8, 2, 2);
+                g.fillStyle(0xffffff);        g.fillRect(x, 8, 1, 1);
+            }
+
+            // ── Ancient Crown of Gold & Cyan ─────────
+            g.fillStyle(GOLD.deep);  g.fillRect(11, 1, 10, 2);
+            g.fillStyle(GOLD.mid);   g.fillRect(12, 0, 8, 2);
+            // 3 prominent crown spires
+            for (const [cx, h] of [[11, 2], [15, 3], [19, 2]]) {
+                g.fillStyle(GOLD.light); g.fillRect(cx, 1 - h, 2, h);
+                g.fillStyle(TRIM.glow);  g.fillRect(cx, 1 - h, 1, 1);
+            }
+
+            // ── Silver / Cyan Royal Vestment Trim ────
+            g.fillStyle(TRIM.deep);  g.fillRect(14, 10, 4, 13);
+            g.fillStyle(TRIM.mid);   g.fillRect(15, 11, 2, 12);
+            g.fillStyle(TRIM.light); g.fillRect(15, 11, 2, 5);
+            g.fillStyle(TRIM.glow);  g.fillRect(15, 12, 2, 2);
+
+            // ── Grand Ancient Soul Reliquary Lantern (held prominently at left) ──
+            // Arm sleeve leading from shoulder to the lantern
+            g.fillStyle(ROBE.deep);  g.fillRect(4, 14, 4, 4);
+            g.fillStyle(ROBE.light); g.fillRect(5, 14, 2, 3);
+            g.fillStyle(0x0a0314);   g.fillRect(4, 16, 2, 2); // Clawed shadowy hand
+            g.fillStyle(GOLD.mid);   g.fillRect(4, 17, 1, 2); // Golden chain
+
+            // Large Grand Lantern Cage (x=2..8, y=17..26)
+            g.fillStyle(GOLD.deep);  g.fillRect(2, 17, 7, 9);
+            g.fillStyle(GOLD.mid);   g.fillRect(3, 17, 5, 1);
+            g.fillStyle(GOLD.mid);   g.fillRect(3, 25, 5, 1);
+            // Inner radiant soul flame
+            g.fillStyle(0x04020a);   g.fillRect(3, 18, 5, 7);
+            g.fillStyle(0x00e5ff, 0.9); g.fillRect(4, 19, 3, 5);
+            g.fillStyle(0xffffff, 0.95); g.fillRect(5, 20, 1, 3);
+            // Outer radiant aura
+            g.fillStyle(0x00e5ff, 0.16); g.fillRect(1, 16, 9, 11);
+
+            // ── Floating Soul Wisps ──────────────────
+            for (const [x, y] of [[26, 10], [27, 18], [25, 23]]) {
+                g.fillStyle(TRIM.glow, 0.75); g.fillRect(x, y, 2, 2);
+                g.fillStyle(0xffffff, 0.9);   g.fillRect(x, y, 1, 1);
             }
         });
     }

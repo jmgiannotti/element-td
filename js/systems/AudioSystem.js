@@ -257,6 +257,34 @@ class AudioSystem {
             this._tone({ type: 'square', freq: f, dur: 0.26, gain: 0.12, delay: i * 0.13 });
         });
     }
+
+    // ── Boss Cues ─────────────────────────────────
+    _boss_alert() {
+        [180, 220, 293, 220].forEach((f, i) => {
+            this._tone({ type: 'sawtooth', freq: f, dur: 0.32, gain: 0.16, delay: i * 0.14 });
+        });
+        this._noise({ dur: 0.5, gain: 0.12, from: 800, to: 100 });
+    }
+
+    _boss_warn() {
+        this._tone({ type: 'sine', freq: 300, to: 650, dur: 0.45, gain: 0.08 });
+        this._tone({ type: 'sawtooth', freq: 110, to: 220, dur: 0.35, gain: 0.06, delay: 0.1 });
+    }
+
+    _boss_slam() {
+        this._tone({ type: 'triangle', freq: 95, to: 30, dur: 0.55, gain: 0.24 });
+        this._noise({ dur: 0.45, gain: 0.2, from: 1200, to: 60 });
+    }
+
+    _boss_fire() {
+        this._noise({ dur: 0.65, gain: 0.18, from: 2400, to: 300 });
+        this._tone({ type: 'sawtooth', freq: 220, to: 80, dur: 0.4, gain: 0.12 });
+    }
+
+    _boss_nova() {
+        this._tone({ type: 'sine', freq: 660, to: 110, dur: 0.45, gain: 0.16 });
+        this._noise({ dur: 0.4, gain: 0.14, from: 1800, to: 150, delay: 0.05 });
+    }
 }
 
 export const audio = new AudioSystem();

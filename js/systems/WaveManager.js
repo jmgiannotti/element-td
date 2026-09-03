@@ -63,6 +63,9 @@ export class WaveManager {
                 const spawn = this.spawnQueue.shift();
                 const enemy = Enemy.obtain(this.scene, spawn.type, null, null, this.currentHpMultiplier || 1);
                 this.scene.enemies.push(enemy);
+                if (enemy.isBoss) {
+                    this.scene.events.emit('boss-spawned', enemy);
+                }
                 this.spawnTimer = this.spawnQueue.length > 0
                     ? this.spawnQueue[0].delay
                     : 0;
@@ -91,6 +94,13 @@ export class WaveManager {
         return false; // Endless mode has no last wave
     }
 
+    get isNextWaveBoss() {
+        if (this.currentWave < this.totalWaves) {
+            return !!WAVE_DATA[this.currentWave]?.isBossWave;
+        }
+        return (this.currentWave + 1) % 5 === 0;
+    }
+
     /**
      * What the next wave is made of, so the player can pick their elements
      * before it arrives rather than after. `currentWave` is bumped the moment a
@@ -105,13 +115,14 @@ export class WaveManager {
         // Procedural composition for endless mode
         if (!this._cachedProceduralComposition || this._cachedWaveIndex !== this.currentWave) {
             const extraWaves = this.currentWave - this.totalWaves + 1;
+            const isBoss = (this.currentWave + 1) % 5 === 0;
             
             // Randomize between 2 to 4 types
             const types = ['slime', 'golem', 'specter', 'dragon'];
             const numTypes = 2 + Math.floor(Math.random() * 3);
             const selectedTypes = [...types].sort(() => 0.5 - Math.random()).slice(0, numTypes);
             
-            this._cachedProceduralComposition = selectedTypes.map(type => {
+            const comp = selectedTypes.map(type => {
                 // Exponential amount scaling (+10% per wave)
                 let baseCount = type === 'slime' ? 8 : (type === 'dragon' ? 1 : 4);
                 let count = Math.round(baseCount * Math.pow(1.10, extraWaves));
@@ -121,6 +132,14 @@ export class WaveManager {
                 
                 return { type, count, delay };
             });
+
+            if (isBoss) {
+                const bossPool = ['boss_titan', 'boss_dragon', 'boss_specter'];
+                const bossType = bossPool[Math.floor(Math.random() * bossPool.length)];
+                comp.push({ type: bossType, count: 1, delay: 2500 });
+            }
+            
+            this._cachedProceduralComposition = comp;
             this._cachedWaveIndex = this.currentWave;
         }
 

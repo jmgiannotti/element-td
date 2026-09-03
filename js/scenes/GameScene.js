@@ -9,6 +9,7 @@ import { RouteView } from '../systems/RouteView.js';
 import { FloatingText } from '../systems/FloatingText.js';
 import { TutorialSystem } from '../systems/TutorialSystem.js';
 import { SpellSystem } from '../systems/SpellSystem.js';
+import { TelegraphSystem } from '../systems/TelegraphSystem.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { ParticleSystem } from '../systems/ParticleSystem.js';
 import { audio } from '../systems/AudioSystem.js';
@@ -79,6 +80,7 @@ export class GameScene extends Phaser.Scene {
         this.economySystem = new EconomySystem(this);
         this.waveManager = new WaveManager(this);
         this.fusionSystem = new FusionSystem(this);
+        this.telegraphSystem = new TelegraphSystem(this);
         // Reads the hero and the enemy list lazily, at cast time, so it can be
         // built before either exists.
         this.spellSystem = new SpellSystem(this);
@@ -1277,6 +1279,7 @@ export class GameScene extends Phaser.Scene {
         // After the hero: the channel VFX are pinned to where he ended up this
         // frame, not to where he was at the start of it.
         this.spellSystem.update(delta);
+        this.telegraphSystem.update(delta);
         // Unscaled delta: a fusion drag is a cursor, not a thing in the world,
         // so it must not slow down or speed up with the VEL toggle.
         this.fusionSystem.update(this.game.loop.delta);

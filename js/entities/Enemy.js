@@ -62,6 +62,12 @@ export class Enemy {
         this.errandDone = false;
         this.distanceTraveled = 0;
 
+        // ── Boss fields ─────────────────────────
+        this.isBoss = !!this.data.isBoss;
+        this.bossSkills = this.data.bossSkills ? [...this.data.bossSkills] : null;
+        this.currentSkillIndex = 0;
+        this.skillCooldownTimer = this.bossSkills ? (this.bossSkills[0].initialCd || 3000) : 0;
+
         // Path and Spawning
         const exitWp = scene.gridSystem.exitPoint;
         if (spawnX !== null && spawnY !== null) {
@@ -181,6 +187,14 @@ export class Enemy {
             if (this.burnTimer <= 0) {
                 this.burning = false;
                 this.burnSource = null;
+            }
+        }
+
+        // ── Boss abilities ──────────────────────
+        if (this.isBoss && this.bossSkills && this.bossSkills.length > 0) {
+            this.skillCooldownTimer -= delta;
+            if (this.skillCooldownTimer <= 0) {
+                this._castBossSkill();
             }
         }
 
@@ -515,6 +529,25 @@ export class Enemy {
         this._updateHpBar();
     }
 
+    _castBossSkill() {
+        if (!this.alive || !this.bossSkills || this.bossSkills.length === 0) return;
+        const skill = this.bossSkills[this.currentSkillIndex % this.bossSkills.length];
+        this.currentSkillIndex++;
+        this.skillCooldownTimer = skill.cd || 8000;
+
+        if (this.scene.telegraphSystem) {
+            this.scene.telegraphSystem.addTelegraph(this, skill);
+        }
+
+        this.scene.events.emit('boss-ability-cast', { boss: this, skill });
+
+        if (this.scene.floating) {
+            this.scene.floating.show(this.x, this.y - 28, `¡${skill.name.toUpperCase()}!`, {
+                color: skill.colorHex || '#FFD54F', size: 9, rise: 18, duration: 1200,
+            });
+        }
+    }
+
     _updateHpBar() {
         if (!this.hpBg) return;
         const pct = Math.max(0, this.hp / this.maxHp);
@@ -542,6 +575,10 @@ export class Enemy {
         const { silent = false, effect = EFFECT.NORMAL, showNumber = !silent, source = null } = opts;
 
         this.hp -= amount;
+
+        if (this.isBoss) {
+            this.scene.events.emit('boss-hp-changed', this);
+        }
 
         if (source && source.recordDamage) {
             source.recordDamage(amount);
@@ -608,6 +645,13 @@ export class Enemy {
         if (this.agroRing) { 
             this.agroRing.destroy(); 
             this.agroRing = null; 
+        }
+
+        if (this.isBoss) {
+            this.scene.events.emit('boss-defeated', this);
+            if (this.scene.cameras?.main) {
+                this.scene.cameras.main.flash(300, 255, 215, 0, false);
+            }
         }
 
         this.scene.events.emit('enemy-died', this);
@@ -709,6 +753,11 @@ export class Enemy {
         this.distanceTraveled = 0;
         this.heroAttackTimer = 0;
         this.blockAttackTimer = 0;
+
+        this.isBoss = !!this.data.isBoss;
+        this.bossSkills = this.data.bossSkills ? [...this.data.bossSkills] : null;
+        this.currentSkillIndex = 0;
+        this.skillCooldownTimer = this.bossSkills ? (this.bossSkills[0].initialCd || 3000) : 0;
 
         const exitWp = scene.gridSystem.exitPoint;
         if (spawnX !== null && spawnY !== null) {

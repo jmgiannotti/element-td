@@ -94,6 +94,7 @@ export class UIScene extends Phaser.Scene {
         this._buildHeroHud();
         this._buildTutorialBanner();
         this._buildPauseOverlay();
+        this._buildBossHpBar();
         this._registerEvents();
 
         this._updateAffordability();
@@ -634,10 +635,15 @@ export class UIScene extends Phaser.Scene {
             return;
         }
 
-        this.previewLabel.setText(`PROX ${wm.nextWaveNumber}`).setColor('#78909C');
+        const isBoss = wm.isNextWaveBoss || comp.some(g => ENEMY_DATA[g.type]?.isBoss);
+        if (isBoss) {
+            this.previewLabel.setText(`JEFE ${wm.nextWaveNumber}`).setColor('#FFD54F');
+        } else {
+            this.previewLabel.setText(`PROX ${wm.nextWaveNumber}`).setColor('#78909C');
+        }
 
         // Whatever room is left after the label, split evenly.
-        const startX = LEFT + 54;
+        const startX = isBoss ? LEFT + 62 : LEFT + 54;
         const span = RIGHT - startX;
         const step = Math.min(52, span / Math.max(1, comp.length));
 
@@ -647,7 +653,7 @@ export class UIScene extends Phaser.Scene {
             const x = startX + step * i + 12;
 
             const icon = this.add.sprite(x, ROW_PREVIEW, safeTexture(this, `enemy_${group.type}`, 'enemy_slime'))
-                .setScale(0.65)
+                .setScale(data.isBoss ? 0.8 : 0.65)
                 .setInteractive({ useHandCursor: false });
 
             // The element rides on the icon's shoulder as a glyph, not as a
@@ -660,6 +666,13 @@ export class UIScene extends Phaser.Scene {
                 fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
                 stroke: '#12122a', strokeThickness: 3,
             }).setOrigin(0, 0.5);
+
+            if (data.isBoss) {
+                const crown = this.add.text(x - 2, ROW_PREVIEW - 14, '👑', {
+                    fontSize: '8px',
+                }).setOrigin(0.5);
+                this.previewEntries.push(crown);
+            }
 
             icon.on('pointerover', () => this._showEnemyTooltip(group.type, x + 40, ROW_PREVIEW - 58));
             icon.on('pointerout', () => this._hideTooltip());
@@ -1237,6 +1250,12 @@ export class UIScene extends Phaser.Scene {
             }
         });
 
+        // ── Boss Events ─────────────────────────
+        on('boss-spawned', (boss) => this._onBossSpawned(boss));
+        on('boss-hp-changed', (boss) => this._onBossHpChanged(boss));
+        on('boss-ability-cast', (data) => this._onBossAbilityCast(data));
+        on('boss-defeated', (boss) => this._onBossDefeated(boss));
+
         on('game-over', () => {
             this._closeUpgradePanel();
             this._closeHelpPanel();
@@ -1249,6 +1268,157 @@ export class UIScene extends Phaser.Scene {
             this._showTutorialStep(null, null);
             this._showEndScreen('¡VICTORIA!', '#4CAF50');
         });
+    }
+
+    // ─── Boss Health Bar (Top Screen) ───────────────────
+    _buildBossHpBar() {
+        this.activeBoss = null;
+        this.bossBarContainer = this.add.container(MAP_CX, -50).setDepth(60).setVisible(false);
+
+        // Dark background with gold border
+        const bgW = 340;
+        const bgH = 38;
+        this.bossBarBg = this.add.rectangle(0, 0, bgW, bgH, 0x0c0c18, 0.94);
+        this.bossBarBg.setStrokeStyle(1.5, 0xFFD54F, 0.9);
+
+        // Boss Title text
+        this.bossTitleText = this.add.text(0, -9, 'JEFE', {
+            fontFamily: FONT, fontSize: '8px', color: '#FFD54F',
+            stroke: '#000000', strokeThickness: 3, letterSpacing: 1,
+        }).setOrigin(0.5);
+
+        // HP bar track
+        const barW = 300;
+        const barH = 10;
+        this.bossHpTrack = this.add.rectangle(0, 6, barW, barH, 0x1a1a2e, 0.95);
+        this.bossHpTrack.setStrokeStyle(1, 0x3a3a5a);
+
+        // HP bar fill
+        this.bossHpFill = this.add.rectangle(-barW / 2, 6, barW, barH - 2, 0xFF5722, 1).setOrigin(0, 0.5);
+
+        // HP text
+        this.bossHpText = this.add.text(0, 6, '1000 / 1000', {
+            fontFamily: FONT, fontSize: '7px', color: '#FFFFFF',
+            stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0.5);
+
+        // Ability / Status announcement line
+        this.bossStatusText = this.add.text(0, 26, '', {
+            fontFamily: FONT, fontSize: '7px', color: '#FF8A80',
+            stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0.5).setVisible(false);
+
+        this.bossBarContainer.add([
+            this.bossBarBg,
+            this.bossTitleText,
+            this.bossHpTrack,
+            this.bossHpFill,
+            this.bossHpText,
+            this.bossStatusText,
+        ]);
+    }
+
+    _onBossSpawned(boss) {
+        this.activeBoss = boss;
+        const data = boss.data;
+
+        const titlePart = data.title ? ` — ${data.title}` : '';
+        this.bossTitleText.setText(`${data.name.toUpperCase()}${titlePart}`);
+        
+        // Element-based color for HP fill
+        const col = data.color || 0xFF5722;
+        this.bossHpFill.fillColor = col;
+        this.bossHpFill.width = 300;
+        this.bossHpText.setText(`${boss.hp} / ${boss.maxHp}`);
+        this.bossStatusText.setText('').setVisible(false);
+
+        this.bossBarContainer.setVisible(true);
+        this.bossBarContainer.y = -50;
+        this.tweens.add({
+            targets: this.bossBarContainer,
+            y: 28,
+            duration: 400,
+            ease: 'Back.easeOut',
+        });
+
+        audio.play('boss_alert');
+        this._flashNotification(`¡ALERTA: HA LLEGADO ${data.name.toUpperCase()}!`, '#FFD54F');
+    }
+
+    _onBossHpChanged(boss) {
+        if (!this.activeBoss || !this.activeBoss.alive) {
+            this.activeBoss = boss;
+        }
+        if (this.activeBoss !== boss) return;
+
+        const pct = Phaser.Math.Clamp(boss.hp / boss.maxHp, 0, 1);
+        this.tweens.add({
+            targets: this.bossHpFill,
+            width: 300 * pct,
+            duration: 120,
+            ease: 'Linear',
+        });
+
+        this.bossHpText.setText(`${Math.max(0, Math.round(boss.hp))} / ${boss.maxHp}`);
+    }
+
+    _onBossAbilityCast(data) {
+        const { boss, skill } = data;
+        if (this.activeBoss && this.activeBoss !== boss) return;
+
+        this.bossStatusText.setText(`¡CANALIZANDO ${skill.name.toUpperCase()}!`)
+            .setColor(skill.colorHex || '#FF8A80')
+            .setVisible(true);
+
+        this.tweens.add({
+            targets: this.bossStatusText,
+            scaleX: 1.12, scaleY: 1.12,
+            duration: 180, yoyo: true, repeat: 3,
+        });
+
+        this.time.delayedCall(skill.chargeMs || 1500, () => {
+            if (this.bossStatusText) {
+                this.bossStatusText.setText('').setVisible(false);
+            }
+        });
+    }
+
+    _onBossDefeated(boss) {
+        if (this.activeBoss === boss) {
+            this.bossHpFill.width = 0;
+            this.bossHpText.setText(`0 / ${boss.maxHp}`);
+            this.bossStatusText.setText('¡JEFE DERROTADO!').setColor('#4CAF50').setVisible(true);
+
+            // Container pulse / victory glow
+            this.tweens.add({
+                targets: this.bossBarBg,
+                strokeColor: 0x4CAF50,
+                duration: 200,
+                yoyo: true,
+                repeat: 3,
+            });
+
+            this._flashNotification(`¡${boss.data.name.toUpperCase()} HA SIDO DERROTADO!`, '#4CAF50');
+
+            this.time.delayedCall(1800, () => {
+                // Check if another boss is still alive
+                const remainingBoss = this.gs.enemies.find(e => e.alive && e.isBoss && e !== boss);
+                if (remainingBoss) {
+                    this._onBossSpawned(remainingBoss);
+                } else {
+                    this.tweens.add({
+                        targets: this.bossBarContainer,
+                        y: -50,
+                        duration: 350,
+                        ease: 'Quad.easeIn',
+                        onComplete: () => {
+                            this.bossBarContainer.setVisible(false);
+                            this.activeBoss = null;
+                        },
+                    });
+                }
+            });
+        }
     }
 
     // ─── Modal plumbing ─────────────────────────────────
