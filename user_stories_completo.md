@@ -337,7 +337,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 
 ## 👑 Epic 9: Jefes y Eventos de Oleada
 
-### US 9.1: Oleadas de Jefe con Ataques Telegrafiados
+### US 9.1: Oleadas de Jefe con Ataques Telegrafiados [✓]
 **Como** jugador,  
 **Quiero** enfrentarme a jefes especiales cada 5 oleadas que ejecuten habilidades de área anunciadas visualmente en el suelo,  
 **Para** tener un combate clímax donde deba mover activamente al héroe y reposicionar defensas.
@@ -346,7 +346,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Jefes con barra de vida superior prominente y habilidades especiales (ej. rugido que aturde torres, fuego en línea recta).
 > - Telegrafiado visual 1.5s antes del impacto para dar tiempo de esquivar con el héroe.
 > 
-> *Estado:* **Pendiente**.
+> *Estado:* **Implementado** en `EnemyData.js`, `Enemy.js`, `WaveData.js`, `WaveManager.js`, `Tower.js`, `TelegraphSystem.js`, `BootScene.js`, `UIScene.js`, `GameScene.js` y `AudioSystem.js`.
 
 ---
 
@@ -439,14 +439,17 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > 
 > *Estado:* **Pendiente**.
 
-### US 14.2: Modo Sin Fin (Endless Mode)
+### US 14.2: Modo Sin Fin (Endless Mode) [✓]
 **Como** jugador veterano,  
 **Quiero** que tras superar la oleada base de cualquier mapa pueda continuar jugando en un modo infinito con dificultad y recompensas crecientes,  
 **Para** probar mis defensas al límite y registrar puntuaciones récord.
 
 > **Criterios de Aceptación:**
-> - Opción de "Continuar en Modo Sin Fin" en la pantalla de victoria.
-> *Estado:* **Pendiente**.
+> - Botón interactivo de "MODO INFINITO" en la pantalla de victoria (`UIScene.js`) que descongela la partida y emite el inicio de la siguiente oleada.
+> - Generación procedural de composiciones infinitas en `WaveManager.js`, con escalado exponencial de enemigos (+10% por oleada), reducción progresiva de intervalos y jefes periódicos cada 5 oleadas.
+> - Adaptación visual del contador de oleadas a formato infinito (`OLEADA X/∞`) en el HUD superior de `UIScene.js`.
+> 
+> *Estado:* **Implementado** en `WaveManager.js` y `UIScene.js`.
 
 ### US 14.3: Banda Sonora Ambiental y Música Dinámica
 **Como** jugador,  
@@ -495,14 +498,239 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > 
 > *Estado:* **Pendiente**.
 
-### US 15.3: Iconografía Pixel Art Dedicada (Reemplazo de Emojis y Glifos)
-**Como** jugador,  
-**Quiero** que todos los indicadores de la interfaz (recursos, vidas, elementos, iconos de habilidades y ajustes) utilicen sprites pixel-art consistentes con el estilo visual del juego en lugar de emojis o caracteres unicode del sistema,  
-**Para** tener una experiencia visual homogénea, inmersiva y sin inconsistencias entre navegadores o sistemas operativos.
+### US 15.3: Sprite Pixel Art en `.ase` para Elemento Fuego (`🔥`)
+**Como** creador y jugador,  
+**Quiero** crear un sprite pixel art dedicado para el elemento Fuego en Aseprite,  
+**Para** reemplazar el emoji `🔥` en la definición de torres, codex, vista previa de oleadas y tooltips sin fallos de tipografía.
 
 > **Criterios de Aceptación:**
-> - Sprites dedicados de 8×8 / 16×16 para: Moneda de Oro, Orbe de Maná (`✦`), Corazón de Vidas (`♥`).
-> - Iconos visuales pixel art para los elementos (Fuego, Agua, Tierra, Rayo y glifos de híbridos).
-> - Iconos de interfaz propios: Engranaje de opciones, flechas de efectividad elemental (▲/▼) y botón de sonido.
+> - Archivo fuente: `icon_fire.ase` (resolución 8×8 o 16×16 px).
+> - Paleta cálida ignea (`#FFA22C`, `#E85D16`, `#FF4500`).
+> - Exportación a PNG e integración en Phaser sustituyendo el emoji de fuego.
+> - Excelente legibilidad a escala nativa en interfaz y tooltips.
 > 
 > *Estado:* **Pendiente**.
+
+---
+
+### US 15.4: Sprite Pixel Art en `.ase` para Elemento Agua (`💧`)
+**Como** creador y jugador,  
+**Quiero** crear un sprite pixel art dedicado para el elemento Agua en Aseprite,  
+**Para** sustituir el emoji `💧` por una gota/orbe acuático nítido y estilizado.
+
+> **Criterios de Aceptación:**
+> - Archivo fuente: `icon_water.ase` (resolución 8×8 o 16×16 px).
+> - Paleta celeste y azul cian (`#74D2F5`, `#2E9BD8`).
+> - Integración en `TowerData.js`, codex y fichas informativas.
+> - Silueta reconocible de gota o gema líquida.
+> 
+> *Estado:* **Pendiente**.
+
+---
+
+### US 15.5: Sprite Pixel Art en `.ase` para Elemento Aire (`💨`)
+**Como** creador y jugador,  
+**Quiero** crear un sprite pixel art para el elemento Aire en Aseprite,  
+**Para** reemplazar el emoji de viento `💨` por un vórtice o ráfaga pixel art representativa.
+
+> **Criterios de Aceptación:**
+> - Archivo fuente: `icon_air.ase` (resolución 8×8 o 16×16 px).
+> - Paleta eólica suave (`#C3D7E2`, `#88A0B2`, `#FFFFFF`).
+> - Reemplazo del emoji en codex, panel de construcción y tooltips.
+> - Claridad visual sin confundirse con efectos de humo.
+> 
+> *Estado:* **Pendiente**.
+
+---
+
+### US 15.6: Sprite Pixel Art en `.ase` para Elemento Tierra (`🟤`)
+**Como** creador y jugador,  
+**Quiero** diseñar un sprite pixel art para el elemento Tierra en Aseprite,  
+**Para** dejar atrás el emoji sustituto `🟤` y mostrar una roca o gema telúrica genuina.
+
+> **Criterios de Aceptación:**
+> - Archivo fuente: `icon_earth.ase` (resolución 8×8 o 16×16 px).
+> - Paleta ocre/térrea (`#C4924F`, `#8F6234`, `#5D4037`).
+> - Icono con forma de roca o runa de piedra facetada.
+> - Reemplazo completo en datos elementales y codex.
+> 
+> *Estado:* **Pendiente**.
+
+---
+
+### US 15.7: Sprite Pixel Art en `.ase` para Híbrido Hielo (`❄️`)
+**Como** creador y jugador,  
+**Quiero** crear un sprite en Aseprite para el elemento híbrido Hielo (Agua + Aire),  
+**Para** sustituir el emoji `❄️` por un cristal de escarcha estilizado acorde al juego.
+
+> **Criterios de Aceptación:**
+> - Archivo fuente: `icon_ice.ase` (resolución 8×8 o 16×16 px).
+> - Paleta escarchada brillante (`#92EBF5`, `#36B6CC`, `#E0F7FA`).
+> - Forma de copo o cristal de hielo puntiagudo.
+> - Reemplazo en tarjetas de fusión y códice de enemigos.
+> 
+> *Estado:* **Pendiente**.
+
+---
+
+### US 15.8: Sprite Pixel Art en `.ase` para Híbrido Tormenta (`⚡`)
+**Como** creador y jugador,  
+**Quiero** diseñar un rayo pixel art en Aseprite para el elemento Tormenta (Aire + Fuego),  
+**Para** reemplazar el emoji `⚡` con un relámpago enérgico y contrastado.
+
+> **Criterios de Aceptación:**
+> - Archivo fuente: `icon_storm.ase` (resolución 8×8 o 16×16 px).
+> - Paleta eléctrica (`#FFE45C`, `#FFF59D`, acentos violetas `#6B45D6`).
+> - Silueta de rayo angular con buen impacto visual en tamaño pequeño.
+> - Reemplazo del emoji en datos de torres híbridas y UI.
+> 
+> *Estado:* **Pendiente**.
+
+---
+
+### US 15.9: Sprite Pixel Art en `.ase` para Híbrido Lava (`🌋`)
+**Como** creador y jugador,  
+**Quiero** crear un sprite en Aseprite para el elemento híbrido Lava (Tierra + Fuego),  
+**Para** sustituir el emoji `🌋` por una gota o roca de magma fundido ardiente.
+
+> **Criterios de Aceptación:**
+> - Archivo fuente: `icon_lava.ase` (resolución 8×8 o 16×16 px).
+> - Paleta volcánica intensa (`#FF8A2B`, `#D43D0A`, núcleo `#FFEB3B`).
+> - Representación de magma escurriendo o fragmento incandescente.
+> - Integración en el panel de fusiones y fichas de daño en el tiempo.
+> 
+> *Estado:* **Pendiente**.
+
+---
+
+### US 15.10: Sprite Pixel Art en `.ase` para Híbrido Lodo (`🌀`)
+**Como** creador y jugador,  
+**Quiero** diseñar un sprite en Aseprite para el elemento híbrido Lodo (Tierra + Agua),  
+**Para** reemplazar el emoji `🌀` por una mancha o remolino de fango cohesivo.
+
+> **Criterios de Aceptación:**
+> - Archivo fuente: `icon_mud.ase` (resolución 8×8 o 16×16 px).
+> - Paleta pantanosa y cieno (`#62C3A8`, `#2C8D74`, `#3E2723`).
+> - Distinción visual clara respecto al elemento tierra puro.
+> - Reemplazo del emoji en codex y preview de torres de control de masas.
+> 
+> *Estado:* **Pendiente**.
+
+---
+
+### US 15.11: Sprite Pixel Art en `.ase` para Corazón de Vidas (`♥`)
+**Como** creador y jugador,  
+**Quiero** diseñar un icono de corazón pixel art en Aseprite para el contador de vidas,  
+**Para** retirar el carácter de texto `♥` del HUD y lograr un indicador nítido y pulsante.
+
+> **Criterios de Aceptación:**
+> - Archivo fuente: `icon_heart.ase` (resolución 8×8 o 16×16 px).
+> - Paleta rubí viva (`#FF1744`, `#D50000`, reflejo blanco `#FF8A80`).
+> - Versión opcional de corazón roto o atenuado al estar en peligro de derrota.
+> - Reemplazo en el texto superior de vidas de `UIScene.js`.
+> 
+> *Estado:* **Pendiente**.
+
+---
+
+### US 15.12: Sprite Pixel Art en `.ase` para Corona de Jefes (`👑`)
+**Como** creador y jugador,  
+**Quiero** crear una corona real dorada en Aseprite para identificar a los jefes,  
+**Para** evitar errores de sustitución en la fuente "Press Start 2P" y tener un marcador de jefe imponente.
+
+> **Criterios de Aceptación:**
+> - Archivo fuente: `icon_crown.ase` (resolución 8×8 o 16×16 px).
+> - Paleta de oro brillante con rubíes (`#FFD54F`, `#FFB300`, acentos `#D50000`).
+> - Integración en el preview inferior de oleadas de jefe y anuncios de victoria/alerta.
+> - Perfecta nitidez al escalarse o acompañar sprites de enemigos.
+> 
+> *Estado:* **Pendiente**.
+
+---
+
+### US 15.13: Sprite Pixel Art en `.ase` para Orbe / Mota de Maná (`✦`) [✓]
+**Como** creador y jugador,  
+**Quiero** diseñar un orbe de maná refinado en Aseprite,  
+**Para** sustituir el símbolo textual `✦` en costes de hechizos, barra de templo y notificaciones.
+
+> **Criterios de Aceptación:**
+> - Archivo fuente: `mana.ase` (resolución 21×24 px).
+> - Paleta violeta / amatista luminosa con núcleo brillante y halo místico.
+> - Script de compilación `update_mana.cjs` que convierte `mana.ase` en Data URI en `ManaSprite.js`.
+> - Carga de textura `'mana_mote'` en `BootScene.js` e integración en tarjeta de recursos y HUD de `UIScene.js`.
+> 
+> *Estado:* **Implementado** en `mana.ase`, `update_mana.cjs`, `ManaSprite.js`, `BootScene.js` y `UIScene.js`.
+
+---
+
+### US 15.14: Sprite Pixel Art en `.ase` para Moneda de Oro (`🪙`) [✓]
+**Como** creador y jugador,  
+**Quiero** contar con un sprite dedicado de moneda de oro en Aseprite,  
+**Para** estandarizar el recurso de oro en la tarjeta HUD, costes de compra y venta de torres.
+
+> **Criterios de Aceptación:**
+> - Archivo fuente: `coin.ase` (resolución 17×17 px).
+> - Paleta de oro reluciente (`#FFD700`, `#FFB300`, borde `#B78103`).
+> - Script de compilación `update_coin.cjs` que convierte `coin.ase` en Data URI en `CoinSprite.js`.
+> - Carga de textura `'icon_coin'` en `BootScene.js` y uso generalizado en el HUD y costes de torres de `UIScene.js`.
+> 
+> *Estado:* **Implementado** en `coin.ase`, `update_coin.cjs`, `CoinSprite.js`, `BootScene.js` y `UIScene.js`.
+
+---
+
+### US 15.15: Sprite Pixel Art en `.ase` para Engranaje de Opciones (`⚙️`)
+**Como** creador y jugador,  
+**Quiero** diseñar un icono de engranaje mecánico en Aseprite,  
+**Para** reemplazar el carácter textual `⚙` en el botón de ajustes del HUD y modal de opciones.
+
+> **Criterios de Aceptación:**
+> - Archivo fuente: `icon_gear.ase` (resolución 12×12 o 16×16 px).
+> - Paleta metálica técnica (`#90CAF9`, `#546E7A`, borde `#263238`).
+> - Estado interactivo normal y hover (iluminado en `#FFD54F`).
+> - Integración en el botón superior derecho de `UIScene` y título de `OptionsModal`.
+> 
+> *Estado:* **Pendiente**.
+
+---
+
+### US 15.16: Sprite Pixel Art en `.ase` para Indicadores de Efectividad (`▲` y `▼`)
+**Como** creador y jugador,  
+**Quiero** crear flechas de efectividad de combate personalizadas en Aseprite,  
+**Para** reemplazar los triángulos de texto `▲` (Súper Efectivo) y `▼` (Resistido).
+
+> **Criterios de Aceptación:**
+> - Archivos fuente: `icon_effective_up.ase` (dorado/verde) e `icon_resist_down.ase` (gris azulado).
+> - Tamaño compacto de 7×7 u 8×8 px.
+> - Uso en números flotantes de combate, codex elemental y comparativas de daño.
+> - Alto contraste visual contra cualquier fondo de terreno.
+> 
+> *Estado:* **Pendiente**.
+
+---
+
+### US 15.17: Sprite Pixel Art en `.ase` para Altavoz y Silencio (`🔊` / `🔇`)
+**Como** creador y jugador,  
+**Quiero** diseñar iconos de sonido activo y mute en Aseprite,  
+**Para** disponer de controles audiovisuales directos y comprensibles visualmente.
+
+> **Criterios de Aceptación:**
+> - Archivos fuente: `icon_sound_on.ase` e `icon_sound_off.ase` (12×12 o 16×16 px).
+> - Altavoz con ondas sonoras (on) y altavoz tachado en rojo suave (off).
+> - Integración en el botón de alternar sonido del modal de opciones y barra rápida.
+> 
+> *Estado:* **Pendiente**.
+
+---
+
+### US 15.18: Sprite Pixel Art en `.ase` para Botón de Iniciar Oleada (`▶`)
+**Como** creador y jugador,  
+**Quiero** diseñar una flecha de reproducción/play rúnica en Aseprite,  
+**Para** reemplazar el carácter `▶` en el botón principal de inicio de oleada.
+
+> **Criterios de Aceptación:**
+> - Archivo fuente: `icon_play_wave.ase` (resolución 8×8 o 12×12 px).
+> - Paleta de esmeralda y oro (`#81C784`, `#FFFFFF`, acentos `#4CAF50`).
+> - Acompaña el texto "OLEADA" en la barra lateral con estilo arcade/fantasía.
+> 
+> *Estado:* **Pendiente**.
+
