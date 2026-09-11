@@ -684,12 +684,13 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 **Para** reemplazar el carácter textual `⚙` en el botón de ajustes del HUD y modal de opciones.
 
 > **Criterios de Aceptación:**
-> - Archivo fuente: `icon_gear.ase` (resolución 12×12 o 16×16 px).
-> - Paleta metálica técnica (`#90CAF9`, `#546E7A`, borde `#263238`).
+> - Archivo fuente: `assets/gear32.ase` (30×30 px útil).
+> - Script de compilación `update_gear.cjs` que convierte `gear32.ase` en Data URI en `GearSprite.js`.
+> - Paleta metálica técnica (`#b6c2d8`, `#7f8ca8`, `#4d5973`, borde `#242838`).
 > - Estado interactivo normal y hover (iluminado en `#FFD54F`).
 > - Integración en el botón superior derecho de `UIScene` y título de `OptionsModal`.
 > 
-> *Estado:* **Pendiente**.
+> *Estado:* **Implementado** en `assets/gear32.ase`, `update_gear.cjs`, `GearSprite.js`, `BootScene.js`, `UIScene.js` y `OptionsModal.js`.
 
 ---
 

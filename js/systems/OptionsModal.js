@@ -52,14 +52,23 @@ export class OptionsModal {
         bg.setStrokeStyle(2, 0xFFD54F);
 
         // Inner header
-        const title = this.scene.add.text(0, -h / 2 + 20, '⚙ OPCIONES', {
+        const title = this.scene.add.text(0, -h / 2 + 20, 'OPCIONES', {
             fontFamily: FONT, fontSize: '11px', color: '#FFD54F',
             stroke: '#000000', strokeThickness: 3,
         }).setOrigin(0.5);
 
+        const iconSize = 14;
+        const gap = 8;
+        const totalHeaderW = iconSize + gap + title.width;
+        const startX = -totalHeaderW / 2;
+
+        const gearIcon = this.scene.add.image(startX + iconSize / 2, -h / 2 + 20, 'icon_gear')
+            .setDisplaySize(iconSize, iconSize);
+        title.setX(startX + iconSize + gap + title.width / 2);
+
         const div1 = this.scene.add.rectangle(0, -h / 2 + 36, w - 40, 1, 0x2a2a5a);
 
-        this.container.add([bg, title, div1]);
+        this.container.add([bg, gearIcon, title, div1]);
 
         // ── 1. Display & Scaling Section ─────────
         const sec1 = this.scene.add.text(-w / 2 + 24, -h / 2 + 50, 'PANTALLA Y ESCALA', {

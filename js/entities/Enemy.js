@@ -94,15 +94,20 @@ export class Enemy {
         if (!this.path) {
             this.alive = false; // Failsafe if path is completely blocked
         } else {
-            // 32×32 art on a 32px tile: one texel to one world pixel, the same
-            // density as the ground it walks on.
+            // 32×32 art on a 32px tile (or 64×64 for giant bosses)
             this.sprite.setScale(1);
             this.sprite.setDepth(10);
 
-            // HP bar, clear of the taller sprite
-            this.hpBg = scene.add.rectangle(this.sprite.x, this.sprite.y - 21, 26, 4, 0x1a1a1a, 0.8);
+            const animKey = `enemy_${type}_pulse`;
+            if (scene.anims.exists(animKey)) {
+                this.sprite.play(animKey);
+            }
+
+            // HP bar, clear of the taller/larger sprite
+            this.hpOffsetY = (this.sprite.height > 32) ? Math.round(this.sprite.height / 2 + 6) : 21;
+            this.hpBg = scene.add.rectangle(this.sprite.x, this.sprite.y - this.hpOffsetY, 26, 4, 0x1a1a1a, 0.8);
             this.hpBg.setStrokeStyle(1, 0x333333).setDepth(11);
-            this.hpFill = scene.add.rectangle(this.sprite.x, this.sprite.y - 21, 24, 2, 0x4CAF50).setDepth(12);
+            this.hpFill = scene.add.rectangle(this.sprite.x, this.sprite.y - this.hpOffsetY, 24, 2, 0x4CAF50).setDepth(12);
 
             // Listen for path changes
             this.pathChangeHandler = () => this.recalculatePath();
@@ -551,11 +556,12 @@ export class Enemy {
     _updateHpBar() {
         if (!this.hpBg) return;
         const pct = Math.max(0, this.hp / this.maxHp);
+        const offY = this.hpOffsetY || 21;
         this.hpBg.x = this.x;
-        this.hpBg.y = this.y - 21;
+        this.hpBg.y = this.y - offY;
         this.hpFill.width = 24 * pct;
         this.hpFill.x = this.x - (24 * (1 - pct)) / 2;
-        this.hpFill.y = this.y - 21;
+        this.hpFill.y = this.y - offY;
 
         if (pct > 0.6) this.hpFill.fillColor = 0x4CAF50;
         else if (pct > 0.3) this.hpFill.fillColor = 0xFFC107;
@@ -786,13 +792,22 @@ export class Enemy {
             .setActive(true)
             .setVisible(true);
 
-        this.hpBg.setPosition(this.sprite.x, this.sprite.y - 21)
+        const animKey = `enemy_${type}_pulse`;
+        if (this.scene.anims.exists(animKey)) {
+            this.sprite.play(animKey);
+        } else if (this.sprite.anims?.isPlaying) {
+            this.sprite.anims.stop();
+        }
+
+        this.hpOffsetY = (this.sprite.height > 32) ? Math.round(this.sprite.height / 2 + 6) : 21;
+
+        this.hpBg.setPosition(this.sprite.x, this.sprite.y - this.hpOffsetY)
             .setAlpha(1)
             .setScale(1)
             .setActive(true)
             .setVisible(true);
             
-        this.hpFill.setPosition(this.sprite.x, this.sprite.y - 21)
+        this.hpFill.setPosition(this.sprite.x, this.sprite.y - this.hpOffsetY)
             .setAlpha(1)
             .setScale(1)
             .setActive(true)

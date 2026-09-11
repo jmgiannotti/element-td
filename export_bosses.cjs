@@ -154,6 +154,9 @@ async function exportBosses() {
 
         console.log('\nExporting boss sprite files:');
 
+        const assetsDir = path.join(__dirname, 'assets');
+        if (!fs.existsSync(assetsDir)) fs.mkdirSync(assetsDir, { recursive: true });
+
         for (const b of bosses) {
             if (!b.data) {
                 console.warn(`  ⚠ No texture found for ${b.key}`);
@@ -167,13 +170,13 @@ async function exportBosses() {
             const png = new PNG({ width, height });
             rgbaBuffer.copy(png.data);
             const pngBuffer = PNG.sync.write(png);
-            const pngPath = path.join(__dirname, `${b.key}.png`);
+            const pngPath = path.join(assetsDir, `${b.key}.png`);
             fs.writeFileSync(pngPath, pngBuffer);
             console.log(`  ✓ ${b.name}: ${pngPath} (${width}×${height} PNG)`);
 
             // 2. Save Aseprite (.ase) file
             const aseBuffer = createAseFile(rgbaBuffer, width, height, b.name);
-            const asePath = path.join(__dirname, `${b.key}.ase`);
+            const asePath = path.join(assetsDir, `${b.key}.ase`);
             fs.writeFileSync(asePath, aseBuffer);
             console.log(`  ✓ ${b.name}: ${asePath} (${width}×${height} Aseprite)`);
         }

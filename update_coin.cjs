@@ -13,7 +13,9 @@ const path = require('path');
 const zlib = require('zlib');
 const { PNG } = require('pngjs');
 
-const ASE_FILE = path.join(__dirname, 'coin.ase');
+const ASE_FILE = fs.existsSync(path.join(__dirname, 'assets', 'coin.ase'))
+    ? path.join(__dirname, 'assets', 'coin.ase')
+    : path.join(__dirname, 'coin.ase');
 const COIN_SPRITE_FILE = path.join(__dirname, 'js', 'data', 'CoinSprite.js');
 
 const buff = fs.readFileSync(ASE_FILE);

@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "sprite": "node update_sprite.cjs",
     "coin": "node update_coin.cjs",
+    "gear": "node update_gear.cjs",
     "bosses": "node update_bosses.cjs",
     "export-bosses": "node export_bosses.cjs"
   },

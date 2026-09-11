@@ -20,7 +20,9 @@ const zlib = require('zlib');
 const { PNG } = require('pngjs');
 
 // ── Configuración ──────────────────────────────────────
-const ASE_FILE = path.join(__dirname, 'Sprite-0002.ase');
+const ASE_FILE = fs.existsSync(path.join(__dirname, 'assets', 'Sprite-0002.ase'))
+    ? path.join(__dirname, 'assets', 'Sprite-0002.ase')
+    : path.join(__dirname, 'Sprite-0002.ase');
 const HERO_SPRITE_FILE = path.join(__dirname, 'js', 'data', 'HeroSprite.js');
 // Fila donde tienen que caer los pies. Hero cuelga la sombra a +14 del centro
 // del sprite, así que 30 es donde el personaje toca el piso. El desplazamiento

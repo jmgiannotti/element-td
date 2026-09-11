@@ -13,6 +13,7 @@ import {
 import { HERO_SPRITE } from '../data/HeroSprite.js';
 import { COIN_SPRITE } from '../data/CoinSprite.js';
 import { MANA_SPRITE } from '../data/ManaSprite.js';
+import { GEAR_SPRITE } from '../data/GearSprite.js';
 import { BOSS_SPRITES } from '../data/BossSprites.js';
 import { SPELLS, SPELL_ORDER } from '../data/SpellData.js';
 
@@ -66,6 +67,7 @@ export function expectedTextureKeys() {
     // sprite — but silently wearing the wrong art is worth a warning.
     if (HERO_SPRITE.enabled) keys.push(HERO_SPRITE.key);
     keys.push(COIN_SPRITE.key);
+    keys.push(GEAR_SPRITE.key);
 
     // The starting look is pre-baked across every lantern tier and every pose:
     // both change several times a wave, and a first-time bake mid-swing would
@@ -121,9 +123,19 @@ export class BootScene extends Phaser.Scene {
         if (!this.textures.exists(MANA_SPRITE.key)) {
             this.load.image(MANA_SPRITE.key, MANA_SPRITE.png);
         }
+        if (!this.textures.exists(GEAR_SPRITE.key)) {
+            this.load.image(GEAR_SPRITE.key, GEAR_SPRITE.png);
+        }
         for (const [key, sprite] of Object.entries(BOSS_SPRITES)) {
             if (sprite?.dataUri && !this.textures.exists(key)) {
-                this.load.image(key, sprite.dataUri);
+                if (sprite.frameCount && sprite.frameCount > 1) {
+                    this.load.spritesheet(key, sprite.dataUri, {
+                        frameWidth: sprite.width,
+                        frameHeight: sprite.height,
+                    });
+                } else {
+                    this.load.image(key, sprite.dataUri);
+                }
             }
         }
     }
@@ -1518,6 +1530,7 @@ export class BootScene extends Phaser.Scene {
             }
         }
         this._registerHeroAnims();
+        this._registerBossAnims();
 
         this._draw(HERO_GLOW_KEY, 26, 26, (g) => drawLanternGlow(g));
         this._draw(HERO_SLASH_KEY, 32, 28, (g) => drawSlash(g));
@@ -1549,6 +1562,27 @@ export class BootScene extends Phaser.Scene {
             frameRate: 1000 / HERO_SPRITE.frameMs,
             repeat: -1,
         });
+    }
+
+    /**
+     * Ciclos y animaciones de reposo/pulso para los jefes importados desde .ase.
+     */
+    _registerBossAnims() {
+        for (const [key, sprite] of Object.entries(BOSS_SPRITES)) {
+            if (!sprite?.frameCount || sprite.frameCount < 2 || !this.textures.exists(key)) continue;
+            const animKey = `${key}_pulse`;
+            if (this.anims.exists(animKey)) continue;
+
+            this.anims.create({
+                key: animKey,
+                frames: this.anims.generateFrameNumbers(key, {
+                    start: 0,
+                    end: sprite.frameCount - 1,
+                }),
+                frameRate: sprite.frameRate || 6,
+                repeat: -1,
+            });
+        }
     }
 
     // ─── Projectiles (18×12) — bolts of the element ─────

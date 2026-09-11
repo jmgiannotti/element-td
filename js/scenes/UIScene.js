@@ -545,9 +545,10 @@ export class UIScene extends Phaser.Scene {
             .setDepth(60)
             .setInteractive({ useHandCursor: true });
 
-        const txt = this.add.text(x, y, '⚙', {
-            fontFamily: FONT, fontSize: '10px', color: '#90CAF9',
-        }).setOrigin(0.5).setDepth(61).setAlpha(0.75);
+        const icon = this.add.image(x, y, 'icon_gear')
+            .setDisplaySize(16, 16)
+            .setDepth(61)
+            .setAlpha(0.85);
 
         bg.on('pointerdown', (p) => {
             p.event?.stopPropagation();
@@ -557,12 +558,12 @@ export class UIScene extends Phaser.Scene {
         bg.on('pointerover', () => {
             bg.setFillStyle(0x2a2a50, 0.95);
             bg.setStrokeStyle(1, 0xFFD54F, 1);
-            txt.setColor('#FFD54F').setAlpha(1);
+            icon.setTint(0xFFD54F).setAlpha(1);
         });
         bg.on('pointerout', () => {
             bg.setFillStyle(0x181830, 0.65);
             bg.setStrokeStyle(1, 0x3a3a5a, 0.75);
-            txt.setColor('#90CAF9').setAlpha(0.75);
+            icon.clearTint().setAlpha(0.85);
         });
     }
 
@@ -653,8 +654,15 @@ export class UIScene extends Phaser.Scene {
             const x = startX + step * i + 12;
 
             const icon = this.add.sprite(x, ROW_PREVIEW, safeTexture(this, `enemy_${group.type}`, 'enemy_slime'))
-                .setScale(data.isBoss ? 0.8 : 0.65)
                 .setInteractive({ useHandCursor: false });
+            const baseScale = data.isBoss ? 0.8 : 0.65;
+            const maxDim = Math.max(icon.width, icon.height);
+            const scale = maxDim > 32 ? baseScale * (32 / maxDim) : baseScale;
+            icon.setScale(scale);
+            const animKey = `enemy_${group.type}_pulse`;
+            if (this.anims.exists(animKey)) {
+                icon.play(animKey);
+            }
 
             // The element rides on the icon's shoulder as a glyph, not as a
             // tint: an enemy already has a colour, and it is not its element's.
@@ -1592,9 +1600,17 @@ export class UIScene extends Phaser.Scene {
             container.add(this.add.rectangle(0, y, 420, 40, 0x0d0d1c, 0.55)
                 .setStrokeStyle(1, 0x22223a));
 
-            container.add(this.add.sprite(
+            const spr = this.add.sprite(
                 -188, y, safeTexture(this, `enemy_${type}`, 'enemy_slime')
-            ).setScale(0.85));
+            );
+            const maxDim = Math.max(spr.width, spr.height);
+            const scale = maxDim > 32 ? (28 / maxDim) : 0.85;
+            spr.setScale(scale);
+            const animKey = `enemy_${type}_pulse`;
+            if (this.anims.exists(animKey)) {
+                spr.play(animKey);
+            }
+            container.add(spr);
 
             // Name, epithet, and the one line that says what the thing is.
             // These four are what the Marcas made out of what died in them, and

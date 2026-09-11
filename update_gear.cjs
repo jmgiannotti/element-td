@@ -1,8 +1,8 @@
 /**
- * update_mana.cjs — mana.ase → Data URI PNG → ManaSprite.js
+ * update_gear.cjs — gear32.ase → Data URI PNG → GearSprite.js
  *
  * Uso:
- *   node update_mana.cjs
+ *   node update_gear.cjs
  */
 
 const fs = require('fs');
@@ -10,10 +10,16 @@ const path = require('path');
 const zlib = require('zlib');
 const { PNG } = require('pngjs');
 
-const ASE_FILE = fs.existsSync(path.join(__dirname, 'assets', 'mana.ase'))
-    ? path.join(__dirname, 'assets', 'mana.ase')
-    : path.join(__dirname, 'mana.ase');
-const MANA_SPRITE_FILE = path.join(__dirname, 'js', 'data', 'ManaSprite.js');
+const ASE_FILE = fs.existsSync(path.join(__dirname, 'assets', 'gear32.ase'))
+    ? path.join(__dirname, 'assets', 'gear32.ase')
+    : path.join(__dirname, 'gear32.ase');
+const GEAR_SPRITE_FILE = path.join(__dirname, 'js', 'data', 'GearSprite.js');
+const EXPORT_PNG_FILE = path.join(__dirname, 'assets', 'settings_gear.png');
+
+if (!fs.existsSync(ASE_FILE)) {
+    console.error(`ERROR: No se encontró ${ASE_FILE}`);
+    process.exit(1);
+}
 
 const buff = fs.readFileSync(ASE_FILE);
 
@@ -33,7 +39,7 @@ if (colorDepth !== 32) {
     process.exit(1);
 }
 
-console.log(`Parseando mana.ase: ${W}×${H}, ${colorDepth}bpp, ${numFrames} frame(s)`);
+console.log(`Parseando gear32.ase: ${W}×${H}, ${colorDepth}bpp, ${numFrames} frame(s)`);
 
 const layers = [];
 const frames = [];
@@ -101,6 +107,7 @@ for (let f = 0; f < numFrames; f++) {
 }
 
 function isDrawable(index) {
+    if (!layers[index]) return true;
     let level = layers[index].childLevel;
     if (!layers[index].visible) return false;
     for (let i = index - 1; i >= 0 && level > 0; i--) {
@@ -130,13 +137,13 @@ function compose(frameIndex) {
 
     for (const raw of ordered) {
         const layer = layers[raw.layerIndex];
-        if (!layer || !isDrawable(raw.layerIndex)) continue;
-        if (layer.opacity === 0) continue;
+        if (layer && (!isDrawable(raw.layerIndex) || layer.opacity === 0)) continue;
 
         const cel = resolveCel(raw);
         if (!cel || !cel.raw) continue;
 
-        const mul = (layer.opacity / 255) * (cel.opacity / 255);
+        const layerOp = layer ? layer.opacity / 255 : 1;
+        const mul = layerOp * (cel.opacity / 255);
 
         for (let py = 0; py < cel.h; py++) {
             for (let px = 0; px < cel.w; px++) {
@@ -166,7 +173,6 @@ function compose(frameIndex) {
     return canvas;
 }
 
-// Componer primer frame
 const canvas = compose(0);
 
 // Encontrar caja delimitadora exacta de píxeles no transparentes
@@ -186,7 +192,7 @@ for (let y = 0; y < H; y++) {
 }
 
 if (opaquePixels === 0) {
-    console.error('ERROR: No se encontraron píxeles visibles en mana.ase');
+    console.error('ERROR: No se encontraron píxeles visibles en gear32.ase');
     process.exit(1);
 }
 
@@ -208,16 +214,18 @@ const base64 = pngBuffer.toString('base64');
 const dataUri = `data:image/png;base64,${base64}`;
 
 const content = `/**
- * Sprite de la mota de maná generado a partir de mana.ase.
- * Ejecutar 'node update_mana.cjs' para regenerar si se modifica el archivo aseprite.
+ * Sprite del engranaje de ajustes generado a partir de gear32.ase.
+ * Ejecutar 'node update_gear.cjs' para regenerar si se modifica el archivo aseprite.
  */
-export const MANA_SPRITE = {
-    key: 'mana_mote',
+export const GEAR_SPRITE = {
+    key: 'icon_gear',
     width: ${cropW},
     height: ${cropH},
     png: '${dataUri}',
 };
 `;
 
-fs.writeFileSync(MANA_SPRITE_FILE, content, 'utf-8');
-console.log(`✓ Generado ${path.relative(process.cwd(), MANA_SPRITE_FILE)} (${cropW}×${cropH})`);
+fs.writeFileSync(GEAR_SPRITE_FILE, content, 'utf-8');
+fs.writeFileSync(EXPORT_PNG_FILE, pngBuffer);
+console.log(`✓ Generado ${path.relative(__dirname, GEAR_SPRITE_FILE)} (${cropW}×${cropH})`);
+console.log(`✓ Exportado ${path.relative(__dirname, EXPORT_PNG_FILE)}`);

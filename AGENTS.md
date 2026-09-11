@@ -76,11 +76,14 @@ e:/Proyectos/Mini juego TD/
    * **Nunca** pintes elementos de interfaz (botones, paneles fijos, contadores del HUD) en `GameScene`.
    * Todo lo interactivo y relativo a menús pertenece a `UIScene`.
 3. **Pipeline de Assets Aseprite (`.ase`)**:
-   * Cuando se trabaje con archivos `.ase` en la raíz (ej. `coin.ase`, `mana.ase`), se compilan a Data URIs ejecutando sus scripts Node:
+   * Los archivos fuente `.ase` y sprites residen en la carpeta `assets/` (ej. `assets/coin.ase`, `assets/mana.ase`, `assets/gear32.ase`, `assets/Sprite-0002.ase`).
+   * Se compilan a Data URIs ejecutando sus scripts Node:
      ```bash
      node update_coin.cjs
      node update_mana.cjs
+     node update_gear.cjs
      node update_bosses.cjs
+     node update_sprite.cjs
      ```
    * Los scripts actualizan los archivos `js/data/*Sprite.js` que luego son cargados como texturas en `BootScene.js`.
 4. **Resolución y Escalado**:
