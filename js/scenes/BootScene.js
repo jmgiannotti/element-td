@@ -16,6 +16,11 @@ import { MANA_SPRITE } from '../data/ManaSprite.js';
 import { GEAR_SPRITE } from '../data/GearSprite.js';
 import { BOSS_SPRITES } from '../data/BossSprites.js';
 import { SPELLS, SPELL_ORDER } from '../data/SpellData.js';
+import { biomeTextures, townTextures } from '../data/BiomeArt.js';
+import {
+    GRASS_VARIANTS, DIRT_VARIANTS, EDGE_VARIANTS, RUT_VARIANTS, BREAKABLE_VARIANTS,
+    SIDES, CORNERS, BIOME_IDS,
+} from '../systems/Terrain.js';
 
 /**
  * BootScene — generates ALL pixel-art textures at runtime. No external assets.
@@ -38,20 +43,11 @@ import { SPELLS, SPELL_ORDER } from '../data/SpellData.js';
  *    the board stays readable with the colour turned off.
  */
 
-// How many interchangeable variants exist per terrain texture family.
-// GameScene picks one per cell from a positional hash so the map looks
-// varied but stays identical between renders of the same cell.
-export const GRASS_VARIANTS = 8;
-export const DIRT_VARIANTS = 6;
-export const EDGE_VARIANTS = 2;
-export const RUT_VARIANTS = 2;
-export const BREAKABLE_VARIANTS = 3;
 
 export const TOWER_KEYS = ['water', 'air', 'fire', 'earth', 'ice', 'storm', 'lava', 'mud'];
 // Tier 3 towers. Towers and bolts only — a legendary has no temple.
 export const LEGENDARY_KEYS = ['blizzard', 'ashstorm', 'obsidian', 'glacier', 'geyser', 'ancestral'];
 const ENEMY_KEYS = ['slime', 'golem', 'specter', 'dragon', 'boss_titan', 'boss_dragon', 'boss_specter'];
-const SIDES = ['top', 'bottom', 'left', 'right'];
 
 /** Every texture key the game can request once BootScene has finished. */
 export function expectedTextureKeys() {
@@ -97,7 +93,12 @@ export function expectedTextureKeys() {
         keys.push(`scat_${side}`);
         for (let v = 0; v < EDGE_VARIANTS; v++) keys.push(`edge_${side}_${v}`);
     }
-    for (const c of ['tl', 'tr', 'bl', 'br']) keys.push(`corner_${c}`);
+    for (const c of CORNERS) keys.push(`corner_${c}`);
+    // The other biomes' terrain, named off the same list that draws it
+    for (const biome of BIOME_IDS) {
+        for (const t of biomeTextures(biome)) keys.push(t.key);
+    }
+    for (const t of townTextures()) keys.push(t.key);
     for (const el of TOWER_KEYS) keys.push(`tower_${el}`, `proj_${el}`, `temple_${el}`);
     for (const el of LEGENDARY_KEYS) keys.push(`tower_${el}`, `proj_${el}`);
     for (const e of ENEMY_KEYS) keys.push(`enemy_${e}`);
@@ -176,6 +177,7 @@ export class BootScene extends Phaser.Scene {
         this._generateCorners();
         this._generateScatter();
         this._generateObstacles();
+        this._generateBiomes();
         this._generateSeals();
         this._generateTowers();
         this._generateTemples();
@@ -503,6 +505,17 @@ export class BootScene extends Phaser.Scene {
                 }
             });
         }
+    }
+
+    // ─── The other biomes (US 14.1) ─────────────────────
+    // City, volcano, snow and crypt terrain and the city's town ring (houses,
+    // trees, stalls) live in BiomeArt; this only draws them. All of it up front, like
+    // the lawn, so a level can switch biome without a stutter.
+    _generateBiomes() {
+        for (const biome of BIOME_IDS) {
+            for (const { key, w, h, draw } of biomeTextures(biome)) this._draw(key, w, h, draw);
+        }
+        for (const { key, w, h, draw } of townTextures()) this._draw(key, w, h, draw);
     }
 
     // ─── Breakable boulders & the barricade ─────────────
