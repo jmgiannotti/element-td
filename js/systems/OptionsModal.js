@@ -81,7 +81,7 @@ export class OptionsModal {
 
         // Scale action buttons
         const btnY = -h / 2 + 92;
-        const bCrisp = this._button(-160, btnY, 86, 22, 'NÍTIDO', 0x2a2a5a, () => {
+        const bCrisp = this._button(-160, btnY, 86, 22, 'NITIDO', 0x2a2a5a, () => {
             display.setCrisp();
             this._refreshInfo();
         });
@@ -244,7 +244,7 @@ export class OptionsModal {
     _refreshInfo() {
         if (!this.resText) return;
         const info = display.getInfo();
-        this.resText.setText(`RESOLUCIÓN: ${info.label}`);
+        this.resText.setText(`RESOLUCION: ${info.label}`);
     }
 
     close() {
