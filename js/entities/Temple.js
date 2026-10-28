@@ -76,6 +76,9 @@ export class Temple {
         this.sprite.on('pointerup', (pointer) => {
             if (pointer.button !== 0) return;
             if (!this.alive) return;
+            // Same rule as the map's own release: only a press the board saw.
+            // Otherwise closing a panel with its button over a temple reopened it.
+            if (!this.scene._pressStarted) return;
             // While placing something the click belongs to the build cursor,
             // otherwise you could never drop a tower beside a temple. Same for
             // the sell and spell cursors: there the click is aimed at this tile.

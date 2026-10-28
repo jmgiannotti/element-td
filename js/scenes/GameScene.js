@@ -179,9 +179,13 @@ export class GameScene extends Phaser.Scene {
         // ── Input ───────────────────────────────
         this.input.mouse.disableContextMenu();
         this.input.on('pointerdown', (pointer, gameObjects) => {
+            // Only a press the map itself received may later count as a click
+            // on it — see the pointerup handler.
+            this._pressStarted = false;
             if (pointer.event._uiConsumed) return;
             if (this.gameOver || this.gameWon) return;
             if (this.uiModalOpen) return;       // upgrade panel has the floor
+            this._pressStarted = true;
 
             // Read through the camera, never off the pointer: `pointer.x` is in
             // the supersampled buffer's space, which is 2× or 3× the world.
@@ -233,6 +237,14 @@ export class GameScene extends Phaser.Scene {
         // card over the board every time someone reaches for a tower is the kind
         // of thing that makes a drag feel broken before it has even started.
         this.input.on('pointerup', (pointer, gameObjects) => {
+            // A release whose press the map never saw is not a click on the
+            // map. The case that needs this: CERRAR closes its panel on press,
+            // so the UI is gone by the release, which then fell through to the
+            // board and selected whatever tower sat under the button.
+            const started = this._pressStarted;
+            this._pressStarted = false;
+            if (!started) { this._pressConsumed = false; return; }
+
             if (this.gameOver || this.gameWon || this.uiModalOpen) return;
             if (pointer.button !== 0 && pointer.button !== undefined) return;
 
