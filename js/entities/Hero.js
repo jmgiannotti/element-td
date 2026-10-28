@@ -684,6 +684,7 @@ export class Hero {
         if (this.channelTimer > 0) this.channelTimer = Math.max(0, this.channelTimer - delta);
         if (this.invuln > 0) this.invuln = Math.max(0, this.invuln - delta);
         if (this.hasteTimer > 0) this.hasteTimer = Math.max(0, this.hasteTimer - delta);
+        if (this.respawnIn > 0) this.respawnIn = Math.max(0, this.respawnIn - delta);
 
         if (this.comboTimer > 0) {
             this.comboTimer = Math.max(0, this.comboTimer - delta);
@@ -862,7 +863,9 @@ export class Hero {
             tower.setEmpowered(false);
         }
 
-        // Respawn after 8 seconds (the Clock already applies timeScale)
+        // Respawn after 8 seconds (the Clock already applies timeScale).
+        // respawnIn mirrors it for the HUD countdown; the clock stays in charge.
+        this.respawnIn = 8000;
         this.scene.time.delayedCall(8000, () => this._respawn());
     }
 

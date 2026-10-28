@@ -94,6 +94,7 @@ export class UIScene extends Phaser.Scene {
         this._buildTopRightGear();
         this._buildWavePreview();
         this._buildWaveButton();
+        this._buildHudPanel();
         this._buildSpellHud();
         this._buildHeroHud();
         this._buildTutorialBanner();
@@ -125,6 +126,7 @@ export class UIScene extends Phaser.Scene {
             this.gs.scene.resume('GameScene');
             this.pauseOverlay.setVisible(false);
         }
+        this._refreshControls();
     }
 
     _buildPauseOverlay() {
@@ -150,6 +152,7 @@ export class UIScene extends Phaser.Scene {
     /** Cooldown wipes have to be redrawn every frame; nothing else here does. */
     update() {
         this._refreshHeroHud();
+        this._refreshHeroHealth();
         this._refreshSpellHud();
     }
 
@@ -189,17 +192,50 @@ export class UIScene extends Phaser.Scene {
         this.goldValue = this._resourceCard(52, 'icon_coin', '#FFD700', 0x2a2410, 0x5a4a20, 1.0);
         this.manaValue = this._resourceCard(88, 'mana_mote', '#B388FF', 0x1e1a33, 0x4a3a7a, 0.8);
 
-        // Progress toward the cheapest upgrade currently within reach
-        this.manaBarBg = this.add.rectangle(CX, 110, INNER_W, 6, 0x1a1a2e);
+        // Progress toward the cheapest temple upgrade within reach. It used to
+        // be a bare bar with a line under it, and nothing on screen said what
+        // it was filling up to — so now it is a titled row: what, how far, and
+        // a click that takes you there.
+        this.manaGoalTitle = this.add.text(LEFT, 113, 'MEJORA', {
+            fontFamily: FONT, fontSize: '7px', color: '#6a6a8a',
+        }).setOrigin(0, 0.5);
+        this.manaGoalText = this.add.text(LEFT + 56, 113, '', {
+            fontFamily: FONT, fontSize: '7px', color: '#B0BEC5',
+        }).setOrigin(0, 0.5);
+        this.manaGoalCount = this.add.text(RIGHT, 113, '', {
+            fontFamily: FONT, fontSize: '7px', color: '#B388FF',
+        }).setOrigin(1, 0.5);
+        this.manaBarBg = this.add.rectangle(CX, 124, INNER_W, 6, 0x1a1a2e);
         this.manaBarBg.setStrokeStyle(1, 0x2a2a4a);
-        this.manaBarFill = this.add.rectangle(LEFT, 110, 0, 4, 0xB388FF).setOrigin(0, 0.5);
-        this.manaGoalText = this.add.text(CX, 124, '', {
-            fontFamily: FONT, fontSize: '8px', color: '#6a6a8a',
-        }).setOrigin(0.5);
+        this.manaBarFill = this.add.rectangle(LEFT, 124, 0, 4, 0xB388FF).setOrigin(0, 0.5);
 
-        this.statusText = this.add.text(CX, 140, '', {
+        const goalHit = this.add.rectangle(CX, 118, INNER_W, 22, 0x000000, 0)
+            .setInteractive({ useHandCursor: true });
+        goalHit.on('pointerdown', () => {
+            const goal = this.gs.templeSystem.cheapestUpgrade();
+            if (!goal) return;
+            audio.play('click');
+            this._openUpgradePanel(goal.element);
+        });
+        goalHit.on('pointerover', () => this._showTooltip([
+            'Proxima mejora de templo:',
+            `junta ${MANA} hasta la mas barata`,
+            'que tengas disponible.',
+            'Click: abrir ese templo.',
+        ], LEFT - 8, 104));
+        goalHit.on('pointerout', () => this._hideTooltip());
+
+        // Lives on the left behind a drawn heart, the wave on the right. One
+        // line, two readouts: lives are the number that ends the game, so they
+        // get an icon and their own colour instead of sharing a grey string.
+        this.heartIcon = this.add.image(LEFT + 6, 140, 'icon_heart').setScale(1.2);
+        this.livesText = this.add.text(LEFT + 16, 140, '', {
+            fontFamily: FONT, fontSize: '8px', color: '#FF8A80',
+        }).setOrigin(0, 0.5);
+        this.statusText = this.add.text(RIGHT, 140, '', {
             fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
-        }).setOrigin(0.5);
+        }).setOrigin(1, 0.5);
+        this._lastLives = this.gs.economySystem.lives;
         this._updateStatus();
 
         this._divider(152);
@@ -223,8 +259,19 @@ export class UIScene extends Phaser.Scene {
         const e = this.gs.economySystem;
         const w = this.gs.waveManager;
         const total = w.currentWave > w.totalWaves ? '∞' : w.totalWaves;
-        this.statusText.setText(`♥ ${e.lives}    OLEADA ${w.currentWave}/${total}`);
-        this.statusText.setColor(e.lives <= 5 ? '#FF1744' : '#B0BEC5');
+        this.livesText.setText(`${e.lives}`);
+        this.livesText.setColor(e.lives <= 5 ? '#FF1744' : '#FF8A80');
+        this.statusText.setText(`OLEADA ${w.currentWave}/${total}`);
+
+        // A life lost is a beat, not just a smaller number: the heart jumps.
+        if (e.lives < this._lastLives) {
+            this.tweens.killTweensOf(this.heartIcon);
+            this.heartIcon.setScale(2);
+            this.tweens.add({ targets: this.heartIcon, scale: 1.2, duration: 260, ease: 'Back.easeOut' });
+            this.livesText.setColor('#FFFFFF');
+            this.time.delayedCall(140, () => this._updateStatus());
+        }
+        this._lastLives = e.lives;
     }
 
     _updateManaBar() {
@@ -233,28 +280,31 @@ export class UIScene extends Phaser.Scene {
 
         if (!goal) {
             this.manaBarFill.width = 0;
+            this.manaGoalTitle.setText('MEJORA').setColor('#6a6a8a');
+            this.manaGoalCount.setText('');
             // With no temple the hero still gathers maná — there is just
             // nowhere to spend it yet, which is the thing worth saying.
-            this.manaGoalText.setText(
-                this.gs.temples.length === 0 ? 'sin templo no hay mejoras' : 'todo al maximo'
-            );
+            this.manaGoalText
+                .setText(this.gs.temples.length === 0 ? 'construi un templo' : 'todo al maximo')
+                .setColor('#6a6a8a');
             return;
         }
 
         const pct = Phaser.Math.Clamp(mana / goal.cost, 0, 1);
+        const ready = pct >= 1;
         this.manaBarFill.width = INNER_W * pct;
-        this.manaBarFill.fillColor = pct >= 1 ? 0x4CAF50 : 0xB388FF;
+        this.manaBarFill.fillColor = ready ? 0x4CAF50 : 0xB388FF;
 
         const d = TEMPLE_DATA[goal.element];
         const t = UPGRADE_TRACKS[goal.track];
-        this.manaGoalText.setText(
-            pct >= 1
-                ? `¡${d.shortName} ${t.label} listo!`
-                : `${mana}/${goal.cost} → ${d.shortName} ${t.label}`
-        );
-        // Gold, not green — the bar right above it is already green when full,
-        // and two greens touching read as one smear.
-        this.manaGoalText.setColor(pct >= 1 ? '#FFD54F' : '#6a6a8a');
+        // Named in the temple's own colour, so it points at a button below
+        this.manaGoalTitle.setText(ready ? '¡LISTA!' : 'MEJORA').setColor(ready ? '#4CAF50' : '#6a6a8a');
+        this.manaGoalText
+            .setText(`${d.shortName} ${t.label}`)
+            .setColor(`#${d.color.toString(16).padStart(6, '0')}`);
+        this.manaGoalCount
+            .setText(ready ? 'ABRIR ▶' : `${mana}/${goal.cost}`)
+            .setColor(ready ? '#4CAF50' : '#B388FF');
     }
 
     // ─── Build buttons ──────────────────────────────────
@@ -287,17 +337,7 @@ export class UIScene extends Phaser.Scene {
             x, y - 8, safeTexture(this, `tower_${element}`, 'tower_earth')
         ).setScale(1.2);
 
-        // Coin + number centred as a pair under the tower sprite
-        const COIN_PX = 10;  // 17 * 0.6 ≈ 10px
-        const costStr = `${td.cost}`;
-        const costW = costStr.length * 6;  // Press Start 2P 8px ≈ 6px/char
-        const pairW = COIN_PX + 2 + costW;
-        const pairLeft = x - pairW / 2;
-        const coin = this.add.image(pairLeft + COIN_PX / 2, y + 20, 'icon_coin').setScale(0.6);
-        const cost = this.add.text(pairLeft + COIN_PX + 2, y + 20, costStr, {
-            fontFamily: FONT, fontSize: '8px', color: '#FFD700',
-            stroke: '#000000', strokeThickness: 3,
-        }).setOrigin(0, 0.5);
+        const { coin, cost } = this._costPair(x, y + 20, td.cost);
 
         const btn = { bg, icon, coin, cost, element, kind: 'tower' };
 
@@ -309,6 +349,27 @@ export class UIScene extends Phaser.Scene {
         bg.on('pointerout', () => this._hideTooltip());
 
         return btn;
+    }
+
+    /** Coin + number, centred as a pair on (x, y). Shared by every build button. */
+    _costPair(x, y, value) {
+        const coin = this.add.image(0, y, 'icon_coin').setScale(0.6);
+        const cost = this.add.text(0, y, '', {
+            fontFamily: FONT, fontSize: '8px', color: '#FFD700',
+            stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0, 0.5);
+        const pair = { coin, cost, x };
+        this._setCostPair(pair, value);
+        return pair;
+    }
+
+    _setCostPair(pair, value) {
+        const COIN_PX = 10;  // 17 * 0.6 ≈ 10px
+        pair.cost.setText(`${value}`);
+        const pairW = COIN_PX + 2 + pair.cost.width;
+        const left = pair.x - pairW / 2;
+        pair.coin.setX(left + COIN_PX / 2);
+        pair.cost.setX(left + COIN_PX + 2);
     }
 
     _createBarricadeBtn(x, y, w) {
@@ -373,18 +434,12 @@ export class UIScene extends Phaser.Scene {
     _buildTempleButtons() {
         this._sectionHeader(290, 'TEMPLOS', '#B388FF');
 
+        // Priced on the button, like the towers. Every temple costs the same
+        // (the next one), so the four prices move together.
         this.templeBtns = [];
         TEMPLE_ELEMENTS.forEach((el, i) => {
-            this.templeBtns.push(this._createTempleBtn(el, this._slotX(i), 328));
+            this.templeBtns.push(this._createTempleBtn(el, this._slotX(i), 336));
         });
-
-        this.templeCostLabel = this.add.text(0, 372, 'SIG. TEMPLO:', {
-            fontFamily: FONT, fontSize: '8px', color: '#FFD700',
-        }).setOrigin(0, 0.5);
-        this.templeCostCoin = this.add.image(0, 372, 'icon_coin').setScale(0.7);
-        this.templeCostValue = this.add.text(0, 372, '', {
-            fontFamily: FONT, fontSize: '8px', color: '#FFD700',
-        }).setOrigin(0, 0.5);
 
         this._divider(384);
     }
@@ -395,12 +450,16 @@ export class UIScene extends Phaser.Scene {
             x, y - 8, safeTexture(this, `temple_${element}`, 'temple_earth')
         ).setScale(1.2);
 
-        // Lit only once you own that temple: shows at a glance which upgrade
-        // trees are actually open to you.
-        const owned = this.add.rectangle(x, y + 20, 40, 5, TEMPLE_DATA[element].color);
-        owned.setVisible(false);
+        const { coin, cost } = this._costPair(x, y + 20, this.gs.templeSystem.nextCost);
 
-        const btn = { bg, icon, owned, element, kind: 'temple' };
+        // A gem in the corner, lit only once you own that temple: shows at a
+        // glance which upgrade trees are actually open to you.
+        const owned = this.add.rectangle(x + 20, y - 23, 6, 6, TEMPLE_DATA[element].color)
+            .setStrokeStyle(1, 0x0a0a18)
+            .setAngle(45)
+            .setVisible(false);
+
+        const btn = { bg, icon, coin, cost, owned, element, kind: 'temple', x };
 
         bg.on('pointerdown', () => {
             if (this.gs.economySystem.gold < this.gs.templeSystem.nextCost) {
@@ -431,22 +490,8 @@ export class UIScene extends Phaser.Scene {
 
     _refreshTempleButtons() {
         const ts = this.gs.templeSystem;
-        const valStr = `${ts.nextCost}`;
-        this.templeCostValue.setText(valStr);
-
-        // Lay out: [label][gap][coin 13px @0.7][gap][value] — centred in sidebar
-        const gap = 4;
-        const coinW = 13;  // 17 * 0.7 ≈ 12px + 1 breathing room
-        const labelW = this.templeCostLabel.width;
-        const valW   = this.templeCostValue.width;
-        const totalW = labelW + gap + coinW + gap + valW;
-        const startX = CX - totalW / 2;
-
-        this.templeCostLabel.setPosition(startX, 372);
-        this.templeCostCoin.setPosition(Math.round(startX + labelW + gap + coinW / 2), 372);
-        this.templeCostValue.setPosition(startX + labelW + gap + coinW + gap, 372);
-
         for (const btn of this.templeBtns) {
+            this._setCostPair(btn, ts.nextCost);
             btn.owned.setVisible(ts.hasTemple(btn.element));
         }
     }
@@ -488,57 +533,68 @@ export class UIScene extends Phaser.Scene {
     }
 
     // ─── Global controls ────────────────────────────────
+    /**
+     * Speed, auto-wave, pause and help, styled like BARRICADA / VENDER rather
+     * than as flat grey blocks. A toggle that is on shows it in its border and
+     * its text, the same way an armed build button does.
+     *
+     * Sound used to live here too; it moved to the gear menu with the rest of
+     * the settings — it is not something you change mid-wave.
+     */
     _buildGlobalControls() {
-        const mk = (x, w, label, onClick) => {
-            const bg = this.add.rectangle(x + w / 2, ROW_CONTROLS, w, 26, 0x333344)
+        const mk = (x, w, label, accent, onClick, tip) => {
+            const bg = this.add.rectangle(x + w / 2, ROW_CONTROLS, w, 24, 0x1e1e3a)
+                .setStrokeStyle(2, 0x3a3a5a)
                 .setInteractive({ useHandCursor: true });
             const txt = this.add.text(x + w / 2, ROW_CONTROLS, label, {
-                fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
+                fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
             }).setOrigin(0.5);
-            bg.on('pointerdown', () => { audio.play('click'); onClick(bg, txt); });
-            return { bg, txt };
+            const btn = { bg, txt, accent, on: false };
+            bg.on('pointerdown', () => { audio.play('click'); onClick(btn); });
+            bg.on('pointerover', () => {
+                bg.fillColor = 0x2a2a5a;
+                if (tip) this._showTooltip(tip, x + w, ROW_CONTROLS - 50);
+            });
+            bg.on('pointerout', () => { bg.fillColor = 0x1e1e3a; this._hideTooltip(); });
+            return btn;
         };
 
-        const isFast = this.gs.time.timeScale > 1.5;
-        const velBtn = mk(LEFT, 54, isFast ? 'VEL 2x' : 'VEL 1x', (bg, txt) => {
-            if (this.gs.time.timeScale === 1) {
-                this.gs.time.timeScale = 2;
-                txt.setText('VEL 2x');
-                bg.fillColor = 0xFF9800;
-            } else {
-                this.gs.time.timeScale = 1;
-                txt.setText('VEL 1x');
-                bg.fillColor = 0x333344;
-            }
-        });
-        if (isFast) velBtn.bg.fillColor = 0xFF9800;
-
         const wm = this.gs.waveManager;
-        const autoBtn = mk(LEFT + 60, 74, wm.autoWave ? 'AUTO: SI' : 'AUTO: NO', (bg, txt) => {
+
+        this.velBtn = mk(LEFT, 54, 'VEL 1x', 0xFF9800, () => {
+            this.gs.time.timeScale = this.gs.time.timeScale === 1 ? 2 : 1;
+            this._refreshControls();
+        }, ['Velocidad', 'x1 o x2.']);
+
+        this.autoBtn = mk(LEFT + 58, 74, 'AUTO: NO', 0x42A5F5, () => {
             wm.autoWave = !wm.autoWave;
-            if (wm.autoWave) {
-                txt.setText('AUTO: SI');
-                bg.fillColor = 0x2196F3;
-                if (!wm.waveActive) this.gs.events.emit('start-wave');
-            } else {
-                txt.setText('AUTO: NO');
-                bg.fillColor = 0x333344;
-            }
-        });
-        if (wm.autoWave) autoBtn.bg.fillColor = 0x2196F3;
+            if (wm.autoWave && !wm.waveActive) this.gs.events.emit('start-wave');
+            this._refreshControls();
+        }, ['Auto oleada', 'Lanza la siguiente', 'oleada sola al', 'terminar la actual.']);
 
-        const sound = mk(LEFT + 138, 70, audio.enabled ? 'SON: SI' : 'SON: NO', (bg, txt) => {
-            const on = audio.toggle();
-            txt.setText(on ? 'SON: SI' : 'SON: NO');
-            bg.fillColor = on ? 0x333344 : 0x552222;
-        });
-        sound.txt.setText(audio.enabled ? 'SON: SI' : 'SON: NO');
-        sound.bg.fillColor = audio.enabled ? 0x333344 : 0x552222;
-
-        mk(LEFT + 212, 22, '||', () => {
+        this.pauseBtn = mk(LEFT + 136, 58, 'PAUSA', 0xFFD54F, () => {
             if (!this.gs.uiModalOpen) this.togglePause();
-        });
-        mk(LEFT + 238, 18, '?', () => this._openHelpPanel());
+        }, ['Pausa  [ESPACIO]']);
+
+        this.helpBtn = mk(LEFT + 198, 58, 'AYUDA', 0xFFD54F, () => this._openHelpPanel(),
+            ['Ayuda', 'Fusiones, elementos,', 'heroe y hechizos.']);
+
+        this._refreshControls();
+    }
+
+    /** Toggle state → label, border and text colour. */
+    _refreshControls() {
+        if (!this.velBtn) return;
+        const paint = (btn, on, label) => {
+            btn.txt.setText(label);
+            btn.bg.setStrokeStyle(2, on ? btn.accent : 0x3a3a5a);
+            btn.txt.setColor(on ? `#${btn.accent.toString(16).padStart(6, '0')}` : '#ECEFF1');
+        };
+        const fast = this.gs.time.timeScale > 1.5;
+        paint(this.velBtn, fast, fast ? 'VEL 2x' : 'VEL 1x');
+        const auto = this.gs.waveManager.autoWave;
+        paint(this.autoBtn, auto, auto ? 'AUTO: SI' : 'AUTO: NO');
+        paint(this.pauseBtn, this.isPaused, this.isPaused ? 'SEGUIR' : 'PAUSA');
     }
 
     _buildTopRightGear() {
@@ -613,84 +669,194 @@ export class UIScene extends Phaser.Scene {
 
     // ─── Next-wave preview ──────────────────────────────
     /**
-     * What is coming, and of which element — beside the button that summons it,
-     * because that is the moment the answer changes what you do.
+     * What is coming, told in two places.
      *
-     * Rebuilt rather than mutated on every wave boundary: the number of enemy
-     * groups changes from wave to wave, so there is no stable set of slots to
-     * keep around.
+     * On the map, Kingdom Rush style: a skull at the gate they will come
+     * through, gold when a boss leads them. Hover it for the full card — every
+     * enemy by name, count, element and weakness — and click it to call the
+     * wave. It used to be a row of icons in the sidebar, which was fine at
+     * wave 1 and unreadable by wave 30: five groups in 256px overlapped into
+     * "x3x1x1x7x1".
+     *
+     * In the sidebar, one line: how many, and whether a boss is among them.
+     * Hovering it shows the same card.
      */
     _buildWavePreview() {
         this.previewLabel = this.add.text(LEFT, ROW_PREVIEW, '', {
             fontFamily: FONT, fontSize: '8px', color: '#78909C',
         }).setOrigin(0, 0.5);
+        this.previewCount = this.add.text(LEFT + 76, ROW_PREVIEW, '', {
+            fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
+        }).setOrigin(0, 0.5);
+        this.previewBoss = this.add.text(RIGHT, ROW_PREVIEW, '', {
+            fontFamily: FONT, fontSize: '8px', color: '#FFD54F',
+        }).setOrigin(1, 0.5);
 
-        this.previewEntries = [];
+        const rowHit = this.add.rectangle(CX, ROW_PREVIEW, INNER_W, 20, 0x000000, 0)
+            .setInteractive({ useHandCursor: false });
+        rowHit.on('pointerover', () => this._showWaveCard(LEFT - 8, ROW_PREVIEW + 10, 1, 1, false));
+        rowHit.on('pointerout', () => this._hideWaveCard());
+
+        this._buildWaveMarker();
+    }
+
+    /** The skull at the gate. Lives in this scene: it is UI, drawn over the map. */
+    _buildWaveMarker() {
+        const sp = this.gs.gridSystem.spawnPoint;
+        const { cols, rows } = this.gs.gridSystem;
+        const gate = this.gs.gridSystem.gridToWorld(
+            Phaser.Math.Clamp(sp.col, 0, cols - 1), Phaser.Math.Clamp(sp.row, 0, rows - 1),
+        );
+        // Straight over the gate's centre, so the arrow points at the arch,
+        // 36px above the gate's centre: room for the arrow to stand off the
+        // medallion and still stop short of the arch. Always above, because
+        // the arrow is part of the sprite and points down; a gate on the top
+        // row just gets the marker pressed against the board's edge.
+        const y = Math.max(gate.y - 36, 14);
+        const x = Math.round(Phaser.Math.Clamp(gate.x, 16, 624));
+
+        const c = this.add.container(x, y).setDepth(40);
+        // The medallion is a sprite (BootScene._generateWaveMarker), its origin
+        // on the disc's centre; the pulse is drawn around that same point. Drawn,
+        // not scaled: a scaled shape inside a container rendered off-centre.
+        const ring = this.add.graphics();
+        const glow = this.add.graphics();
+        const badge = this.add.image(0, 0, 'marker_wave').setOrigin(0.5, 13 / 34);
+        const hit = this.add.zone(0, 0, 26, 26).setInteractive({ useHandCursor: true });
+        c.add([ring, glow, badge, hit]);
+
+        this.waveMarker = { c, ring, glow, badge, hit, color: 0xE53950, boss: false };
+
+        const pulse = { t: 0 };
+        this.tweens.add({
+            targets: pulse, t: 1, duration: 1300, repeat: -1, ease: 'Quad.easeOut',
+            onUpdate: () => {
+                ring.clear();
+                ring.lineStyle(1, this.waveMarker.color, 0.7 * (1 - pulse.t));
+                ring.strokeCircle(0, 0, 14 + 8 * pulse.t);
+            },
+        });
+
+        // Hover: a thin halo in the eyes' colour rather than a size change
+        hit.on('pointerover', () => {
+            glow.clear();
+            glow.lineStyle(1, this.waveMarker.color, 0.9);
+            glow.strokeCircle(0, 0, 13.5);
+            this._showWaveCard(x + 18, y - 8, 0, 0, true);
+        });
+        hit.on('pointerout', () => {
+            glow.clear();
+            this._hideWaveCard();
+        });
+        hit.on('pointerdown', (pointer) => {
+            pointer.event.stopPropagation();
+            pointer.event._uiConsumed = true;
+            if (this.gs.waveManager.waveActive) return;
+            this._hideWaveCard();
+            this.gs.events.emit('start-wave');
+        });
+
     }
 
     _refreshWavePreview() {
-        for (const e of this.previewEntries) e.destroy();
-        this.previewEntries = [];
-
         const wm = this.gs.waveManager;
         const comp = wm.nextComposition;
+        this._hideWaveCard();
+        this._refreshWaveButton();
 
         if (!comp) {
             this.previewLabel.setText('ULTIMA OLEADA').setColor('#FFD54F');
+            this.previewCount.setText('');
+            this.previewBoss.setText('');
+            if (this.waveMarker) this.waveMarker.c.setVisible(false);
             return;
         }
 
         const isBoss = wm.isNextWaveBoss || comp.some(g => ENEMY_DATA[g.type]?.isBoss);
+        const total = comp.reduce((n, g) => n + g.count, 0);
+        this.previewLabel.setText(wm.waveActive ? 'LUEGO:' : 'PROXIMA:');
+        this.previewCount.setText(`${total} enemigos`);
+        this.previewBoss.setText(isBoss ? '¡JEFE!' : '');
+
+        // Only between waves: during one, the gate is already busy saying it
+        if (this.waveMarker) {
+            const m = this.waveMarker;
+            m.c.setVisible(!wm.waveActive);
+            // The pulse takes the colour of the eyes: ember, or gold for a boss
+            m.color = isBoss ? 0xFFD54F : 0xE53950;
+            m.badge.setTexture(isBoss ? 'marker_wave_boss' : 'marker_wave');
+        }
+    }
+
+    /**
+     * The card listing the next wave: one row per enemy group. `ox`/`oy` are
+     * the card's origin (0 = grows right/down from x,y; 1 = left/up).
+     */
+    _showWaveCard(x, y, ox, oy, fromMarker) {
+        this._hideWaveCard();
+        this._hideTooltip();
+        const wm = this.gs.waveManager;
+        const comp = wm.nextComposition;
+        if (!comp) return;
+
+        // Wide enough for the longest weakness line ("Aire  debil: Tierra, Tormenta")
+        const W = 252;
+        const ROW = 26;
+        const isBoss = wm.isNextWaveBoss || comp.some(g => ENEMY_DATA[g.type]?.isBoss);
+        const H = 30 + comp.length * ROW + (fromMarker ? 16 : 4);
+        const left = Phaser.Math.Clamp(x - W * ox, 4, 636 - W);
+        const top = Phaser.Math.Clamp(y - H * oy, 4, 476 - H);
+
+        const c = this.add.container(left, top).setDepth(95);
+        c.add(this.add.rectangle(0, 0, W, H, 0x0a0a1a, 0.96).setOrigin(0)
+            .setStrokeStyle(1, isBoss ? 0xFFD54F : 0x3a3a5a));
+
+        c.add(this.add.text(10, 12, `OLEADA ${wm.nextWaveNumber}`, {
+            fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
+        }).setOrigin(0, 0.5));
         if (isBoss) {
-            this.previewLabel.setText(`JEFE ${wm.nextWaveNumber}`).setColor('#FFD54F');
-        } else {
-            this.previewLabel.setText(`PROX ${wm.nextWaveNumber}`).setColor('#78909C');
+            c.add(this.add.text(W - 10, 12, '¡JEFE!', {
+                fontFamily: FONT, fontSize: '8px', color: '#FFD54F',
+            }).setOrigin(1, 0.5));
+        }
+        c.add(this.add.rectangle(10, 22, W - 20, 1, 0x2a2a4a).setOrigin(0, 0.5));
+
+        const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
+        comp.forEach((g, i) => {
+            const d = ENEMY_DATA[g.type];
+            if (!d) return;
+            const ry = 30 + i * ROW + ROW / 2;
+
+            const icon = this.add.sprite(18, ry, safeTexture(this, `enemy_${g.type}`, 'enemy_slime'));
+            icon.setScale(18 / Math.max(icon.width, icon.height));
+            const anim = `enemy_${g.type}_pulse`;
+            if (this.anims.exists(anim)) icon.play(anim);
+            c.add(icon);
+
+            c.add(this.add.text(34, ry - 5, d.name, {
+                fontFamily: FONT, fontSize: '8px', color: hex(d.color),
+            }).setOrigin(0, 0.5));
+            c.add(this.add.text(W - 10, ry - 5, `x${g.count}`, {
+                fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
+            }).setOrigin(1, 0.5));
+
+            const weak = d.weakness?.length ? `  debil: ${d.weakness.map(elementName).join(', ')}` : '';
+            c.add(this.add.text(34, ry + 6, `${elementName(d.element)}${weak}`, {
+                fontFamily: FONT, fontSize: '7px', color: '#78909C',
+            }).setOrigin(0, 0.5));
+        });
+
+        if (fromMarker) {
+            c.add(this.add.text(W / 2, H - 9, wm.waveActive ? '' : 'Click: iniciar oleada', {
+                fontFamily: FONT, fontSize: '7px', color: '#4CAF50',
+            }).setOrigin(0.5));
         }
 
-        // Whatever room is left after the label, split evenly.
-        const startX = isBoss ? LEFT + 62 : LEFT + 54;
-        const span = RIGHT - startX;
-        const step = Math.min(52, span / Math.max(1, comp.length));
+        this.waveCard = c;
+    }
 
-        comp.forEach((group, i) => {
-            const data = ENEMY_DATA[group.type];
-            if (!data) return;
-            const x = startX + step * i + 12;
-
-            const icon = this.add.sprite(x, ROW_PREVIEW, safeTexture(this, `enemy_${group.type}`, 'enemy_slime'))
-                .setInteractive({ useHandCursor: false });
-            const baseScale = data.isBoss ? 0.8 : 0.65;
-            const maxDim = Math.max(icon.width, icon.height);
-            const scale = maxDim > 32 ? baseScale * (32 / maxDim) : baseScale;
-            icon.setScale(scale);
-            const animKey = `enemy_${group.type}_pulse`;
-            if (this.anims.exists(animKey)) {
-                icon.play(animKey);
-            }
-
-            // The element rides on the icon's shoulder as a glyph, not as a
-            // tint: an enemy already has a colour, and it is not its element's.
-            const glyph = this.add.text(x + 9, ROW_PREVIEW - 8, elementSymbol(data.element), {
-                fontFamily: FONT, fontSize: '8px',
-            }).setOrigin(0.5);
-
-            const count = this.add.text(x + 12, ROW_PREVIEW + 6, `x${group.count}`, {
-                fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
-                stroke: '#12122a', strokeThickness: 3,
-            }).setOrigin(0, 0.5);
-
-            if (data.isBoss) {
-                const crown = this.add.text(x - 2, ROW_PREVIEW - 14, '👑', {
-                    fontSize: '8px',
-                }).setOrigin(0.5);
-                this.previewEntries.push(crown);
-            }
-
-            icon.on('pointerover', () => this._showEnemyTooltip(group.type, x + 40, ROW_PREVIEW - 58));
-            icon.on('pointerout', () => this._hideTooltip());
-
-            this.previewEntries.push(icon, glyph, count);
-        });
+    _hideWaveCard() {
+        if (this.waveCard) { this.waveCard.destroy(true); this.waveCard = null; }
     }
 
     // ─── Fusion preview ─────────────────────────────────
@@ -775,9 +941,10 @@ export class UIScene extends Phaser.Scene {
         this.waveBtnBg.setStrokeStyle(2, 0x4CAF50);
         this.waveBtnBg.setInteractive({ useHandCursor: true });
 
-        this.waveBtnText = this.add.text(CX, ROW_WAVE_BTN, 'OLEADA ▶', {
+        this.waveBtnText = this.add.text(CX, ROW_WAVE_BTN, '', {
             fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
         }).setOrigin(0.5);
+        this._refreshWaveButton();
 
         this.waveBtnBg.on('pointerdown', () => {
             if (!this.gs.waveManager.waveActive) this.gs.events.emit('start-wave');
@@ -788,6 +955,15 @@ export class UIScene extends Phaser.Scene {
         this.waveBtnBg.on('pointerout', () => {
             this.waveBtnBg.fillColor = this.gs.waveManager.waveActive ? 0x333344 : 0x2E7D32;
         });
+    }
+
+    /** Which wave the button starts, or which one is running. */
+    _refreshWaveButton() {
+        if (!this.waveBtnText) return;
+        const wm = this.gs.waveManager;
+        this.waveBtnText.setText(wm.waveActive
+            ? `OLEADA ${wm.currentWave} EN CURSO`
+            : `INICIAR OLEADA ${wm.nextWaveNumber} ▶`);
     }
 
     // ─── Hero ability bar ───────────────────────────────
@@ -854,6 +1030,58 @@ export class UIScene extends Phaser.Scene {
      * that a spell has a price, so each cell carries the number — and the number
      * is what turns "I have 400✦" into a decision instead of a total.
      */
+    /**
+     * One backing panel for the spell and ability rows, in the sidebar's own
+     * colours. Without it the two rows floated on the grass and the boulders
+     * showed through between them; with it they read as one piece of chrome.
+     *
+     * It also swallows clicks, so a press in the gaps between buttons can no
+     * longer drop a tower on the cells hidden underneath.
+     */
+    _buildHudPanel() {
+        const left = 3;
+        const right = HUD_X + HUD_GAP * 2 + HUD_SIZE / 2 + 7;
+        const top = SPELL_Y - SPELL_SIZE / 2 - 20;
+        const bottom = 477;
+        const panel = this.add.rectangle(
+            (left + right) / 2, (top + bottom) / 2, right - left, bottom - top, 0x12122a, 0.84,
+        ).setStrokeStyle(1, 0x2a2a4a).setDepth(49).setInteractive();
+        panel.on('pointerdown', (pointer) => {
+            pointer.event.stopPropagation();
+            pointer.event._uiConsumed = true;
+        });
+
+        // Vesper's health, beside the name, plus the wait while he is gone.
+        // The bar over his head is easy to lose in a fight; this one is not.
+        const barX = HUD_X - HUD_SIZE / 2 + 54;
+        const barW = right - 6 - barX;
+        const barY = HUD_Y - HUD_SIZE / 2 - 9;
+        this.heroHpBg = this.add.rectangle(barX, barY, barW, 5, 0x1a1a1a)
+            .setOrigin(0, 0.5).setStrokeStyle(1, 0x333344).setDepth(50);
+        this.heroHpFill = this.add.rectangle(barX + 1, barY, barW - 2, 3, 0x4CAF50)
+            .setOrigin(0, 0.5).setDepth(51);
+        this.heroHpBarW = barW - 2;
+        this.heroRespawnText = this.add.text(barX + barW / 2, barY, '', {
+            fontFamily: FONT, fontSize: '7px', color: '#B0BEC5',
+            stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0.5).setDepth(52);
+    }
+
+    _refreshHeroHealth() {
+        const hero = this.gs.hero;
+        if (!hero || !this.heroHpFill) return;
+        if (hero.isDead) {
+            this.heroHpFill.setVisible(false);
+            // The empty bar already says he is down; the number says for how long.
+            this.heroRespawnText.setText(`${Math.ceil((hero.respawnIn || 0) / 1000)}s`);
+            return;
+        }
+        const pct = Phaser.Math.Clamp(hero.hp / hero.maxHp, 0, 1);
+        this.heroHpFill.setVisible(true).setSize(Math.max(1, this.heroHpBarW * pct), 3);
+        this.heroHpFill.fillColor = pct > 0.6 ? 0x4CAF50 : pct > 0.3 ? 0xFFC107 : 0xEF5350;
+        this.heroRespawnText.setText('');
+    }
+
     _buildSpellHud() {
         this.add.text(HUD_X - HUD_SIZE / 2, SPELL_Y - SPELL_SIZE / 2 - 9, 'HECHIZOS', {
             fontFamily: FONT, fontSize: '8px', color: '#CFDDE9',
@@ -1135,7 +1363,8 @@ export class UIScene extends Phaser.Scene {
         on('wave-started', () => {
             this._updateStatus();
             this.waveBtnBg.fillColor = 0x333344;
-            this.waveBtnText.setColor('#555555');
+            this.waveBtnText.setColor('#8a8aa0');
+            this._refreshWaveButton();
             // currentWave has already advanced, so the readout now describes the
             // wave after this one — which is the one still worth preparing for.
             this._refreshWavePreview();
@@ -1147,6 +1376,7 @@ export class UIScene extends Phaser.Scene {
 
             this.waveBtnBg.fillColor = 0x2E7D32;
             this.waveBtnText.setColor('#FFFFFF');
+            this._refreshWaveButton();
 
             this.gs.economySystem.addGold(15);
             this._flashNotification('¡Oleada completada! +15 oro', '#4CAF50');
@@ -2160,10 +2390,6 @@ export class UIScene extends Phaser.Scene {
         for (const btn of this.templeBtns) {
             this._setAffordable(btn, gold >= templeCost);
         }
-        const canAfford = gold >= templeCost;
-        this.templeCostLabel.setColor(canAfford ? '#FFD700' : '#555555');
-        this.templeCostCoin.setAlpha(canAfford ? 1 : 0.3);
-        this.templeCostValue.setColor(canAfford ? '#FFD700' : '#555555');
     }
 
     _setAffordable(btn, can) {

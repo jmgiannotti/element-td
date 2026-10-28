@@ -63,7 +63,8 @@ export function expectedTextureKeys() {
         'seal_water_halo', 'seal_air_halo', 'seal_fire_halo', 'seal_earth_halo',
         'gate_spawn', 'gate_exit', HERO_GLOW_KEY, HERO_SLASH_KEY,
         'spell_moon', 'spell_moon_ring', 'sentinel',
-        'btn_bg', 'btn_bg_sel', 'btn_bg_off', 'btn_build', 'btn_build_sel'];
+        'btn_bg', 'btn_bg_sel', 'btn_bg_off', 'btn_build', 'btn_build_sel', 'icon_heart',
+        'marker_wave', 'marker_wave_boss'];
 
     // One icon per spell, named off the table so a new spell fails the boot
     // check loudly instead of showing Phaser's placeholder square on a button.
@@ -2313,6 +2314,88 @@ export class BootScene extends Phaser.Scene {
         });
     }
 
+    /**
+     * The next-wave marker over the spawn gate, Kingdom Rush style — but made of
+     * this game's materials: a medallion of the same granite as the pedestals,
+     * a bone skull set into it, and the eyes lit from inside the way every rune
+     * on the board is. A boss wave gilds the rim, in the gold the game spends
+     * on rank. The arrow is part of the sprite, standing 3px off the disc.
+     *
+     * 26×34: the disc is centred on (13, 13) — between texels, so a 26px disc
+     * is symmetric — and UIScene puts the image's origin exactly there.
+     */
+    _generateWaveMarker() {
+        const BONE = ramp(0x14101a, 0x6a5e4c, 0xa89c86, 0xe6dcc6, 0xf8f2e4);
+        const R = 12.5;            // outer radius, outline included
+        const C = 13;              // centre, on the texel boundary
+
+        const make = (key, rim, eye) => this._draw(key, 26, 34, (g) => {
+            groundShadow(g, 13, 27, 9, 1, 0.25);
+
+            // Disc: outline, rim lit from the top-left, then the recessed field
+            for (let y = 0; y < 26; y++) {
+                for (let x = 0; x < 26; x++) {
+                    const dx = x + 0.5 - C;
+                    const dy = y + 0.5 - C;
+                    const d = Math.hypot(dx, dy);
+                    if (d > R) continue;
+                    let col;
+                    if (d > R - 1) col = rim.deep;
+                    else if (d > R - 4) {
+                        // The rim: a bevel, bright where it faces the light
+                        const lit = -(dx + dy) / (Math.SQRT2 * d || 1);
+                        col = lit > 0.55 ? rim.glow : lit > 0.15 ? rim.light : lit > -0.35 ? rim.mid : rim.dark;
+                    } else if (d > R - 5) col = rim.deep;
+                    else {
+                        // The field is sunk, so it catches light on the far side
+                        const lit = (dx + dy) / (Math.SQRT2 * (d || 1));
+                        col = d > R - 6.5 && lit > 0.4 ? 0x24243e : 0x12122a;
+                    }
+                    g.fillStyle(col);
+                    g.fillRect(x, y, 1, 1);
+                }
+            }
+
+            // A glow in the field behind the eyes
+            g.fillStyle(eye.mid, 0.18); g.fillRect(8, 10, 10, 3);
+
+            // The skull, 12×12, centred on (13, 13)
+            blit(g, [
+                '...aaaaaa...',
+                '.aabbbbbbaa.',
+                'abbbbbbbbbda',
+                'abcggbbggcda',
+                'abceebbeecda',
+                'abcccbbcccda',
+                'abbbbaabbbda',
+                '.abbbbbbbda.',
+                '..aaaaaaaa..',
+                '..abcbcbda..',
+                '..abbbbbda..',
+                '...aaaaaa...',
+            ], {
+                a: BONE.deep, b: BONE.light, c: 0x1a0a10, d: BONE.mid,
+                // Eyes: two embers in each socket, brighter on top
+                g: eye.light, e: eye.mid,
+            }, 7, 7);
+            g.fillStyle(BONE.glow); g.fillRect(10, 9, 2, 1);
+
+            // The arrow, 3px clear of the disc, in the rim's material
+            const rows = [[9, 16], [10, 15], [11, 14], [12, 13]];
+            g.fillStyle(rim.deep);
+            rows.forEach(([x0, x1], i) => g.fillRect(x0 - 1, 29 + i, x1 - x0 + 3, 1));
+            g.fillRect(12, 33, 2, 1);
+            rows.forEach(([x0, x1], i) => {
+                g.fillStyle(i === 0 ? rim.light : rim.mid);
+                g.fillRect(x0, 29 + i, x1 - x0 + 1, 1);
+            });
+        });
+
+        const EMBER = ramp(0x3a0812, 0x8a1424, 0xE53950, 0xFF8A80, 0xFFD0C8);
+        make('marker_wave', STONE_HI, EMBER);
+        make('marker_wave_boss', GOLD, ramp(0x4a1a00, 0xa8400a, 0xff8a2b, 0xffd54f, 0xfff3c4));
+    }
+
     // ─── Route gates (32×32) ────────────────────────────
     _generateGates() {
         // Where they come from: a cracked arch with something green behind it.
@@ -2419,6 +2502,24 @@ export class BootScene extends Phaser.Scene {
         panel('btn_bg_sel', 40, 40, GOLD.light, 0x22224a, 0x32325a);
         panel('btn_build', 56, 62, 0x3a3a5e, 0x1a1a34, 0x2a2a4e);
         panel('btn_build_sel', 56, 62, GOLD.light, 0x22224a, 0x32325a);
+
+        // Lives. Drawn, because the pixel font has no heart: "♥" came out as
+        // a speck the size of a comma, on the one number that ends the game.
+        this._draw('icon_heart', 9, 9, (g) => {
+            blit(g, [
+                '.aa...aa.',
+                'abba.abba',
+                'abcbabbda',
+                'abccbbbda',
+                'abbbbbbda',
+                '.abbbbda.',
+                '..abbda..',
+                '...ada...',
+                '....a....',
+            ], { a: 0x3a0812, b: 0xE53950, c: 0xFF9AA8, d: 0xA8203A });
+        });
+
+        this._generateWaveMarker();
 
         this._draw('btn_bg_off', 40, 40, (g) => {
             g.fillStyle(0x121228);
