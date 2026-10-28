@@ -5,6 +5,8 @@ import { WaveManager } from '../systems/WaveManager.js';
 import { EconomySystem, BARRICADE_COST, refundValue } from '../systems/EconomySystem.js';
 import { FusionSystem } from '../systems/FusionSystem.js';
 import { TempleSystem } from '../systems/TempleSystem.js';
+import { BarricadeSystem } from '../systems/BarricadeSystem.js';
+import { BARRICADE_ENCHANTS, ENCHANT_ORDER, enchantCostLabel } from '../data/BarricadeData.js';
 import { RouteView } from '../systems/RouteView.js';
 import { FloatingText } from '../systems/FloatingText.js';
 import { TutorialSystem } from '../systems/TutorialSystem.js';
@@ -100,6 +102,8 @@ export class GameScene extends Phaser.Scene {
 
         // TempleSystem reads scene.temples, so it is built after the lists.
         this.templeSystem = new TempleSystem(this);
+        // Enchantments on top of the barricades map above; reads it lazily.
+        this.barricadeSystem = new BarricadeSystem(this);
 
         // ── State ───────────────────────────────
         this.selectedElement = null;
@@ -354,6 +358,7 @@ export class GameScene extends Phaser.Scene {
         // Shutdown event to clean up static pools and systems
         this.events.on('shutdown', () => {
             this.input.keyboard.removeAllListeners();
+            if (this.barricadeSystem) this.barricadeSystem.destroy();
             if (this.particleSystem) {
                 this.particleSystem.destroy();
                 this.particleSystem = null;
@@ -402,7 +407,7 @@ export class GameScene extends Phaser.Scene {
                 temples: this.temples.map(t => ({ col: t.col, row: t.row, element: t.element, paid: t.paidCost })),
                 barricades: Array.from(this.barricades.entries()).map(([key, cost]) => {
                     const [c, r] = key.split(',').map(Number);
-                    return { col: c, row: r, cost };
+                    return { col: c, row: r, cost, enchant: this.barricadeSystem.typeAt(c, r) };
                 }),
                 breakableBlocks: Array.from(this.breakableBlocks.entries()).map(([key, hp]) => {
                     const [c, r] = key.split(',').map(Number);
@@ -415,6 +420,12 @@ export class GameScene extends Phaser.Scene {
             if (this.selectedStructure && this.selectedStructure.alive) {
                 this._refreshStatLabel();
             }
+        });
+        // Only a bare barricade's card quotes a price in maná (Escarcha), and
+        // maná moves every time a temple drinks, so nothing else listens.
+        onCustom('mana-changed', () => {
+            const s = this.selectedStructure;
+            if (s && s.kind === 'barricade' && s.alive) this._refreshStatLabel();
         });
         onCustom('wave-complete', () => {
             this._refreshRouteVisibility();
@@ -716,6 +727,15 @@ export class GameScene extends Phaser.Scene {
             return;
         }
 
+        if (this.barricades.has(`${col},${row}`)) {
+            // Handles are made fresh, so a second click on the same wall has to
+            // hand back the pinned one for selectStructure to let go of it.
+            const pinned = this.selectedStructure;
+            const same = pinned?.kind === 'barricade' && pinned.col === col && pinned.row === row;
+            this.selectStructure(same ? pinned : this.barricadeSystem.handle(col, row));
+            return;
+        }
+
         this.selectStructure(null);
     }
 
@@ -754,10 +774,31 @@ export class GameScene extends Phaser.Scene {
         this.upgradeBtnBg.on('pointerdown', (pointer) => {
             if (pointer.button !== 0 && pointer.button !== undefined) return;
             pointer.event.stopPropagation();
-            this._buyTowerUpgrade();
+            if (this.selectedStructure?.kind === 'barricade') this._buyEnchant(ENCHANT_ORDER[0]);
+            else this._buyTowerUpgrade();
         });
 
-        this.statCard.add([this.statCardBg, this.statText, this.upgradeBtnBg, this.upgradeBtnText]);
+        // Second button, only used by a bare barricade: one per enchantment.
+        this.altBtnBg = this.add.rectangle(0, 30, 178, 22, 0x1e1e3a)
+            .setStrokeStyle(1, 0x3a3a5a)
+            .setInteractive({ useHandCursor: true })
+            .setVisible(false);
+        this.altBtnBg.setData('uiBlocker', true);
+        this.altBtnText = this.add.text(0, 30, '', {
+            fontFamily: '"Press Start 2P"',
+            fontSize: '8px',
+            color: '#FFFFFF',
+        }).setOrigin(0.5).setVisible(false);
+        this.altBtnBg.on('pointerdown', (pointer) => {
+            if (pointer.button !== 0 && pointer.button !== undefined) return;
+            pointer.event.stopPropagation();
+            this._buyEnchant(ENCHANT_ORDER[1]);
+        });
+
+        this.statCard.add([
+            this.statCardBg, this.statText, this.upgradeBtnBg, this.upgradeBtnText,
+            this.altBtnBg, this.altBtnText,
+        ]);
     }
 
     /**
@@ -797,6 +838,12 @@ export class GameScene extends Phaser.Scene {
         }
 
         const isTower = t instanceof Tower;
+        if (t.kind === 'barricade') {
+            this._refreshBarricadeCard(t);
+            return;
+        }
+        this.altBtnBg.setVisible(false);
+        this.altBtnText.setVisible(false);
         const ts = this.templeSystem;
         const templeLvl = ts ? ts.totalLevels(t.element) : 0;
 
@@ -842,11 +889,70 @@ export class GameScene extends Phaser.Scene {
         }
 
         this.statText.setText(lines.join('\n'));
+        this._layoutStatCard(t, isTower ? 1 : 0);
+    }
 
+    /**
+     * A barricade's card: what it does now, and — while it is still bare — the
+     * two enchantments, each on its own button and in its own currency.
+     */
+    _refreshBarricadeCard(t) {
+        const type = this.barricadeSystem.typeAt(t.col, t.row);
+        const lines = [];
+
+        if (type) {
+            const e = BARRICADE_ENCHANTS[type];
+            lines.push(`Barricada de ${e.name}`);
+            lines.push(e.desc);
+            lines.push('Bloquea el paso');
+            this.upgradeBtnBg.setVisible(false);
+            this.upgradeBtnText.setVisible(false);
+            this.altBtnBg.setVisible(false);
+            this.altBtnText.setVisible(false);
+            this.statText.setText(lines.join('\n'));
+            this._layoutStatCard(t, 0);
+            return;
+        }
+
+        lines.push('Barricada');
+        lines.push('Bloquea el paso');
+        lines.push('Encantala: afecta a quien');
+        lines.push('camine a su lado');
+        this.statText.setText(lines.join('\n'));
+
+        const paint = (bg, txt, enchantType) => {
+            const e = BARRICADE_ENCHANTS[enchantType];
+            const ok = this.barricadeSystem.canAfford(enchantType);
+            const hex = `#${e.color.toString(16).padStart(6, '0')}`;
+            bg.setVisible(true);
+            txt.setVisible(true);
+            txt.setText(`${e.name.toUpperCase()}  ${enchantCostLabel(enchantType)}`);
+            txt.setColor(ok ? hex : '#888899');
+            bg.fillColor = ok ? 0x241d3d : 0x16162a;
+            bg.setStrokeStyle(1, ok ? e.color : 0x3a3a5a);
+        };
+        paint(this.upgradeBtnBg, this.upgradeBtnText, ENCHANT_ORDER[0]);
+        paint(this.altBtnBg, this.altBtnText, ENCHANT_ORDER[1]);
+        this._layoutStatCard(t, 2);
+    }
+
+    _buyEnchant(type) {
+        const t = this.selectedStructure;
+        if (!t || t.kind !== 'barricade' || !t.alive) return;
+        if (this.barricadeSystem.enchant(t.col, t.row, type)) {
+            this._refreshStatLabel();
+        } else {
+            audio.play('deny');
+            this.cameras.main.shake(90, 0.003);
+        }
+    }
+
+    /** Sizes the card around its text and `buttons` stacked buttons, then places it. */
+    _layoutStatCard(t, buttons) {
         // Measure content dimensions and adapt card size
         const textBounds = this.statText.getBounds();
         const cardW = Math.max(198, textBounds.width + 20);
-        const cardH = isTower ? textBounds.height + 44 : textBounds.height + 18;
+        const cardH = textBounds.height + 18 + buttons * 26;
 
         this.statCardBg.setSize(cardW, cardH);
         if (this.statCardBg.input && this.statCardBg.input.hitArea) {
@@ -854,16 +960,18 @@ export class GameScene extends Phaser.Scene {
         }
         this.statText.setPosition(-cardW / 2 + 10, -cardH / 2 + 8);
 
-        if (isTower) {
-            const btnW = cardW - 16;
-            const btnH = 22;
-            this.upgradeBtnBg.setSize(btnW, btnH);
-            if (this.upgradeBtnBg.input && this.upgradeBtnBg.input.hitArea) {
-                this.upgradeBtnBg.input.hitArea.setSize(btnW, btnH);
-            }
-            this.upgradeBtnBg.setPosition(0, cardH / 2 - 16);
-            this.upgradeBtnText.setPosition(0, cardH / 2 - 16);
-        }
+        const btnW = cardW - 16;
+        const btnH = 22;
+        // Bottom-up, so with two buttons the first one sits above the second.
+        const stack = [[this.upgradeBtnBg, this.upgradeBtnText], [this.altBtnBg, this.altBtnText]]
+            .slice(0, buttons);
+        stack.forEach(([bg, txt], i) => {
+            const y = cardH / 2 - 16 - (buttons - 1 - i) * 26;
+            bg.setSize(btnW, btnH);
+            if (bg.input && bg.input.hitArea) bg.input.hitArea.setSize(btnW, btnH);
+            bg.setPosition(0, y);
+            txt.setPosition(0, y);
+        });
 
         // Clamp and position above/below the structure
         const clampedX = Phaser.Math.Clamp(
@@ -1167,6 +1275,7 @@ export class GameScene extends Phaser.Scene {
         const pos = this.gridSystem.gridToWorld(col, row);
 
         if (sale.kind === 'barricade') {
+            this.barricadeSystem.remove(col, row);
             this.barricades.delete(key);
             this.gridSystem.grid[row][col] = TILE.PATH;
             this._setDecor(col, row, null);
@@ -1253,6 +1362,9 @@ export class GameScene extends Phaser.Scene {
 
         // Enemies
         for (const e of this.enemies) e.update(time, delta);
+
+        // Enchanted barricades, after the enemies have moved this frame
+        this.barricadeSystem.update(delta);
 
         // Temples, then the motes: a temple whose shutdown expires this frame
         // should be drinking again on this frame, not on the next one.

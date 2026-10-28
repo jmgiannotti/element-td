@@ -112,7 +112,7 @@ export class SaveSystem {
                 .map(t => ({ col: t.col, row: t.row, element: t.element, paid: t.paidCost }));
             barricadesToSave = Array.from(gameScene.barricades.entries()).map(([key, cost]) => {
                 const [c, r] = key.split(',').map(Number);
-                return { col: c, row: r, cost };
+                return { col: c, row: r, cost, enchant: gameScene.barricadeSystem.typeAt(c, r) };
             });
             breakableBlocksToSave = Array.from(gameScene.breakableBlocks.entries()).map(([key, hp]) => {
                 const [c, r] = key.split(',').map(Number);
@@ -217,6 +217,7 @@ export class SaveSystem {
                     gameScene.gridSystem.grid[b.row][b.col] = TILE.BARRICADE;
                     gameScene._setDecor(b.col, b.row, 'tile_barricade');
                     gameScene.barricades.set(`${b.col},${b.row}`, b.cost ?? BARRICADE_COST);
+                    if (b.enchant) gameScene.barricadeSystem.restore(b.col, b.row, b.enchant);
                 }
             }
 

@@ -6,6 +6,7 @@ import {
 import { safeTexture } from '../systems/TextureGuard.js';
 import { audio } from '../systems/AudioSystem.js';
 import { BARRICADE_COST, SELL_REFUND } from '../systems/EconomySystem.js';
+import { BARRICADE_ENCHANTS } from '../data/BarricadeData.js';
 import { ENEMY_DATA } from '../data/EnemyData.js';
 import {
     EFFECT, EFFECT_MARK, EFFECT_LABEL, EFFECT_COLOR,
@@ -1245,6 +1246,14 @@ export class UIScene extends Phaser.Scene {
                 `${TEMPLE_DATA[el].shortName}: ${UPGRADE_TRACKS[track].label} Nv.${lvl}`,
                 '#FFD54F'
             );
+            this._updateManaBar();
+        });
+
+        on('barricade-enchanted', (type) => {
+            const e = BARRICADE_ENCHANTS[type];
+            this._flashNotification(`Barricada de ${e.name}: ${e.desc.toLowerCase()}`,
+                `#${e.color.toString(16).padStart(6, '0')}`);
+            this._updateAffordability();
             this._updateManaBar();
         });
 

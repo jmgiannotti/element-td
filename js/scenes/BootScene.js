@@ -56,6 +56,7 @@ const SIDES = ['top', 'bottom', 'left', 'right'];
 /** Every texture key the game can request once BootScene has finished. */
 export function expectedTextureKeys() {
     const keys = ['hero_shadow', 'mana_mote', 'tile_barricade',
+        'tile_barricade_spikes', 'tile_barricade_frost',
         'gate_spawn', 'gate_exit', HERO_GLOW_KEY, HERO_SLASH_KEY,
         'spell_moon', 'spell_moon_ring',
         'btn_bg', 'btn_bg_sel', 'btn_bg_off', 'btn_build', 'btn_build_sel'];
@@ -549,41 +550,107 @@ export class BootScene extends Phaser.Scene {
 
         // Barricade — a rune-locked gate of granite and gold. Reads as "closed"
         // at a glance, which is the only thing it has to say.
-        this._draw('tile_barricade', 32, 32, (g) => {
-            groundShadow(g, 16, 29, 12, 2, 0.28);
+        this._draw('tile_barricade', 32, 32, (g) => this._barricade(g, GOLD));
 
-            // Two posts
-            for (const x of [3, 24]) {
-                g.fillStyle(STONE.deep);  g.fillRect(x, 3, 5, 26);
-                g.fillStyle(STONE.mid);   g.fillRect(x + 1, 4, 3, 24);
-                g.fillStyle(STONE.light); g.fillRect(x + 1, 4, 1, 24);
-                g.fillStyle(STONE.dark);  g.fillRect(x + 3, 4, 1, 24);
-                g.fillStyle(STONE.glow);  g.fillRect(x + 1, 4, 3, 1);
-                g.fillStyle(STONE.deep);  g.fillRect(x + 1, 15, 3, 1);
-            }
-
-            // Three cross beams
-            for (const y of [7, 15, 23]) {
-                g.fillStyle(STONE.deep);  g.fillRect(2, y, 28, 6);
-                g.fillStyle(STONE.mid);   g.fillRect(3, y + 1, 26, 4);
-                g.fillStyle(STONE.light); g.fillRect(3, y + 1, 26, 1);
-                g.fillStyle(STONE.dark);  g.fillRect(3, y + 4, 26, 1);
-                for (let x = 6; x < 27; x += 6) {
-                    g.fillStyle(STONE.deep); g.fillRect(x, y + 1, 1, 4);
-                }
-            }
-
-            // Gold rivets and the seal in the middle
-            for (const [x, y] of [[4, 8], [26, 8], [4, 24], [26, 24]]) {
-                g.fillStyle(GOLD.dark);  g.fillRect(x, y, 3, 3);
-                g.fillStyle(GOLD.light); g.fillRect(x, y, 2, 2);
-                g.fillStyle(GOLD.glow);  g.fillRect(x, y, 1, 1);
-            }
-            g.fillStyle(GOLD.mid, 0.22); g.fillRect(11, 12, 10, 10);
-            volume(g, profile(12, [
-                [15, 16], [14, 17], [13, 18], [12, 19], [13, 18], [14, 17], [15, 16],
-            ]), GOLD, { spec: 0.22 });
+        // Enchanted barricades (US 11.1). The same gate, so a maze still reads
+        // as one wall; what changed is what sticks out of it and the colour of
+        // the seal, which is where the eye goes first.
+        this._draw('tile_barricade_spikes', 32, 32, (g) => {
+            this._barricade(g, EL.air);
+            this._spikes(g);
         });
+        this._draw('tile_barricade_frost', 32, 32, (g) => {
+            this._barricade(g, EL.ice);
+            this._frost(g);
+        });
+    }
+
+    /** The gate itself. `seal` is the ramp for the rivets and the central seal. */
+    _barricade(g, seal) {
+        groundShadow(g, 16, 29, 12, 2, 0.28);
+
+        // Two posts
+        for (const x of [3, 24]) {
+            g.fillStyle(STONE.deep);  g.fillRect(x, 3, 5, 26);
+            g.fillStyle(STONE.mid);   g.fillRect(x + 1, 4, 3, 24);
+            g.fillStyle(STONE.light); g.fillRect(x + 1, 4, 1, 24);
+            g.fillStyle(STONE.dark);  g.fillRect(x + 3, 4, 1, 24);
+            g.fillStyle(STONE.glow);  g.fillRect(x + 1, 4, 3, 1);
+            g.fillStyle(STONE.deep);  g.fillRect(x + 1, 15, 3, 1);
+        }
+
+        // Three cross beams
+        for (const y of [7, 15, 23]) {
+            g.fillStyle(STONE.deep);  g.fillRect(2, y, 28, 6);
+            g.fillStyle(STONE.mid);   g.fillRect(3, y + 1, 26, 4);
+            g.fillStyle(STONE.light); g.fillRect(3, y + 1, 26, 1);
+            g.fillStyle(STONE.dark);  g.fillRect(3, y + 4, 26, 1);
+            for (let x = 6; x < 27; x += 6) {
+                g.fillStyle(STONE.deep); g.fillRect(x, y + 1, 1, 4);
+            }
+        }
+
+        // Rivets and the seal in the middle
+        for (const [x, y] of [[4, 8], [26, 8], [4, 24], [26, 24]]) {
+            g.fillStyle(seal.dark);  g.fillRect(x, y, 3, 3);
+            g.fillStyle(seal.light); g.fillRect(x, y, 2, 2);
+            g.fillStyle(seal.glow);  g.fillRect(x, y, 1, 1);
+        }
+        g.fillStyle(seal.mid, 0.22); g.fillRect(11, 12, 10, 10);
+        volume(g, profile(12, [
+            [15, 16], [14, 17], [13, 18], [12, 19], [13, 18], [14, 17], [15, 16],
+        ]), seal, { spec: 0.22 });
+    }
+
+    /**
+     * PUAS — iron spikes driven through the beams, points out on both faces.
+     * Sideways, not up: the threat is to whoever walks *past*, and spikes on
+     * top would say "don't climb", which nobody here does.
+     */
+    _spikes(g) {
+        const IRON = EL.air;
+        const spike = (y, dir) => {
+            // dir -1 points left out of the left post, +1 right out of the right
+            const base = dir < 0 ? 2 : 29;
+            for (let i = 0; i < 3; i++) {
+                const x = base + dir * i;
+                const h = 3 - i;
+                g.fillStyle(IRON.deep);  g.fillRect(x, y - (h >> 1) - 1, 1, h + 2);
+                g.fillStyle(i === 0 ? IRON.mid : IRON.light);
+                g.fillRect(x, y - (h >> 1), 1, Math.max(1, h));
+            }
+            g.fillStyle(IRON.glow); g.fillRect(base + dir * 2, y, 1, 1);
+        };
+        for (const y of [9, 17, 25]) { spike(y, -1); spike(y, 1); }
+
+        // And through the faces of the beams, point towards the viewer
+        for (const [x, y] of [[9, 9], [21, 9], [9, 17], [21, 17], [9, 25], [21, 25]]) {
+            g.fillStyle(IRON.deep);  g.fillRect(x - 1, y - 1, 3, 3);
+            g.fillStyle(IRON.mid);   g.fillRect(x - 1, y - 1, 2, 2);
+            g.fillStyle(IRON.glow);  g.fillRect(x - 1, y - 1, 1, 1);
+        }
+    }
+
+    /** ESCARCHA — rime on the beams and icicles hanging off them. */
+    _frost(g) {
+        const I = EL.ice;
+        // Rime along the top of each beam, heavier on the lit side
+        for (const y of [7, 15, 23]) {
+            g.fillStyle(I.light, 0.85); g.fillRect(3, y, 22, 1);
+            g.fillStyle(I.glow);        g.fillRect(3, y, 9, 1);
+            g.fillStyle(I.mid, 0.5);    g.fillRect(3, y + 1, 26, 1);
+        }
+        // Caps on the posts
+        for (const x of [3, 24]) {
+            g.fillStyle(I.light); g.fillRect(x, 2, 5, 2);
+            g.fillStyle(I.glow);  g.fillRect(x, 2, 2, 1);
+        }
+        // Icicles under the beams, uneven so they read as grown, not cut
+        for (const [x, y, len] of [[5, 13, 2], [12, 13, 1], [22, 13, 2], [8, 21, 2], [19, 21, 1], [26, 21, 2], [11, 29, 1], [20, 29, 2]]) {
+            g.fillStyle(I.mid);   g.fillRect(x, y, 2, 1);
+            g.fillStyle(I.light); g.fillRect(x, y + 1, 1, len);
+            g.fillStyle(0xffffff, 0.8); g.fillRect(x, y, 1, 1);
+        }
     }
 
     // ─── Towers (32×32) ─────────────────────────────────

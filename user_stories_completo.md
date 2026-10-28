@@ -376,7 +376,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 
 ## 🧱 Epic 11: Barricadas Especializadas
 
-### US 11.1: Barricadas con Efectos Tácticos
+### US 11.1: Barricadas con Efectos Tácticos [✓]
 **Como** jugador,  
 **Quiero** poder encantar o mejorar barricadas para que apliquen efectos a los enemigos que caminen a su lado (púas de daño, escarcha ralentizadora),  
 **Para** que la arquitectura del laberinto sea también una herramienta de daño activo.
@@ -385,7 +385,11 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Opciones de barricada con púas (daño físico de contacto) y barricada de hielo (aura de ralentización adyacente).
 > - Coste de mejora adicional en oro/maná.
 > 
-> *Estado:* **Pendiente**.
+> Diseño: se encanta haciendo click en una barricada (tarjeta de inspección); una por barricada y permanente.
+> - **Púas** (25 oro, va a la cuenta de la barricada y se reembolsa en parte al vender): pincha cada 0.5s a todo enemigo a ≤1 casilla; el daño escala con la vida de la oleada.
+> - **Escarcha** (35 maná, no reembolsable, como un rango de templo): ralentiza 35% a quien pase al lado, con 0.8s de arrastre; no se apila con un slow mayor.
+>
+> *Estado:* Implementado en `js/data/BarricadeData.js`, `js/systems/BarricadeSystem.js`, `GameScene.js` (tarjeta, venta, checkpoint), `SaveSystem.js`, `BootScene.js` (sprites) y `UIScene.js` (aviso).
 
 ---
 
