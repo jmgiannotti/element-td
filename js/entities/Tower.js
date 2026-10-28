@@ -96,14 +96,20 @@ export class Tower {
             : 1;
     }
 
+    /** Bonus from the seal under this tower, if it shares an element. */
+    _seal(stat) {
+        const seals = this.scene.sealSystem;
+        return seals ? seals.multiplier(this.col, this.row, this.element, stat) : 1;
+    }
+
     get damage() {
         const lvlBonus = 1 + (this.level - 1) * TOWER_UPGRADE.DAMAGE_STEP;
-        return this.data.damage * lvlBonus * this._mult('damage');
+        return this.data.damage * lvlBonus * this._mult('damage') * this._seal('damage');
     }
 
     get range() {
         const lvlBonus = 1 + (this.level - 1) * TOWER_UPGRADE.RANGE_STEP;
-        return this.data.range * lvlBonus * this._mult('range');
+        return this.data.range * lvlBonus * this._mult('range') * this._seal('range');
     }
 
     get fireRate() { return this.data.fireRate * this._mult('fireRate'); }

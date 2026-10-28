@@ -6,6 +6,7 @@ import { EconomySystem, BARRICADE_COST, refundValue } from '../systems/EconomySy
 import { FusionSystem } from '../systems/FusionSystem.js';
 import { TempleSystem } from '../systems/TempleSystem.js';
 import { BarricadeSystem } from '../systems/BarricadeSystem.js';
+import { SealSystem } from '../systems/SealSystem.js';
 import { BARRICADE_ENCHANTS, ENCHANT_ORDER, enchantCostLabel } from '../data/BarricadeData.js';
 import { RouteView } from '../systems/RouteView.js';
 import { FloatingText } from '../systems/FloatingText.js';
@@ -124,6 +125,8 @@ export class GameScene extends Phaser.Scene {
 
         // ── Render map ──────────────────────────
         this._renderMap();
+        // After the ground is painted; towers read it lazily for their stats.
+        this.sealSystem = new SealSystem(this, this.levelData);
         this.routeView = new RouteView(this);
         // Wave 1 has not started, so the board opens in planning mode.
         this._refreshRouteVisibility();
@@ -299,6 +302,8 @@ export class GameScene extends Phaser.Scene {
             this._setSpellMode(null);
             this._clearBarricadeProbe();
             this.placementMode = true;
+            // Temples take no seal bonus, so only a tower in hand lights them.
+            this.sealSystem.setHighlight(el);
             this.previewSprite.setTexture(safeTexture(this, `tower_${el}`, 'tower_earth'));
             this.previewRange.setVisible(true);
             // Show the range the tower will actually have, upgrades included.
@@ -312,6 +317,7 @@ export class GameScene extends Phaser.Scene {
         onCustom('select-barricade', () => {
             this.selectedElement = 'barricade';
             this.isBarricadeMode = true;
+            this.sealSystem.setHighlight(null);
             this.isTempleMode = false;
             this._setSellMode(false);
             this._setSpellMode(null);
@@ -327,6 +333,7 @@ export class GameScene extends Phaser.Scene {
             this.selectedElement = el;
             this.isTempleMode = true;
             this.isBarricadeMode = false;
+            this.sealSystem.setHighlight(null);
             this._setSellMode(false);
             this._setSpellMode(null);
             this._clearBarricadeProbe();
@@ -359,6 +366,7 @@ export class GameScene extends Phaser.Scene {
         this.events.on('shutdown', () => {
             this.input.keyboard.removeAllListeners();
             if (this.barricadeSystem) this.barricadeSystem.destroy();
+            if (this.sealSystem) this.sealSystem.destroy();
             if (this.particleSystem) {
                 this.particleSystem.destroy();
                 this.particleSystem = null;
@@ -860,6 +868,8 @@ export class GameScene extends Phaser.Scene {
                     : 'sin mejoras de templo'
             );
             if (t.empowered) lines.push('potenciada por el heroe');
+            const seal = this.sealSystem.bonusLabel(t.col, t.row, t.element);
+            if (seal) lines.push(seal);
 
             // Upgrade button logic (US 8.1 Gold sink)
             this.upgradeBtnBg.setVisible(true);
@@ -1074,7 +1084,18 @@ export class GameScene extends Phaser.Scene {
             else this.cursorLabel.setVisible(false);
         } else {
             ok = this.gridSystem.canBuildTower(col, row) && !this.occupiedCells.has(`${col},${row}`);
-            this.cursorLabel.setVisible(false);
+            const el = this.selectedElement;
+            const isTower = !this.isTempleMode && TOWER_DATA[el];
+            const bonus = ok && isTower ? this.sealSystem.bonusLabel(col, row, el) : null;
+            if (bonus) this._showCursorLabel(pos, bonus, '#FFD54F');
+            else this.cursorLabel.setVisible(false);
+            // The ring previews the range the tower will really have on this cell.
+            if (isTower) {
+                this.previewRange.setRadius(
+                    TOWER_DATA[el].range * this.templeSystem.multiplier(el, 'range')
+                    * this.sealSystem.multiplier(col, row, el, 'range')
+                );
+            }
         }
 
         // The ghost only appears on buildable ground; drawing it over an
@@ -1335,6 +1356,7 @@ export class GameScene extends Phaser.Scene {
         this.selectedElement = null;
         this.isBarricadeMode = false;
         this.isTempleMode = false;
+        this.sealSystem.setHighlight(null);
         this._setSellMode(false);
         this._setSpellMode(null);
         this.previewSprite.setVisible(false);
@@ -1365,6 +1387,7 @@ export class GameScene extends Phaser.Scene {
 
         // Enchanted barricades, after the enemies have moved this frame
         this.barricadeSystem.update(delta);
+        this.sealSystem.update(delta);
 
         // Temples, then the motes: a temple whose shutdown expires this frame
         // should be drinking again on this frame, not on the next one.

@@ -57,6 +57,10 @@ const SIDES = ['top', 'bottom', 'left', 'right'];
 export function expectedTextureKeys() {
     const keys = ['hero_shadow', 'mana_mote', 'tile_barricade',
         'tile_barricade_spikes', 'tile_barricade_frost',
+        'seal_water', 'seal_air', 'seal_fire', 'seal_earth',
+        'seal_water_frame', 'seal_air_frame', 'seal_fire_frame', 'seal_earth_frame',
+        'seal_water_on', 'seal_air_on', 'seal_fire_on', 'seal_earth_on',
+        'seal_water_halo', 'seal_air_halo', 'seal_fire_halo', 'seal_earth_halo',
         'gate_spawn', 'gate_exit', HERO_GLOW_KEY, HERO_SLASH_KEY,
         'spell_moon', 'spell_moon_ring',
         'btn_bg', 'btn_bg_sel', 'btn_bg_off', 'btn_build', 'btn_build_sel'];
@@ -171,6 +175,7 @@ export class BootScene extends Phaser.Scene {
         this._generateCorners();
         this._generateScatter();
         this._generateObstacles();
+        this._generateSeals();
         this._generateTowers();
         this._generateTemples();
         this._generateEnemies();
@@ -650,6 +655,118 @@ export class BootScene extends Phaser.Scene {
             g.fillStyle(I.mid);   g.fillRect(x, y, 2, 1);
             g.fillStyle(I.light); g.fillRect(x, y + 1, 1, len);
             g.fillStyle(0xffffff, 0.8); g.fillRect(x, y, 1, 1);
+        }
+    }
+
+    // ─── Elemental seals (32×32) ────────────────────────
+    /**
+     * A seal is not ground — the lawn under it stays clean. It is a cluster of
+     * crystals in the element's colour and a dotted frame on the tile's edge:
+     * the same outlined, flat-faceted pixel art as the pedestals and the cyan
+     * shards in the grass, so it reads as something placed in the world rather
+     * than a stain on it.
+     *
+     * Four textures per element, which SealSystem swaps between:
+     *   seal_<el>        the cluster, for an empty tile
+     *   seal_<el>_frame  the dotted frame, for an empty tile
+     *   seal_<el>_on     lit frame + four corner crystals, once a matching
+     *                    tower stands there — kept clear of the pedestal
+     *   seal_<el>_halo   the light under the pedestal's footing, pulsed
+     */
+    _generateSeals() {
+        const RAMPS = {
+            fire:  EL.fire,
+            water: EL.ice,
+            earth: ramp(0x1a2608, 0x3d5a14, 0x7a9a2a, 0xc8d25a, 0xfff0a8),
+            air:   ramp(0x241c48, 0x5a4a9a, 0xa898d8, 0xe4ddff, 0xffffff),
+        };
+
+        // One faceted crystal: 1px dark outline, lit left face, shaded right
+        // face, a bright ridge, a white glint. `base` is the row it stands on.
+        const crystal = (g, cx, base, h, w, r) => {
+            const top = base - h + 1;
+            const spans = [];
+            for (let y = top; y <= base; y++) {
+                const i = y - top;
+                const half = i === 0 ? 0 : i === 1 ? Math.max(0, w - 1) : w;
+                spans.push([cx - half, cx + half]);
+            }
+            const filled = new Set();
+            spans.forEach(([x0, x1], i) => { for (let x = x0; x <= x1; x++) filled.add(`${x},${top + i}`); });
+            g.fillStyle(r.deep);
+            for (const key of filled) {
+                const [x, y] = key.split(',').map(Number);
+                for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+                    if (!filled.has(`${x + dx},${y + dy}`)) g.fillRect(x + dx, y + dy, 1, 1);
+                }
+            }
+            spans.forEach(([x0, x1], i) => {
+                const y = top + i;
+                for (let x = x0; x <= x1; x++) {
+                    let c = x < cx ? r.light : x === cx ? r.mid : r.dark;
+                    if (y === base) c = x <= cx ? r.mid : r.dark;     // the foot sits in shadow
+                    g.fillStyle(c); g.fillRect(x, y, 1, 1);
+                }
+            });
+            g.fillStyle(r.glow); g.fillRect(cx, top, 1, Math.min(2, h));        // lit ridge tip
+            g.fillStyle(0xffffff); g.fillRect(cx - Math.min(1, w), top + 2, 1, 1);  // glint
+        };
+
+        // The tile's edge, one pixel in, so two seals side by side never fuse.
+        const ring = [];
+        for (let i = 1; i <= 30; i++) ring.push([i, 1], [i, 30]);
+        for (let i = 2; i <= 29; i++) ring.push([1, i], [30, i]);
+
+        for (const [el, r] of Object.entries(RAMPS)) {
+            this._draw(`seal_${el}`, 32, 32, (g) => {
+                groundShadow(g, 16, 22, 8, 2, 0.35);
+                crystal(g, 11, 21, 6, 1, r);
+                crystal(g, 21, 21, 5, 1, r);
+                crystal(g, 16, 22, 10, 2, r);      // the tall one in front
+            });
+
+            this._draw(`seal_${el}_frame`, 32, 32, (g) => {
+                // Dotted, with full corners so the frame reads as a frame
+                for (const [x, y] of ring) {
+                    const corner = (x <= 3 || x >= 28) && (y <= 3 || y >= 28);
+                    if (corner || (x + y) % 3 === 0) {
+                        g.fillStyle(corner ? r.light : r.mid, corner ? 0.9 : 0.6);
+                        g.fillRect(x, y, 1, 1);
+                    }
+                }
+            });
+
+            this._draw(`seal_${el}_on`, 32, 32, (g) => {
+                // A soft band either side of a clean, solid 1px line
+                g.fillStyle(r.mid, 0.25);
+                for (const [x, y] of ring) {
+                    g.fillRect(x === 1 ? 0 : x === 30 ? 31 : x, y === 1 ? 0 : y === 30 ? 31 : y, 1, 1);
+                    g.fillRect(x === 1 ? 2 : x === 30 ? 29 : x, y === 1 ? 2 : y === 30 ? 29 : y, 1, 1);
+                }
+                g.fillStyle(r.light);
+                for (const [x, y] of ring) g.fillRect(x, y, 1, 1);
+
+                // Four small crystals keeping watch at the corners, clear of
+                // the pedestal (x 5–27) and of its head
+                crystal(g, 4, 7, 4, 1, r);
+                crystal(g, 27, 7, 4, 1, r);
+                crystal(g, 3, 29, 4, 1, r);
+                crystal(g, 28, 29, 4, 1, r);
+            });
+
+            this._draw(`seal_${el}_halo`, 32, 32, (g) => {
+                // Light pooled under the footing: it shows past the plinth's
+                // sides and below it, which is what makes the base look lit.
+                for (const [rx, ry, a] of [[15, 6, 0.12], [13, 5, 0.18], [11, 4, 0.22]]) {
+                    for (let y = -ry; y <= ry; y++) {
+                        const t = 1 - (y * y) / ((ry + 0.4) * (ry + 0.4));
+                        const w = Math.round(rx * Math.sqrt(Math.max(0, t)));
+                        if (w <= 0) continue;
+                        g.fillStyle(r.mid, a);
+                        g.fillRect(16 - w, 26 + y, w * 2, 1);
+                    }
+                }
+            });
         }
     }
 

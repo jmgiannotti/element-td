@@ -395,7 +395,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 
 ## 🗺️ Epic 12: Terreno Elemental
 
-### US 12.1: Casillas de Suelo con Afinidad Elemental
+### US 12.1: Casillas de Suelo con Afinidad Elemental [✓]
 **Como** jugador,  
 **Quiero** que ciertas casillas del mapa posean afinidad con un elemento natural (Fuego, Agua, Tierra, Rayo) otorgando un bonus a las torres colocadas allí,  
 **Para** incentivar la lectura del terreno y variar la colocación de torres entre partidas.
@@ -404,7 +404,13 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Casillas del grid marcadas visualmente con runas elementales.
 > - Colocar una torre del elemento coincidente otorga un +20% de daño o rango.
 > 
-> *Estado:* **Pendiente**.
+> Diseño: el pasto queda limpio; cada sello es un **racimo de 3 cristales facetados** (mismo estilo con outline que los pedestales) con un **marco punteado** en el borde de la casilla. Con una torre compatible encima, el racimo se oculta y aparecen un marco luminoso, 4 cristales en las esquinas y un brillo pulsante bajo la base. Colores: Fuego naranja, Agua cian, Tierra verde/ámbar, Aire blanco/violeta.
+> - Fuego/Tierra: +20% daño · Agua/Aire: +20% alcance.
+> - Híbridos y legendarias cuentan todos sus componentes (Hielo usa sellos de Agua o Aire; Obsidiana y Templo Ancestral, cualquiera).
+> - Con una torre en la mano, los sellos compatibles laten; el cursor muestra el bono y el anillo de alcance ya lo incluye. Ocupado por el elemento correcto, el sello brilla; por otro, se apaga.
+> - Se definen por mapa en `LevelData.seals`.
+>
+> *Estado:* Implementado en `js/data/SealData.js`, `js/systems/SealSystem.js`, `LevelData.js`, `Tower.js`, `GameScene.js` y `BootScene.js` (sprites `seal_*`).
 
 ---
 

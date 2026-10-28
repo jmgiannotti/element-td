@@ -35,6 +35,19 @@ export const LEVEL_VALLE = {
     // Enough to open with a temple (60) plus any single tower (20–30) and
     // still have change — the first decision should be which two to buy,
     // not whether you can afford to start at all.
+    // Elemental seals (US 12.1), on grass beside the road: two per element,
+    // one in each band between the switchbacks so no single stretch of road
+    // hoards them.
+    seals: [
+        { col: 6, row: 4, element: 'fire' },
+        { col: 11, row: 4, element: 'air' },
+        { col: 7, row: 8, element: 'water' },
+        { col: 12, row: 8, element: 'earth' },
+        { col: 18, row: 8, element: 'water' },
+        { col: 9, row: 12, element: 'earth' },
+        { col: 13, row: 12, element: 'fire' },
+        { col: 18, row: 12, element: 'air' },
+    ],
     initialGold: 110,
     initialLives: 20,
 };
