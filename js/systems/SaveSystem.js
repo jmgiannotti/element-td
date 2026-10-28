@@ -124,7 +124,7 @@ export class SaveSystem {
         const data = {
             version: 1,
             timestamp: Date.now(),
-            levelId: gameScene.levelData?.id || 'valle_sagrado',
+            levelId: gameScene.levelData.id,
             gold: goldToSave,
             mana: manaToSave,
             lives: livesToSave,

@@ -15,12 +15,10 @@ export function refundValue(paidCost) {
 export class EconomySystem {
     constructor(scene) {
         this.scene = scene;
-        // Enough to open with a temple (60) plus any single tower (20–30) and
-        // still have change — the first decision should be which two to buy,
-        // not whether you can afford to start at all.
-        this.gold = 110;
+        // Starting purse and lives are per level (LevelData).
+        this.gold = scene.levelData.initialGold;
         this.mana = 0;
-        this.lives = 20;
+        this.lives = scene.levelData.initialLives;
 
         // Gold is now a kill bounty. It used to come from motes, but motes are
         // life force and only temples may drink them — without a bounty you

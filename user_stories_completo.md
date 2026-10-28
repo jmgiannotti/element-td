@@ -437,7 +437,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - **Persistencia Multimapa (`SaveSystem`)**:
 >   - `SaveSystem` incluye el `levelId` en el guardado para restaurar exactamente el mapa y sus obstáculos guardados.
 > 
-> *Estado:* **Pendiente**.
+> *Estado:* **En progreso** — Paso 1 (desacoplamiento base) hecho: el mapa vive en `js/data/LevelData.js`; se eliminó `WAYPOINTS` y `GridSystem` usa las dimensiones del nivel (`GridSystem.js`, `GameScene.js`, `Hero.js`, `EconomySystem.js`, `SaveSystem.js`). Pendiente: biomas, selector en `TitleScene`, oleadas por mapa.
 
 ### US 14.2: Modo Sin Fin (Endless Mode) [✓]
 **Como** jugador veterano,  

@@ -16,12 +16,11 @@ import { pointerWorld } from '../systems/Viewport.js';
 const SWING_MS = 260;
 const WALK_FRAME_MS = 145;
 
-const SPAWN_COL = 10;
-const SPAWN_ROW = 7;
-
 export class Hero {
     constructor(scene, col, row) {
         this.scene = scene;
+        // Where the hero (re)appears, as the level placed it.
+        this.spawnCell = { col, row };
 
         const pos = scene.gridSystem.gridToWorld(col, row);
 
@@ -884,7 +883,7 @@ export class Hero {
         this._setPose('stand');
         if (heroArtAnimates(this.scene)) this.sprite.setFrame(HERO_SPRITE.idleFrame);
 
-        const pos = this.scene.gridSystem.gridToWorld(SPAWN_COL, SPAWN_ROW);
+        const pos = this.scene.gridSystem.gridToWorld(this.spawnCell.col, this.spawnCell.row);
         this.posX = pos.x;
         this.posY = pos.y;
         this.sprite.setPosition(pos.x, pos.y);

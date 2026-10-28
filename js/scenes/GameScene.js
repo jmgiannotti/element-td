@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { GridSystem, TILE_SIZE, GAME_WIDTH, GAME_HEIGHT, GRID_COLS, GRID_ROWS, TILE } from '../systems/GridSystem.js';
+import { GridSystem, TILE_SIZE, GAME_WIDTH, GAME_HEIGHT, TILE } from '../systems/GridSystem.js';
 import { DEFAULT_LEVEL, getLevelById } from '../data/LevelData.js';
 import { WaveManager } from '../systems/WaveManager.js';
 import { EconomySystem, BARRICADE_COST, refundValue } from '../systems/EconomySystem.js';
@@ -125,8 +125,7 @@ export class GameScene extends Phaser.Scene {
         this._refreshRouteVisibility();
 
         // ── Hero ────────────────────────────────
-        const heroCol = this.levelData.heroSpawn?.col ?? 10;
-        const heroRow = this.levelData.heroSpawn?.row ?? 7;
+        const { col: heroCol, row: heroRow } = this.levelData.heroSpawn;
         this.hero = new Hero(this, heroCol, heroRow);
 
         // ── Placement preview ───────────────────
@@ -471,11 +470,12 @@ export class GameScene extends Phaser.Scene {
         this.tileNodes = new Map();  // 'c,r' → terrain sprites for that cell
         this.decor = new Map();      // 'c,r' → boulder / barricade sprite
 
-        for (let r = 0; r < GRID_ROWS; r++) {
-            for (let c = 0; c < GRID_COLS; c++) {
+        const { cols, rows } = this.gridSystem;
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
                 this._paintCell(c, r);
                 if (this.gridSystem.grid[r][c] === TILE.BREAKABLE) {
-                    this.breakableBlocks.set(`${c},${r}`, 80); // 80 HP for breakable
+                    this.breakableBlocks.set(`${c},${r}`, this.gridSystem.breakableHp(c, r));
                     this._setDecor(c, r, `breakable_${cellHash(c, r) % BREAKABLE_VARIANTS}`);
                 }
             }
@@ -485,8 +485,8 @@ export class GameScene extends Phaser.Scene {
         this.buildGrid = this.add.graphics().setDepth(D_GRID).setVisible(false);
         const MARK = 4;
         this.buildGrid.lineStyle(1, 0xffffff, 0.06);
-        for (let c = 1; c < GRID_COLS; c++) {
-            for (let r = 1; r < GRID_ROWS; r++) {
+        for (let c = 1; c < cols; c++) {
+            for (let r = 1; r < rows; r++) {
                 const gx = c * TILE_SIZE;
                 const gy = r * TILE_SIZE;
                 this.buildGrid.lineBetween(gx - MARK, gy, gx + MARK, gy);
@@ -497,27 +497,27 @@ export class GameScene extends Phaser.Scene {
         // Entrance and exit. Drawn buildings rather than a glyph and an emoji:
         // the two ends of the route are the most important landmarks on the
         // board, and a font is the one thing here that cannot match the art.
-        const enter = this.gridSystem.waypoints[1] || this.gridSystem.spawnPoint;
-        this.add.image(
-            TILE_SIZE / 2, enter.row * TILE_SIZE + TILE_SIZE / 2,
-            safeTexture(this, 'gate_spawn', 'tile_barricade')
-        ).setDepth(D_DECOR);
+        // Both sit on the first/last cell inside the board; the keep stands
+        // one cell in from the edge so it reads as the end of the road.
+        const { spawnPoint: enter, exitPoint: exit } = this.gridSystem;
+        const clampCol = (c) => Phaser.Math.Clamp(c, 0, cols - 1);
+        const clampRow = (r) => Phaser.Math.Clamp(r, 0, rows - 1);
+        const enterPos = this.gridSystem.gridToWorld(clampCol(enter.col), clampRow(enter.row));
+        this.add.image(enterPos.x, enterPos.y, safeTexture(this, 'gate_spawn', 'tile_barricade'))
+            .setDepth(D_DECOR);
 
-        const exit = this.gridSystem.waypoints[this.gridSystem.waypoints.length - 2] || this.gridSystem.exitPoint;
-        this.add.image(
-            (exit.col + 2) * TILE_SIZE + TILE_SIZE / 2,
-            exit.row * TILE_SIZE + TILE_SIZE / 2,
-            safeTexture(this, 'gate_exit', 'tile_barricade')
-        ).setDepth(D_DECOR);
+        const exitPos = this.gridSystem.gridToWorld(clampCol(exit.col) - 1, clampRow(exit.row));
+        this.add.image(exitPos.x, exitPos.y, safeTexture(this, 'gate_exit', 'tile_barricade'))
+            .setDepth(D_DECOR);
     }
 
     _isGrass(col, row) {
-        if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) return false;
+        if (!this.gridSystem.inBounds(col, row)) return false;
         return this.gridSystem.grid[row][col] === TILE.GRASS;
     }
 
     _isRoad(col, row) {
-        if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) return false;
+        if (!this.gridSystem.inBounds(col, row)) return false;
         return this.gridSystem.grid[row][col] !== TILE.GRASS;
     }
 
@@ -592,7 +592,7 @@ export class GameScene extends Phaser.Scene {
     _repaintArea(col, row) {
         for (let r = row - 1; r <= row + 1; r++) {
             for (let c = col - 1; c <= col + 1; c++) {
-                if (c >= 0 && c < GRID_COLS && r >= 0 && r < GRID_ROWS) this._paintCell(c, r);
+                if (this.gridSystem.inBounds(c, r)) this._paintCell(c, r);
             }
         }
     }

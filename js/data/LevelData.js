@@ -32,7 +32,10 @@ export const LEVEL_VALLE = {
         { c1: 1, r1: 6, c2: 2, r2: 7, hp: 80 },
         { c1: 1, r1: 8, c2: 2, r2: 11, hp: 80 },
     ],
-    initialGold: 100,
+    // Enough to open with a temple (60) plus any single tower (20–30) and
+    // still have change — the first decision should be which two to buy,
+    // not whether you can afford to start at all.
+    initialGold: 110,
     initialLives: 20,
 };
 
