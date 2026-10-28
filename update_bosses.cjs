@@ -18,7 +18,7 @@ const BOSS_SPRITES_FILE = path.join(__dirname, 'js', 'data', 'BossSprites.js');
 const BOSS_DEFS = [
     { key: 'enemy_boss_titan', baseNames: ['boss_titan'], label: 'Titán de Sillar' },
     { key: 'enemy_boss_dragon', baseNames: ['boss_ascua_64', 'boss_dragon'], label: 'Ascua Primordial' },
-    { key: 'enemy_boss_specter', baseNames: ['boss_specter'], label: 'Rey Velador' },
+    { key: 'enemy_boss_specter', baseNames: ['rey_velador_64', 'boss_specter'], label: 'Rey Velador' },
 ];
 
 function readAseprite(filePath) {
