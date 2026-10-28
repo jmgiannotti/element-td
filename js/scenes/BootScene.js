@@ -48,6 +48,8 @@ export const RUT_VARIANTS = 2;
 export const BREAKABLE_VARIANTS = 3;
 
 export const TOWER_KEYS = ['water', 'air', 'fire', 'earth', 'ice', 'storm', 'lava', 'mud'];
+// Tier 3 towers. Towers and bolts only — a legendary has no temple.
+export const LEGENDARY_KEYS = ['blizzard', 'ashstorm', 'obsidian', 'glacier', 'geyser', 'ancestral'];
 const ENEMY_KEYS = ['slime', 'golem', 'specter', 'dragon', 'boss_titan', 'boss_dragon', 'boss_specter'];
 const SIDES = ['top', 'bottom', 'left', 'right'];
 
@@ -91,6 +93,7 @@ export function expectedTextureKeys() {
     }
     for (const c of ['tl', 'tr', 'bl', 'br']) keys.push(`corner_${c}`);
     for (const el of TOWER_KEYS) keys.push(`tower_${el}`, `proj_${el}`, `temple_${el}`);
+    for (const el of LEGENDARY_KEYS) keys.push(`tower_${el}`, `proj_${el}`);
     for (const e of ENEMY_KEYS) keys.push(`enemy_${e}`);
 
     return keys;
@@ -605,6 +608,210 @@ export class BootScene extends Phaser.Scene {
                 heads[el](g);
             });
         }
+
+        const legends = {
+            blizzard: (g) => this._headBlizzard(g),
+            ashstorm: (g) => this._headAshstorm(g),
+            obsidian: (g) => this._headObsidian(g),
+            glacier: (g) => this._headGlacier(g),
+            geyser: (g) => this._headGeyser(g),
+            ancestral: (g) => this._headAncestral(g),
+        };
+
+        for (const el of LEGENDARY_KEYS) {
+            this._draw(`tower_${el}`, 32, 32, (g) => {
+                this._pedestal(g, EL[el]);
+                this._gild(g);
+                legends[el](g);
+            });
+        }
+    }
+
+    /**
+     * What makes a pedestal legendary: the same stone, gilt. Gold is the colour
+     * the game spends on rank — upgrade pips, the selection ring — so a gold
+     * cornice says "tier 3" without a word, and keeps all fourteen towers one
+     * family.
+     */
+    _gild(g) {
+        // Cornice lip, lit from the left like every other edge on the board
+        g.fillStyle(GOLD.dark);  g.fillRect(8, 16, 16, 1);
+        g.fillStyle(GOLD.mid);   g.fillRect(8, 16, 12, 1);
+        g.fillStyle(GOLD.light); g.fillRect(8, 16, 6, 1);
+        g.fillStyle(GOLD.glow);  g.fillRect(9, 16, 2, 1);
+        g.fillStyle(GOLD.dark);  g.fillRect(8, 19, 16, 1);
+
+        // Studs at the footing's corners
+        for (const x of [6, 24]) {
+            g.fillStyle(GOLD.dark);  g.fillRect(x, 25, 2, 2);
+            g.fillStyle(GOLD.light); g.fillRect(x, 25, 1, 1);
+        }
+
+        // The rune gets a setting, like a stone in a ring
+        g.fillStyle(GOLD.mid);   g.fillRect(12, 21, 1, 1); g.fillRect(19, 21, 1, 1);
+        g.fillStyle(GOLD.light); g.fillRect(15, 24, 2, 1);
+    }
+
+    /** VENTISCA — ice shards gathered under a storm orb, snow whirling round. */
+    _headBlizzard(g) {
+        const p = EL.blizzard;
+        volume(g, taper(8, 15, 2, 4, 10, 1.2), p, { lu: 0.3, lv: 0.35, spec: 0.16 });
+        volume(g, taper(6, 15, 2, 4, 22, 1.2), p, { lu: 0.3, lv: 0.35, spec: 0.16 });
+        volume(g, taper(5, 15, 2, 5, 16, 1.2), p, { lu: 0.3, lv: 0.25, spec: 0.16 });
+        g.fillStyle(p.glow); g.fillRect(14, 7, 1, 7);
+        g.fillStyle(p.deep, 0.6); g.fillRect(18, 8, 1, 7);
+
+        // The orb the shards grew towards
+        g.fillStyle(EL.storm.mid, 0.18); g.fillRect(11, 0, 10, 7);
+        volume(g, ellipse(16, 3, 3, 3), EL.storm, { spec: 0.22 });
+        g.fillStyle(EL.storm.glow); g.fillRect(15, 2, 2, 1);
+        g.fillStyle(0xffffff); g.fillRect(14, 1, 1, 1);
+
+        // A bolt down into the tallest shard
+        line(g, 18, 5, 19, 7, EL.storm.glow);
+
+        // Snow, blown on a curve so it reads as wind and not as noise
+        for (const [x, y, a] of [[6, 3, 1], [8, 1, 0.7], [25, 4, 1], [27, 7, 0.7],
+            [5, 9, 0.8], [26, 11, 0.9], [23, 1, 0.6]]) {
+            g.fillStyle(0xffffff, a); g.fillRect(x, y, 1, 1);
+        }
+        g.fillStyle(p.light, 0.6); g.fillRect(6, 5, 3, 1); g.fillRect(23, 9, 3, 1);
+    }
+
+    /** TORMENTA DE CENIZA — a volcano under its own ash cloud, struck by lightning. */
+    _headAshstorm(g) {
+        const p = EL.ashstorm;
+        volume(g, taper(7, 15, 3, 9, 16, 1.05), BASALT, { lu: 0.3, lv: 0.28, spec: 0.13 });
+
+        // Crater
+        g.fillStyle(BASALT.light); g.fillRect(13, 7, 6, 1);
+        g.fillStyle(EL.lava.mid);  g.fillRect(14, 8, 4, 1);
+        g.fillStyle(EL.lava.glow); g.fillRect(15, 8, 2, 1);
+        // Magma seams down the flank
+        g.fillStyle(EL.lava.mid); g.fillRect(13, 10, 1, 3); g.fillRect(19, 11, 1, 3);
+        g.fillStyle(EL.lava.light); g.fillRect(13, 10, 1, 1);
+
+        // The ash cloud, heavy and low
+        volume(g, ellipse(12, 3, 4, 2), BASALT, { lu: 0.3, lv: 0.2, spec: 0.1 });
+        volume(g, ellipse(20, 3, 5, 3), BASALT, { lu: 0.3, lv: 0.2, spec: 0.1 });
+        g.fillStyle(p.mid, 0.35); g.fillRect(10, 5, 14, 1);
+
+        // Lightning out of the cloud, into the crater
+        g.fillStyle(p.dark, 0.6);
+        for (const [x, y] of [[18, 5], [17, 6], [18, 7]]) g.fillRect(x - 1, y, 3, 1);
+        g.fillStyle(p.glow);
+        for (const [x, y] of [[18, 5], [17, 6], [18, 7]]) g.fillRect(x, y, 1, 1);
+
+        // Embers in the wind
+        g.fillStyle(p.light); g.fillRect(7, 7, 1, 1); g.fillRect(25, 8, 1, 1);
+        g.fillStyle(p.glow, 0.8); g.fillRect(26, 1, 1, 1); g.fillRect(6, 1, 1, 1);
+    }
+
+    /** OBSIDIANA — a spire of black glass, fire still in its heart. */
+    _headObsidian(g) {
+        const p = EL.obsidian;
+        volume(g, taper(10, 15, 1, 3, 9, 1), p, { lu: 0.3, lv: 0.3, spec: 0.12 });
+        volume(g, taper(11, 15, 1, 2, 23, 1), p, { lu: 0.3, lv: 0.3, spec: 0.12 });
+        volume(g, taper(0, 15, 1, 6, 16, 0.85), p, { lu: 0.3, lv: 0.2, spec: 0.1, band: 0.22 });
+
+        // Facets: glass is planes and edges
+        g.fillStyle(p.light, 0.85); g.fillRect(14, 3, 1, 11);
+        g.fillStyle(p.deep); g.fillRect(18, 5, 1, 10);
+        g.fillStyle(0xffffff); g.fillRect(14, 2, 1, 2); g.fillRect(8, 11, 1, 1);
+
+        // The lava it was quenched from, still glowing through a crack
+        const crack = [[16, 5], [17, 6], [16, 7], [16, 8], [15, 9], [16, 10], [17, 11], [16, 12]];
+        g.fillStyle(EL.lava.mid, 0.5);
+        for (const [x, y] of crack) g.fillRect(x - 1, y, 3, 1);
+        g.fillStyle(EL.lava.light);
+        for (const [x, y] of crack) g.fillRect(x, y, 1, 1);
+        g.fillStyle(EL.lava.glow); g.fillRect(16, 8, 1, 1);
+
+        // Frost on the edge it was quenched in
+        g.fillStyle(EL.ice.light, 0.8); g.fillRect(12, 9, 1, 3);
+    }
+
+    /** GLACIAR — an iceberg breaking out of the bog. */
+    _headGlacier(g) {
+        const p = EL.glacier;
+        const m = EL.mud;
+        volume(g, taper(10, 15, 10, 7, 16, 1.4), STONE_HI, { lu: 0.28, lv: 0.18 });
+        g.fillStyle(STONE_HI.glow); g.fillRect(7, 10, 18, 1);
+
+        volume(g, rough(taper(1, 11, 3, 8, 16, 0.7), 0x61AC, 1), p, { lu: 0.3, lv: 0.25, spec: 0.16 });
+        // Cleaved faces
+        g.fillStyle(p.glow); g.fillRect(13, 2, 3, 1); g.fillRect(12, 3, 1, 5);
+        g.fillStyle(p.dark); g.fillRect(19, 3, 1, 8);
+        g.fillStyle(p.deep, 0.6); g.fillRect(18, 4, 1, 7);
+        g.fillStyle(0xffffff); g.fillRect(13, 3, 1, 2);
+
+        // Bog lapping at its foot
+        g.fillStyle(m.dark);  g.fillRect(8, 11, 16, 1);
+        g.fillStyle(m.mid);   g.fillRect(9, 11, 5, 1); g.fillRect(19, 11, 4, 1);
+        g.fillStyle(m.light); g.fillRect(10, 11, 2, 1);
+
+        // Cold coming off it
+        g.fillStyle(p.light, 0.5); g.fillRect(6, 4, 1, 1); g.fillRect(25, 6, 1, 1); g.fillRect(24, 1, 1, 1);
+        g.fillStyle(p.light, 0.3); g.fillRect(9, 16, 14, 1);
+    }
+
+    /** GEISER — a boiling spring throwing up a column of scalding water. */
+    _headGeyser(g) {
+        const p = EL.geyser;
+        volume(g, taper(10, 15, 10, 7, 16, 1.4), STONE_HI, { lu: 0.28, lv: 0.18 });
+        g.fillStyle(STONE_HI.glow); g.fillRect(7, 10, 18, 1);
+
+        // The spring, lit from below by the lava under it
+        volume(g, ellipse(16, 11, 8, 1), p, { outline: false, spec: 0.24 });
+        g.fillStyle(EL.lava.mid); g.fillRect(9, 11, 2, 1); g.fillRect(21, 11, 2, 1);
+        g.fillStyle(EL.lava.glow); g.fillRect(10, 11, 1, 1);
+
+        // The jet: narrow at the vent, fraying as it climbs. A solid cap on top
+        // reads as a mushroom; water breaking into drops reads as a geyser.
+        volume(g, taper(1, 10, 1, 3, 16, 1.3), p, { lu: 0.3, lv: 0.4, spec: 0.2 });
+        g.fillStyle(p.glow); g.fillRect(15, 2, 1, 8);
+        g.fillStyle(0xffffff, 0.9); g.fillRect(15, 1, 1, 2);
+
+        // Spray falling back on both sides, arcing outward
+        const drops = [[13, 1], [11, 2], [10, 4], [9, 6], [19, 1], [21, 2], [22, 4], [23, 6]];
+        g.fillStyle(p.mid);
+        for (const [x, y] of drops) g.fillRect(x, y, 1, 2);
+        g.fillStyle(p.light);
+        for (const [x, y] of drops) g.fillRect(x, y, 1, 1);
+
+        // Steam
+        g.fillStyle(0xffffff, 0.35); g.fillRect(6, 1, 3, 2); g.fillRect(24, 0, 3, 2);
+        g.fillStyle(0xffffff, 0.2); g.fillRect(25, 2, 2, 1); g.fillRect(16, 0, 2, 1);
+    }
+
+    /** TEMPLO ANCESTRAL — a mossed monolith, the four elements orbiting its eye. */
+    _headAncestral(g) {
+        const p = EL.ancestral;
+        volume(g, taper(2, 15, 4, 5, 16, 1), STONE_HI, { lu: 0.28, lv: 0.2, spec: 0.1 });
+        // Moss over the cap and down one side
+        volume(g, ellipse(16, 2, 4, 1), p, { spec: 0.24 });
+        g.fillStyle(p.mid); g.fillRect(12, 4, 1, 5); g.fillRect(13, 4, 1, 2);
+        g.fillStyle(p.light); g.fillRect(12, 4, 1, 2);
+
+        // The eye carved into the face, lit with all four at once
+        g.fillStyle(p.mid, 0.25); g.fillRect(13, 6, 7, 6);
+        blit(g, [
+            '.aaa.',
+            'abcba',
+            '.aaa.',
+        ], { a: p.dark, b: p.light, c: p.glow }, 14, 7);
+        g.fillStyle(STONE_HI.deep); g.fillRect(14, 12, 5, 1);
+
+        // The four elements, set at the corners like the points of a compass
+        const gem = (x, y, r) => {
+            g.fillStyle(r.mid, 0.3); g.fillRect(x - 1, y - 1, 4, 4);
+            g.fillStyle(r.dark); g.fillRect(x, y, 2, 2);
+            g.fillStyle(r.light); g.fillRect(x, y, 1, 1);
+        };
+        gem(7, 3, EL.water);
+        gem(23, 3, EL.air);
+        gem(7, 10, EL.fire);
+        gem(23, 10, EL.earth);
     }
 
     /** The pedestal all eight towers stand on. */
@@ -1654,7 +1861,50 @@ export class BootScene extends Phaser.Scene {
             },
         };
 
-        for (const el of TOWER_KEYS) {
+        Object.assign(shapes, {
+            blizzard: (g, p) => {
+                // A snowflake, which no other bolt is: six arms, not a blob
+                g.fillStyle(p.mid, 0.6); g.fillRect(11, 4, 5, 5);
+                g.fillStyle(p.light);
+                g.fillRect(13, 2, 1, 9); g.fillRect(10, 6, 7, 1);
+                g.fillRect(11, 4, 1, 1); g.fillRect(15, 4, 1, 1);
+                g.fillRect(11, 8, 1, 1); g.fillRect(15, 8, 1, 1);
+                g.fillStyle(0xffffff); g.fillRect(13, 6, 1, 1);
+            },
+            ashstorm: (g, p) => {
+                volume(g, rough(ellipse(13, 6, 3, 3), 0xA5A5, 1), BASALT, { spec: 0.14 });
+                g.fillStyle(p.light); g.fillRect(12, 5, 2, 2);
+                g.fillStyle(p.glow); g.fillRect(16, 3, 1, 1); g.fillRect(15, 4, 1, 1); g.fillRect(16, 5, 1, 1);
+            },
+            obsidian: (g, p) => {
+                volume(g, profile(3, [
+                    [15, 17], [12, 17], [10, 16], [10, 16], [12, 15], [14, 15],
+                ]), p, { spec: 0.14 });
+                g.fillStyle(0xffffff); g.fillRect(15, 4, 1, 2);
+                g.fillStyle(EL.lava.light); g.fillRect(12, 6, 2, 1);
+            },
+            glacier: (g, p) => {
+                volume(g, rough(ellipse(13, 6, 4, 4), 0x9C3E, 1), p, { spec: 0.2 });
+                g.fillStyle(p.glow); g.fillRect(11, 3, 3, 1); g.fillRect(11, 4, 1, 2);
+                g.fillStyle(0xffffff); g.fillRect(12, 4, 1, 1);
+            },
+            geyser: (g, p) => {
+                volume(g, teardrop(13, 2, 10, 3), p, { spec: 0.22 });
+                g.fillStyle(0xffffff, 0.85); g.fillRect(12, 5, 1, 2);
+                g.fillStyle(0xffffff, 0.35); g.fillRect(8, 2, 2, 2); g.fillRect(6, 8, 2, 1);
+            },
+            ancestral: (g, p) => {
+                volume(g, ellipse(13, 6, 4, 4), p, { spec: 0.22 });
+                // One pixel of each element on the orb's rim
+                g.fillStyle(EL.water.light); g.fillRect(12, 2, 2, 1);
+                g.fillStyle(EL.air.glow);    g.fillRect(16, 5, 1, 2);
+                g.fillStyle(EL.fire.light);  g.fillRect(12, 9, 2, 1);
+                g.fillStyle(EL.earth.light); g.fillRect(9, 5, 1, 2);
+                g.fillStyle(0xffffff); g.fillRect(12, 5, 1, 1);
+            },
+        });
+
+        for (const el of [...TOWER_KEYS, ...LEGENDARY_KEYS]) {
             const p = EL[el];
             this._draw(`proj_${el}`, 18, 12, (g) => {
                 // Tail first: a wedge of the element's own light, thinning and

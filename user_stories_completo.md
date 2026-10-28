@@ -352,7 +352,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 
 ## 🎯 Epic 10: Fusión Avanzada — Torres Tier 3 (Legendarias)
 
-### US 10.1: Fusión de Híbridos en Torres Legendarias
+### US 10.1: Fusión de Híbridos en Torres Legendarias [✓]
 **Como** jugador avanzado,  
 **Quiero** poder fusionar dos torres híbridas adyacentes en una torre legendaria de Nivel 3 con habilidades pasivas únicas,  
 **Para** alcanzar el máximo techo de poder y optimización del tablero.
@@ -362,7 +362,15 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Torres Tier 3 con identidades y proyectiles únicos (ej. Tormenta de Ceniza, Templo Ancestral).
 > - Registro documentado en la pestaña de Fusiones del panel de ayuda.
 > 
-> *Estado:* **Pendiente**.
+> Combinaciones (dos híbridos distintos, solo torres):
+> - Hielo + Tormenta → **Ventisca**: cadena x4, cada salto puede congelar.
+> - Lava + Tormenta → **Tormenta de Ceniza**: cadena x4, cada salto quema.
+> - Hielo + Lava → **Obsidiana**: golpe pesado con esquirlas en área; ignora resistencias.
+> - Hielo + Lodo → **Glaciar**: congela en área (a los jefes solo los ralentiza).
+> - Lava + Lodo → **Geiser**: área + quemadura a todos los alcanzados.
+> - Lodo + Tormenta → **Templo Ancestral**: siempre golpea la debilidad del enemigo; nunca es resistido.
+>
+> *Estado:* Implementado en `TowerData.js` (`LEGENDARY_MAP`, `fusionResult`, `tierOf`), `Elements.js`, `Palette.js`, `TempleData.js`, `TempleSystem.js`, `FusionSystem.js`, `Projectile.js`, `BootScene.js`, `AudioSystem.js` y `UIScene.js` (pestaña Fusiones).
 
 ---
 

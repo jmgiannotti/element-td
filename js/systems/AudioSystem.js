@@ -22,6 +22,8 @@ const THROTTLE = {
 const SHOOT_PITCH = {
     water: 520, air: 780, fire: 300, earth: 220,
     ice: 620, storm: 900, lava: 260, mud: 400,
+    blizzard: 700, ashstorm: 340, obsidian: 180,
+    glacier: 560, geyser: 330, ancestral: 440,
 };
 
 class AudioSystem {

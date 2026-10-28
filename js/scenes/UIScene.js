@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { ELEMENTS, TOWER_DATA, FUSION_MAP } from '../data/TowerData.js';
+import { ELEMENTS, TOWER_DATA, FUSION_MAP, LEGENDARY_MAP } from '../data/TowerData.js';
 import {
     TEMPLE_DATA, TEMPLE_ELEMENTS, UPGRADE_TRACKS, TRACK_ORDER,
 } from '../data/TempleData.js';
@@ -731,6 +731,7 @@ export class UIScene extends Phaser.Scene {
                 d.specialDesc,
                 'Libera 1 casilla',
             ];
+            if (d.tier === 3) lines.splice(1, 0, 'TORRE LEGENDARIA');
         }
 
         // Opens away from the nearer edge, so a card on a badge at the far left
@@ -1540,37 +1541,57 @@ export class UIScene extends Phaser.Scene {
         container.add(this.add.text(0, -113, 'Las que brillan tienen con quien fusionar.', {
             fontFamily: FONT, fontSize: '8px', color: '#78909C',
         }).setOrigin(0.5));
-        container.add(this.add.text(0, -100, 'Igual para templos. Nace donde la soltaste.', {
-            fontFamily: FONT, fontSize: '8px', color: '#78909C',
-        }).setOrigin(0.5));
 
-        // Derived from FUSION_MAP so the table can never drift from the rules.
-        Object.entries(FUSION_MAP).forEach(([pair, result], i) => {
+        const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
+
+        // One recipe: a + b = result, then the result's name and what it does.
+        // Two columns, so ten recipes fit without shrinking the type.
+        const recipe = (pair, result, col, y, gold) => {
             const [a, b] = pair.split('+');
-            const y = -70 + i * 40;
             const d = TOWER_DATA[result];
+            const x0 = col === 0 ? -222 : 6;
+
+            if (gold) {
+                container.add(this.add.rectangle(x0 + 108, y, 220, 32, 0x2a210a, 0.35)
+                    .setStrokeStyle(1, 0x8a5c05, 0.6));
+            }
 
             const icon = (x, el) => container.add(
-                this.add.sprite(x, y, safeTexture(this, `tower_${el}`, 'tower_earth')).setScale(0.9)
+                this.add.sprite(x0 + x, y, safeTexture(this, `tower_${el}`, 'tower_earth')).setScale(0.8)
             );
             const glyph = (x, t) => container.add(
-                this.add.text(x, y, t, {
+                this.add.text(x0 + x, y, t, {
                     fontFamily: FONT, fontSize: '8px', color: '#78909C',
                 }).setOrigin(0.5)
             );
 
-            icon(-190, a);
-            glyph(-160, '+');
-            icon(-130, b);
-            glyph(-100, '=');
-            icon(-70, result);
+            icon(12, a);
+            glyph(28, '+');
+            icon(44, b);
+            glyph(60, '=');
+            icon(76, result);
 
-            container.add(this.add.text(-44, y - 6, d.name, {
-                fontFamily: FONT, fontSize: '8px', color: `#${d.color.toString(16).padStart(6, '0')}`,
+            container.add(this.add.text(x0 + 92, y - 6, d.name, {
+                fontFamily: FONT, fontSize: '7px', color: hex(d.color),
             }).setOrigin(0, 0.5));
-            container.add(this.add.text(-44, y + 9, d.specialDesc, {
-                fontFamily: FONT, fontSize: '8px', color: '#78909C',
+            container.add(this.add.text(x0 + 92, y + 7, d.specialDesc, {
+                fontFamily: FONT, fontSize: '7px', color: '#78909C',
             }).setOrigin(0, 0.5));
+        };
+
+        const header = (y, text, color) => container.add(
+            this.add.text(0, y, text, { fontFamily: FONT, fontSize: '8px', color }).setOrigin(0.5)
+        );
+
+        // Both tables are derived from the maps, so they can never drift from the rules.
+        header(-94, 'HIBRIDOS  ·  torres y templos', '#B0BEC5');
+        Object.entries(FUSION_MAP).forEach(([pair, result], i) => {
+            recipe(pair, result, i % 2, -70 + Math.floor(i / 2) * 36, false);
+        });
+
+        header(-4, 'LEGENDARIAS  ·  dos hibridos distintos', '#FFD54F');
+        Object.entries(LEGENDARY_MAP).forEach(([pair, result], i) => {
+            recipe(pair, result, i % 2, 22 + Math.floor(i / 2) * 36, true);
         });
     }
 

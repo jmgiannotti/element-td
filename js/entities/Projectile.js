@@ -123,13 +123,44 @@ export class Projectile {
                 case 'aoeSlow':
                     this._doAoeSlow();
                     break;
+                // ── Legendary ──
+                case 'chainFreeze':
+                    this._chill(this.target);
+                    this._doChain((e) => this._chill(e));
+                    break;
+                case 'chainBurn':
+                    this._scorch(this.target);
+                    this._doChain((e) => this._scorch(e));
+                    break;
+                case 'shatter':
+                    this._doSplash(0.5);
+                    break;
+                case 'aoeFreeze':
+                    this._doAoeFreeze();
+                    break;
+                case 'aoeBurn':
+                    this._doSplash(0.4, (e) => this._scorch(e));
+                    this._scorch(this.target);
+                    break;
             }
         }
 
         this.destroy();
     }
 
-    _doSplash() {
+    /** Ventisca: a chance to lock each enemy the bolt passes through. */
+    _chill(enemy) {
+        if (enemy.alive && Math.random() < this.towerData.freezeChance) {
+            enemy.applyFreeze(this.towerData.freezeMs);
+        }
+    }
+
+    /** Tormenta de Ceniza / Geiser: every enemy touched keeps burning. */
+    _scorch(enemy) {
+        if (enemy.alive) enemy.applyBurn(this.towerData.burnDps, 3000, this.sourceTower);
+    }
+
+    _doSplash(share = 0.4, onHit = null) {
         const radius = this.towerData.specialValue;
         for (const enemy of this.scene.enemies) {
             if (!enemy.alive || enemy === this.target) continue;
@@ -140,12 +171,13 @@ export class Projectile {
                 // Splash is the same element as the shot that caused it, so the
                 // match-up is re-read per victim rather than inherited.
                 const effect = effectOf(this.towerData.element, enemy.data);
-                enemy.takeDamage(this.damage * 0.4 * effectMultiplier(effect), { effect, source: this.sourceTower });
+                enemy.takeDamage(this.damage * share * effectMultiplier(effect), { effect, source: this.sourceTower });
+                if (onHit) onHit(enemy);
             }
         }
     }
 
-    _doChain() {
+    _doChain(onHit = null) {
         let remaining = this.towerData.specialValue - 1;
         let lastX = this.target.x;
         let lastY = this.target.y;
@@ -159,9 +191,10 @@ export class Projectile {
             if (d <= 90) {
                 const effect = effectOf(this.towerData.element, enemy.data);
                 enemy.takeDamage(chainDmg * effectMultiplier(effect), { effect, source: this.sourceTower });
-                // Visual chain line
+                if (onHit) onHit(enemy);
+                // Visual chain line, in the tower's own colour
                 const line = this.scene.add.line(
-                    0, 0, lastX, lastY, enemy.x, enemy.y, 0xFFD54F, 0.7
+                    0, 0, lastX, lastY, enemy.x, enemy.y, this.towerData.color ?? 0xFFD54F, 0.7
                 ).setOrigin(0, 0).setDepth(14).setLineWidth(1);
                 this.scene.time.delayedCall(150, () => line.destroy());
 
@@ -182,6 +215,22 @@ export class Projectile {
             );
             if (d <= 64) {
                 enemy.applySlow(this.towerData.specialValue, 3000);
+            }
+        }
+    }
+
+    /** Glaciar: everything near the impact freezes, and stays slow after. */
+    _doAoeFreeze() {
+        const radius = this.towerData.radius;
+        for (const enemy of this.scene.enemies) {
+            if (!enemy.alive) continue;
+            const d = Phaser.Math.Distance.Between(
+                this.target.x, this.target.y, enemy.x, enemy.y
+            );
+            if (d <= radius) {
+                // A boss parked forever in a block of ice is no fight at all.
+                if (!enemy.isBoss) enemy.applyFreeze(this.towerData.specialValue);
+                enemy.applySlow(0.4, 2500);
             }
         }
     }

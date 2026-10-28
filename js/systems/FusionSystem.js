@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { FUSION_MAP, TOWER_DATA } from '../data/TowerData.js';
+import { TOWER_DATA, fusionResult, tierOf } from '../data/TowerData.js';
 import { TEMPLE_DATA } from '../data/TempleData.js';
 import { Tower } from '../entities/Tower.js';
 import { Temple } from '../entities/Temple.js';
@@ -186,8 +186,15 @@ export class FusionSystem {
         }
     }
 
+    /**
+     * Pures fuse into hybrids, and hybrid *towers* into legendaries. A hybrid
+     * temple and anything legendary are already the top of their tree.
+     */
     _fusable(b) {
-        return b && b.alive && !b.isHybrid;
+        if (!b || !b.alive) return false;
+        const tier = tierOf(b.element);
+        if (tier === 1) return true;
+        return tier === 2 && this._kindOf(b) === 'tower';
     }
 
     /** The list a building belongs to, which is also the list it can fuse within. */
@@ -202,8 +209,8 @@ export class FusionSystem {
     /** What `a` and `b` would become, or null if they would become nothing. */
     resultOf(a, b) {
         if (!this._fusable(a) || !this._fusable(b) || a === b) return null;
-        // Sorted so the lookup key is the same whichever one you picked up
-        return FUSION_MAP[[a.element, b.element].sort().join('+')] ?? null;
+        if (this._kindOf(a) !== this._kindOf(b)) return null;
+        return fusionResult(a.element, b.element);
     }
 
     /** Every neighbour of `b` it could merge with. Four cells, never more. */
@@ -546,6 +553,7 @@ export class FusionSystem {
 
         // VFX – expanding flash
         const pos = scene.gridSystem.gridToWorld(col, row);
+        if (kind === 'tower' && tierOf(resultElement) === 3) this._legendaryBirth(pos, resultElement);
         const flash = scene.add.circle(pos.x, pos.y, 10, 0xFFD700, 0.9);
         flash.setDepth(30);
         scene.tweens.add({
@@ -563,6 +571,39 @@ export class FusionSystem {
         // appeared cannot fuse again, and the tile it came from is now free.
         this.refresh();
         scene.events.emit('fusion-complete', resultElement, kind);
+    }
+
+    /**
+     * Tier 3 is the rarest thing a player builds, so it gets more than the
+     * flash every fusion gets: a column of its own light and a shockwave in
+     * gold, the colour the game reserves for rank.
+     */
+    _legendaryBirth(pos, element) {
+        const scene = this.scene;
+        const color = TOWER_DATA[element].color;
+
+        const pillar = scene.add.rectangle(pos.x, pos.y - 40, 14, 96, color, 0.55).setDepth(29);
+        scene.tweens.add({
+            targets: pillar, scaleX: 0.1, alpha: 0, duration: 650, ease: 'Quad.easeIn',
+            onComplete: () => pillar.destroy(),
+        });
+
+        for (const [delay, c] of [[0, 0xFFD54F], [140, color]]) {
+            const ring = scene.add.circle(pos.x, pos.y, 14, c, 0)
+                .setStrokeStyle(2, c, 0.95).setDepth(29);
+            scene.tweens.add({
+                targets: ring, scaleX: 4, scaleY: 4, alpha: 0,
+                delay, duration: 600, ease: 'Quad.easeOut',
+                onComplete: () => ring.destroy(),
+            });
+        }
+
+        if (scene.cameras?.main) scene.cameras.main.shake(180, 0.004);
+        if (scene.floating) {
+            scene.floating.show(pos.x, pos.y - 24, '¡LEGENDARIA!', {
+                color: '#FFD54F', size: 8, rise: 22, duration: 1100,
+            });
+        }
     }
 
     destroy() {
