@@ -55,11 +55,14 @@ const HUD_GAP = 36;
 // Wider cells than an ability: a spell carries a price as well as a key, and a
 // price you cannot see is not a price. Stacked rather than continuing the
 // ability row because the tutorial banner owns the strip at y≈456 to the right.
-const SPELL_W = 60;
-const SPELL_H = 28;
-const SPELL_GAP = 66;
-const SPELL_Y = HUD_Y - 52;
-const SPELL_X = HUD_X - HUD_SIZE / 2 + SPELL_W / 2;
+// Spell slots are the same square as Vesper's Q/E, in the same columns, so the
+// two rows read as one block and neither reaches further into the lane.
+const SPELL_SIZE = HUD_SIZE;
+const SPELL_GAP = HUD_GAP;
+// Raised 12px over the Q/E row's spacing to make room for the price line that
+// hangs under each slot.
+const SPELL_Y = HUD_Y - 64;
+const SPELL_X = HUD_X;
 
 export class UIScene extends Phaser.Scene {
     constructor() {
@@ -852,7 +855,7 @@ export class UIScene extends Phaser.Scene {
      * is what turns "I have 400✦" into a decision instead of a total.
      */
     _buildSpellHud() {
-        this.add.text(HUD_X - HUD_SIZE / 2, SPELL_Y - SPELL_H / 2 - 9, 'HECHIZOS', {
+        this.add.text(HUD_X - HUD_SIZE / 2, SPELL_Y - SPELL_SIZE / 2 - 9, 'HECHIZOS', {
             fontFamily: FONT, fontSize: '8px', color: '#CFDDE9',
             stroke: '#000000', strokeThickness: 3,
         }).setOrigin(0, 0.5).setDepth(50);
@@ -861,36 +864,36 @@ export class UIScene extends Phaser.Scene {
             const s = SPELLS[key];
             const x = SPELL_X + i * SPELL_GAP;
 
-            const bg = this.add.rectangle(x, SPELL_Y, SPELL_W, SPELL_H, 0x12122a, 0.86)
+            const bg = this.add.rectangle(x, SPELL_Y, SPELL_SIZE, SPELL_SIZE, 0x12122a, 0.86)
                 .setStrokeStyle(2, s.color)
                 .setDepth(50)
                 .setInteractive({ useHandCursor: true });
 
-            const icon = this.add.image(x - 20, SPELL_Y, safeTexture(this, s.icon, 'mana_mote'))
-                .setScale(0.8)
+            // Laid out exactly like Vesper's Q/E right below: the picture in
+            // the upper half, the key along the bottom edge. The price is the
+            // one thing a Q/E button does not have, so it hangs underneath.
+            const icon = this.add.image(x, SPELL_Y - 3, safeTexture(this, s.icon, 'mana_mote'))
+                .setScale(0.6)
                 .setDepth(52);
 
-            const hot = this.add.text(x - 3, SPELL_Y - 6, s.hotkey, {
+            const hot = this.add.text(x, SPELL_Y + 10, s.hotkey, {
                 fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
                 stroke: '#000000', strokeThickness: 3,
-            }).setOrigin(0, 0.5).setDepth(52);
+            }).setOrigin(0.5).setDepth(53);
 
-            const cost = this.add.text(x - 3, SPELL_Y + 6, `${s.cost}`, {
-                fontFamily: FONT, fontSize: '8px', color: '#B388FF',
+            const cost = this.add.text(x, SPELL_Y + SPELL_SIZE / 2 + 7, `${s.cost}`, {
+                fontFamily: FONT, fontSize: '7px', color: '#B388FF',
                 stroke: '#000000', strokeThickness: 3,
-            }).setOrigin(0, 0.5).setDepth(52);
+            }).setOrigin(0.5).setDepth(53);
 
-            const wipe = this.add.rectangle(x, SPELL_Y + (SPELL_H - 4) / 2, SPELL_W - 4, 0, 0x000000, 0.66)
+            const wipe = this.add.rectangle(x, SPELL_Y + (SPELL_SIZE - 4) / 2, SPELL_SIZE - 4, 0, 0x000000, 0.66)
                 .setOrigin(0.5, 1)
                 .setDepth(51);
 
-            // Over the icon, not over the middle of the cell: the right half
-            // already holds the key and the price, and a countdown parked on
-            // top of them makes all three unreadable at once.
-            const timer = this.add.text(x - 20, SPELL_Y, '', {
+            const timer = this.add.text(x, SPELL_Y - 3, '', {
                 fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
                 stroke: '#000000', strokeThickness: 3,
-            }).setOrigin(0.5).setDepth(53);
+            }).setOrigin(0.5).setDepth(54);
 
             bg.on('pointerdown', (pointer) => {
                 pointer.event.stopPropagation();
@@ -918,7 +921,7 @@ export class UIScene extends Phaser.Scene {
 
         for (const btn of this.spellBtns) {
             const pct = ss.cooldownPct(btn.key);
-            btn.wipe.setSize(SPELL_W - 4, Math.max(0, (SPELL_H - 4) * pct));
+            btn.wipe.setSize(SPELL_SIZE - 4, Math.max(0, (SPELL_SIZE - 4) * pct));
             btn.wipe.setVisible(pct > 0);
 
             const cooling = pct > 0;

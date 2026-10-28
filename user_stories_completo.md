@@ -161,7 +161,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > 
 > *Estado:* **Implementado** en `SpellSystem.js`, `UIScene._buildSpellHud()` y `GameScene._handleClick()`.
 
-### US 3.2: Más Variedad de Hechizos
+### US 3.2: Más Variedad de Hechizos [✓]
 **Como** jugador,  
 **Quiero** tener al menos 3 hechizos diferentes (daño en área, control de masas, utilidad/curación) para elegir,  
 **Para** que la decisión de gastar maná sea estratégica y dependa de la situación de la partida.
@@ -171,7 +171,12 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Cada hechizo tiene un coste, cooldown y efecto visual distintivo.
 > - La barra de hechizos en la UI se expande para soportar múltiples ranuras.
 > 
-> *Estado:* **Pendiente**.
+> Hechizos (3 ranuras cuadradas de 30px alineadas con Q/E, con ícono, tecla, costo y barrido de cooldown):
+> - **[R] Luna** (120✦, 25s): daño en área + ralentización.
+> - **[T] Centinelas Arcanos** (90✦, 25s): en el camino o en el pasto. 3 soldados en triángulo, 12s, 90 HP, que se mueven solos: buscan enemigos cercanos (repartiéndose los blancos), persiguen hasta una correa de 170px desde donde se invocaron y vuelven a su puesto si no queda nada. Cada uno retiene a un enemigo con la misma regla de enganche que Vesper, pega 12 de daño mágico y al morir/expirar estalla (25 en área).
+> - **[Y] Égida Arcana** (75✦, 20s): cura 40% a Vesper y centinelas, +30% de cadencia por 5s a torres, Vesper y centinelas, y repara los bloques rompibles del área (las barricadas no tienen vida en este juego).
+>
+> *Estado:* Implementado en `SpellData.js`, `SpellSystem.js`, `js/entities/Sentinel.js` (nuevo), `Enemy.js` (enganche), `Hero.js`/`Tower.js` (curación y prisa), `GameScene.js`, `UIScene.js`, `BootScene.js` (sprite e íconos) y `AudioSystem.js`.
 
 ---
 

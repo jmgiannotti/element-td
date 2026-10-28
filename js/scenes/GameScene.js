@@ -94,6 +94,8 @@ export class GameScene extends Phaser.Scene {
         this.temples = [];
         this.enemies = [];
         this.projectiles = [];
+        // CENTINELAS ARCANOS currently on the road (see SpellSystem).
+        this.sentinels = [];
         this.manaMotes = [];
         this.occupiedCells = new Set();
         this.breakableBlocks = new Map();
@@ -367,6 +369,8 @@ export class GameScene extends Phaser.Scene {
             this.input.keyboard.removeAllListeners();
             if (this.barricadeSystem) this.barricadeSystem.destroy();
             if (this.sealSystem) this.sealSystem.destroy();
+            for (const s of this.sentinels || []) s.destroy();
+            this.sentinels = [];
             if (this.particleSystem) {
                 this.particleSystem.destroy();
                 this.particleSystem = null;
@@ -697,6 +701,9 @@ export class GameScene extends Phaser.Scene {
         // it is the one the player is holding a countdown for.
         if (this.spellMode) {
             const key = this.spellMode;
+            // A bad point (CENTINELAS off the road) is said and the spell stays
+            // armed: the click was a miss, not a decision to put it away.
+            if (this.spellSystem.announceTargetRefusal(key, p.x, p.y)) return true;
             this._setSpellMode(null);
             this.spellSystem.cast(key, p.x, p.y);
             return true;
@@ -1045,10 +1052,19 @@ export class GameScene extends Phaser.Scene {
         // show before the click are where it reaches and what it takes.
         if (this.spellMode) {
             const spell = SPELLS[this.spellMode];
-            this.spellCursor.setPosition(p.x, p.y).setVisible(true);
+            const bad = this.spellSystem.targetRefusal(this.spellMode, p.x, p.y);
+            // A road-only spell snaps to the cell it will actually land on.
+            let at = p;
+            if (spell.roadOnly) {
+                const c = this.gridSystem.worldToGrid(p.x, p.y);
+                at = this.gridSystem.gridToWorld(c.col, c.row);
+            }
+            this.spellCursor.setPosition(at.x, at.y).setVisible(true);
+            this.spellCursor.setStrokeStyle(1, bad ? 0xFF5252 : spell.color, bad ? 0.8 : 0.5);
             this._showCursorLabel(
-                { x: p.x, y: p.y - spell.radius + 14 },
-                `${spell.label}  ${spell.cost}✦`, spell.colorHex,
+                { x: at.x, y: at.y - spell.radius - 8 },
+                bad ? 'solo sobre el camino' : `${spell.label}  ${spell.cost}✦`,
+                bad ? '#FF8A80' : spell.colorHex,
             );
             return;
         }
@@ -1385,6 +1401,9 @@ export class GameScene extends Phaser.Scene {
         // Enemies
         for (const e of this.enemies) e.update(time, delta);
 
+        // Summoned soldiers, after the enemies have engaged them this frame
+        for (const s of this.sentinels) s.update(delta);
+
         // Enchanted barricades, after the enemies have moved this frame
         this.barricadeSystem.update(delta);
         this.sealSystem.update(delta);
@@ -1428,6 +1447,7 @@ export class GameScene extends Phaser.Scene {
         this.temples = this.temples.filter(t => t.alive);
         this.enemies = this.enemies.filter(e => e.alive);
         this.projectiles = this.projectiles.filter(p => p.alive);
+        this.sentinels = this.sentinels.filter(s => s.alive);
         this.manaMotes = this.manaMotes.filter(m => m.alive);
 
         // Selling or fusing the pinned tower leaves the readout hanging over an

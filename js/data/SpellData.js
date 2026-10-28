@@ -70,9 +70,81 @@ export const SPELLS = {
             'apuntes. 130 de daño y 50% mas lentos.',
         ],
     },
+
+    // ── CENTINELAS ARCANOS: control ─────────────────────
+    // Three soldiers that hunt on their own, each holding one enemy the way
+    // Vesper does. Called anywhere — the road, or the grass a golem has to
+    // cross to reach a temple — and they go after what is near.
+    centinelas: {
+        key: 'centinelas',
+        label: 'CENTINELAS',
+        hotkey: 'T',
+        icon: 'spell_centinelas',
+
+        cost: 90,
+        cooldown: 25000,
+
+        targeted: true,
+        // The cursor ring: the triangle they appear in, not an area of effect
+        radius: 18,
+
+        count: 3,
+        lifeMs: 12000,
+        hp: 90,
+        // Magic: no element, so no match-up — neither super nor resisted.
+        damage: 12,
+        attackMs: 700,
+        attackRange: 30,
+        // What each one gives back when it goes, by death or by time
+        burstDamage: 25,
+        burstRadius: 40,
+
+        channelMs: 320,
+
+        color: 0x7FE7FF,
+        colorHex: '#7FE7FF',
+        desc: [
+            'Tres soldados arcanos que salen a cazar.',
+            'Cada uno frena a un enemigo y pelea',
+            '12s; al caer, estalla en area.',
+        ],
+    },
+
+    // ── EGIDA ARCANA: utility ───────────────────────────
+    // The cheapest of the three and the only one that touches your own side:
+    // it keeps Vesper and the sentinels standing, and turns a cluster of
+    // towers up for five seconds. Worth most cast where all three meet.
+    egida: {
+        key: 'egida',
+        label: 'EGIDA',
+        hotkey: 'Y',
+        icon: 'spell_egida',
+
+        cost: 75,
+        cooldown: 20000,
+
+        targeted: true,
+        radius: 80,
+
+        /** Share of max HP restored to Vesper and the sentinels inside. */
+        heal: 0.4,
+        /** Attack speed for towers, Vesper and sentinels inside, and for how long. */
+        haste: 0.3,
+        hasteMs: 5000,
+
+        channelMs: 260,
+
+        color: 0x8EECC4,
+        colorHex: '#8EECC4',
+        desc: [
+            'Cura 40% a Vesper y centinelas,',
+            'repara bloques y da +30% de cadencia',
+            'a todo aliado del circulo por 5s.',
+        ],
+    },
 };
 
-export const SPELL_ORDER = ['luna'];
+export const SPELL_ORDER = ['luna', 'centinelas', 'egida'];
 
 /** `LUNA  [R]  ·  120✦  ·  25s` — name, key, price and recharge in one line. */
 export function spellHeading(key) {

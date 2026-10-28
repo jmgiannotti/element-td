@@ -62,7 +62,7 @@ export function expectedTextureKeys() {
         'seal_water_on', 'seal_air_on', 'seal_fire_on', 'seal_earth_on',
         'seal_water_halo', 'seal_air_halo', 'seal_fire_halo', 'seal_earth_halo',
         'gate_spawn', 'gate_exit', HERO_GLOW_KEY, HERO_SLASH_KEY,
-        'spell_moon', 'spell_moon_ring',
+        'spell_moon', 'spell_moon_ring', 'sentinel',
         'btn_bg', 'btn_bg_sel', 'btn_bg_off', 'btn_build', 'btn_build_sel'];
 
     // One icon per spell, named off the table so a new spell fails the boot
@@ -2219,6 +2219,97 @@ export class BootScene extends Phaser.Scene {
                 }
             }
             g.fillStyle(SOUL.light, 0.55); g.fillRect(4, 10, 1, 4);
+        });
+
+        this._generateSentinelArt();
+    }
+
+    /**
+     * CENTINELAS ARCANOS and EGIDA: the soldier and both button icons.
+     *
+     * The soldier is Vesper's kind of sprite — dark outline, flat lit and
+     * shaded faces — at two thirds the size, and empty: a floating suit of
+     * violet-grey plate with nothing in it but the cyan light behind the visor.
+     * No legs, so it reads as summoned rather than recruited.
+     */
+    _generateSentinelArt() {
+        const PLATE = ramp(0x120e22, 0x2c2444, 0x4a3d6e, 0x7a68a8, 0xb8a8e0);
+        const BLADE = ramp(0x0a3a4c, 0x1d7fa0, 0x4fc8e8, 0x9ff0ff, 0xffffff);
+        const AEGIS = ramp(0x0e3a2c, 0x1f6e54, 0x3fae86, 0x8eecc4, 0xe8fff4);
+
+        // The visor: a slit of light across the helm, brightest at its centre
+        const visor = (g, x0, y, w) => {
+            g.fillStyle(BLADE.deep); g.fillRect(x0 - 1, y - 1, w + 2, 3);
+            g.fillStyle(BLADE.mid);  g.fillRect(x0, y, w, 1);
+            g.fillStyle(BLADE.glow); g.fillRect(x0 + (w >> 1) - 1, y, 2, 1);
+        };
+
+        this._draw('sentinel', 24, 24, (g) => {
+            // Plates that trail below, apart from each other: nothing joins them
+            volume(g, profile(17, [[9, 13], [10, 12]]), PLATE, { lu: 0.3, lv: 0.2, spec: 0.1 });
+            volume(g, profile(20, [[10, 12]]), PLATE, { lu: 0.3, lv: 0.2, spec: 0.1, flat: true });
+
+            // Cuirass, wide at the shoulders and tapering to nothing
+            volume(g, taper(9, 15, 4, 2, 11, 1), PLATE, { lu: 0.3, lv: 0.25, spec: 0.12 });
+            // The rune on the chest, lit from inside
+            g.fillStyle(BLADE.light); g.fillRect(10, 11, 1, 2);
+            g.fillStyle(BLADE.glow);  g.fillRect(10, 11, 1, 1);
+
+            // Pauldrons
+            volume(g, ellipse(6, 9, 2, 2), STONE_HI, { spec: 0.2 });
+            volume(g, ellipse(16, 9, 2, 2), STONE_HI, { spec: 0.2 });
+            // Sword hand, on the right pauldron's side
+            g.fillStyle(STONE_HI.deep); g.fillRect(14, 13, 3, 2);
+            g.fillStyle(STONE_HI.light); g.fillRect(14, 13, 2, 1);
+
+            // Helm, with a short crest
+            volume(g, ellipse(11, 5, 4, 4), PLATE, { lu: 0.3, lv: 0.3, spec: 0.14 });
+            g.fillStyle(PLATE.deep);  g.fillRect(10, 0, 2, 2);
+            g.fillStyle(PLATE.glow);  g.fillRect(10, 0, 1, 1);
+            visor(g, 8, 5, 6);
+
+            // Energy sword, raised in the right hand and drawn last: it is the
+            // one thing on the soldier that is not violet, so it goes in front.
+            const blade = [];
+            for (let i = 0; i < 12; i++) blade.push([16 + Math.round(i * 0.45), 13 - i]);
+            g.fillStyle(BLADE.deep);
+            for (const [x, y] of blade) g.fillRect(x - 1, y - 1, 3, 3);
+            for (const [x, y] of blade) {
+                g.fillStyle(y < 5 ? BLADE.glow : BLADE.light); g.fillRect(x, y, 1, 1);
+            }
+            // Crossguard over the fist
+            g.fillStyle(BLADE.deep); g.fillRect(14, 12, 5, 3);
+            g.fillStyle(BLADE.mid);  g.fillRect(15, 13, 3, 1);
+        });
+
+        // Icon: the helm, face-on, big enough to read at button size
+        this._draw('spell_centinelas', 24, 24, (g) => {
+            volume(g, ellipse(12, 11, 8, 9), PLATE, { lu: 0.3, lv: 0.28, spec: 0.12 });
+            g.fillStyle(PLATE.deep); g.fillRect(11, 1, 2, 3);
+            g.fillStyle(PLATE.glow); g.fillRect(11, 1, 1, 2);
+            visor(g, 6, 10, 12);
+            // Cheek guards
+            g.fillStyle(PLATE.dark); g.fillRect(7, 14, 2, 4); g.fillRect(15, 14, 2, 4);
+            g.fillStyle(PLATE.deep); g.fillRect(11, 14, 2, 5);
+            // A sword's tip rising past the helm
+            g.fillStyle(BLADE.deep); g.fillRect(19, 2, 3, 9);
+            g.fillStyle(BLADE.light); g.fillRect(20, 3, 1, 7);
+            g.fillStyle(BLADE.glow); g.fillRect(20, 2, 1, 2);
+        });
+
+        // Icon: a heater shield with a cross of light on it
+        this._draw('spell_egida', 24, 24, (g) => {
+            volume(g, profile(2, [
+                [4, 19], [4, 19], [4, 19], [4, 19], [4, 19], [4, 19], [4, 19],
+                [5, 18], [5, 18], [6, 17], [6, 17], [7, 16], [8, 15], [9, 14],
+                [10, 13], [11, 12],
+            ]), AEGIS, { lu: 0.3, lv: 0.25, spec: 0.14 });
+            // Rim
+            g.fillStyle(AEGIS.glow, 0.7); g.fillRect(5, 3, 14, 1);
+            // The cross, the part that heals
+            g.fillStyle(AEGIS.deep);  g.fillRect(10, 5, 4, 10); g.fillRect(7, 8, 10, 4);
+            g.fillStyle(0xffffff);    g.fillRect(11, 6, 2, 8);  g.fillRect(8, 9, 8, 2);
+            g.fillStyle(AEGIS.light); g.fillRect(11, 9, 2, 2);
         });
     }
 

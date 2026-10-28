@@ -610,7 +610,9 @@ export class Hero {
 
         // ── Auto-attack nearby enemies ──────────
         // Suppressed mid-cast: the ability is the action right now.
-        if (this.busy <= 0 && time - this.lastAttack >= this.attackRate) {
+        // EGIDA quickens the swing; it never touches the damage.
+        const rate = this.hasteTimer > 0 ? this.attackRate / 1.3 : this.attackRate;
+        if (this.busy <= 0 && time - this.lastAttack >= rate) {
             const target = this._findNearest();
             if (target) {
                 target.takeDamage(this.attackDamage);
@@ -681,6 +683,7 @@ export class Hero {
         if (this.busy > 0) this.busy = Math.max(0, this.busy - delta);
         if (this.channelTimer > 0) this.channelTimer = Math.max(0, this.channelTimer - delta);
         if (this.invuln > 0) this.invuln = Math.max(0, this.invuln - delta);
+        if (this.hasteTimer > 0) this.hasteTimer = Math.max(0, this.hasteTimer - delta);
 
         if (this.comboTimer > 0) {
             this.comboTimer = Math.max(0, this.comboTimer - delta);
@@ -784,6 +787,19 @@ export class Hero {
         if (pct > 0.6) this.hpFill.fillColor = 0x4CAF50;
         else if (pct > 0.3) this.hpFill.fillColor = 0xFFC107;
         else this.hpFill.fillColor = 0xEF5350;
+    }
+
+    /** EGIDA: a share of max HP back. Returns how much actually healed. */
+    heal(fraction) {
+        if (this.isDead) return 0;
+        const before = this.hp;
+        this.hp = Math.min(this.maxHp, this.hp + this.maxHp * fraction);
+        this._updateHpBar();
+        return this.hp - before;
+    }
+
+    haste(ms) {
+        if (!this.isDead) this.hasteTimer = Math.max(this.hasteTimer || 0, ms);
     }
 
     takeDamage(amount) {

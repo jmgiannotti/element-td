@@ -230,6 +230,14 @@ export class Enemy {
             }
         }
 
+        // ── Sentinel combat ─────────────────────
+        // The hero's rule, with one difference: a sentinel holds a single
+        // enemy. Whoever reaches it first is held; the rest walk on by.
+        if (this._fightSentinel(delta)) {
+            this._updateHpBar();
+            return;
+        }
+
         // Off the road: the errand replaces the route entirely, so nothing
         // below this line runs until it goes back to 'road'.
         if (this.mode === 'chase') {
@@ -618,6 +626,34 @@ export class Enemy {
         }
     }
 
+    /**
+     * Engage, or keep fighting, a CENTINELA. True while held — the caller stops
+     * moving for the frame. Same reach and the same blow as against Vesper.
+     */
+    _fightSentinel(delta) {
+        const list = this.scene.sentinels;
+        if (!list || list.length === 0) { this.heldBy = null; return false; }
+
+        let s = this.heldBy;
+        if (s && (!s.alive || s.holding !== this)) s = this.heldBy = null;
+        if (!s) {
+            s = list.find(x => x.alive && (!x.holding || !x.holding.alive)
+                && Phaser.Math.Distance.Between(this.x, this.y, x.x, x.y) < 22) ?? null;
+            if (!s) return false;
+            s.holding = this;
+            this.heldBy = s;
+            this.sentinelAttackTimer = 0;
+        }
+
+        this.sentinelAttackTimer += delta;
+        if (this.sentinelAttackTimer >= 1000) {
+            this.sentinelAttackTimer = 0;
+            s.takeDamage(this.data.hp * 0.2 + 5);
+        }
+        if (!s.alive) { this.heldBy = null; return false; }
+        return true;
+    }
+
     applySlow(amount, duration) {
         this.slowAmount = Math.max(this.slowAmount, amount);
         this.slowTimer = Math.max(this.slowTimer, duration);
@@ -758,6 +794,8 @@ export class Enemy {
         this.errandDone = false;
         this.distanceTraveled = 0;
         this.heroAttackTimer = 0;
+        this.heldBy = null;
+        this.sentinelAttackTimer = 0;
         this.blockAttackTimer = 0;
 
         this.isBoss = !!this.data.isBoss;

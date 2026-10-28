@@ -235,6 +235,22 @@ class AudioSystem {
      * same triangle, falling instead of rising, so the two are audibly the same
      * building doing the opposite thing.
      */
+    /** Soldiers stepping out of a rune: three quick rising notes, one each. */
+    _summon() {
+        [392, 523, 659].forEach((f, i) => {
+            this._tone({ type: 'square', freq: f, to: f * 1.5, dur: 0.08, gain: 0.07, delay: i * 0.07 });
+        });
+        this._noise({ dur: 0.18, gain: 0.05, from: 2400, to: 600 });
+    }
+
+    /** The aegis settling: a soft, warm chord rather than an impact. */
+    _aegis() {
+        [523, 659, 784].forEach((f, i) => {
+            this._tone({ type: 'sine', freq: f, dur: 0.5, gain: 0.06, delay: i * 0.03 });
+        });
+        this._tone({ type: 'triangle', freq: 262, to: 392, dur: 0.4, gain: 0.06 });
+    }
+
     _sabotage() {
         this._tone({ type: 'triangle', freq: 150, to: 62, dur: 0.34, gain: 0.16 });
         this._noise({ dur: 0.26, gain: 0.1, from: 700, to: 110 });
