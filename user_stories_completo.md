@@ -460,7 +460,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - **Persistencia Multimapa (`SaveSystem`)**:
 >   - `SaveSystem` incluye el `levelId` en el guardado para restaurar exactamente el mapa y sus obstáculos guardados.
 > 
-> *Estado:* **En progreso** — Paso 1 (desacoplamiento base) hecho: el mapa vive en `js/data/LevelData.js`; se eliminó `WAYPOINTS` y `GridSystem` usa las dimensiones del nivel (`GridSystem.js`, `GameScene.js`, `Hero.js`, `EconomySystem.js`, `SaveSystem.js`). Pendiente: biomas, selector en `TitleScene`, oleadas por mapa.
+> *Estado:* **En progreso** — Paso 1 (desacoplamiento base) hecho: el mapa vive en `js/data/LevelData.js`; se eliminó `WAYPOINTS` y `GridSystem` usa las dimensiones del nivel (`GridSystem.js`, `GameScene.js`, `Hero.js`, `EconomySystem.js`, `SaveSystem.js`). Paso 2 (biomas visuales) hecho: `grass`, `city`, `volcano`, `snow` y `dungeon`, con suelo construible oscuro (luma 13–14 %) y camino de losas irregulares claro (62–71 %) con borde oscuro; rompibles propios por bioma (cajas/barriles/sacos en `city`); `city` tiene suelo de empedrado y casas en 3/4 en la fila superior (con árboles y puestos de mercado pegados a las fachadas) y en `townBlocks` por nivel. Paso 3 (mapas) hecho: 5 niveles en `LevelData.js` (`map_1` Paso de Ceniza, `map_2` Plaza del Mercado, `map_3` Caldera de Magma con plaza para barricadas vía `roadAreas` en `GridSystem`, `map_4` Glaciar Quebrado, `map_5` Cripta Ancestral con 15 vidas y 150 de oro) (`js/systems/Terrain.js`, `js/data/BiomeArt.js`, `Palette.js`, `BootScene.js`, `GameScene.js`). Pendiente: selector en `TitleScene` y oleadas por mapa.
 
 ### US 14.2: Modo Sin Fin (Endless Mode) [✓]
 **Como** jugador veterano,  
