@@ -50,6 +50,11 @@ export class GridSystem {
             }
         }
 
+        // Open plazas of road, for mazing with barricades
+        for (const a of this.levelData.roadAreas || []) {
+            this._fillBlocks(grid, a.c1, a.r1, a.c2, a.r2, TILE.PATH);
+        }
+
         // Add breakable block detours defined in levelData
         if (this.levelData.breakableBlocks) {
             for (const b of this.levelData.breakableBlocks) {

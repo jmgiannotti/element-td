@@ -26,17 +26,12 @@ import { Hero } from '../entities/Hero.js';
 import { TOWER_DATA, ELEMENTS, TOWER_UPGRADE } from '../data/TowerData.js';
 import { TEMPLE_DATA, TRACK_ORDER, upgradeCost } from '../data/TempleData.js';
 import {
-    GRASS_VARIANTS, DIRT_VARIANTS, EDGE_VARIANTS, RUT_VARIANTS, BREAKABLE_VARIANTS,
-} from './BootScene.js';
+    cellHash, cellLayers, breakableKey, biomeKey, resolveBiome, townProps, BIOMES,
+} from '../systems/Terrain.js';
 import { safeTexture } from '../systems/TextureGuard.js';
 import { applyViewport, pointerWorld } from '../systems/Viewport.js';
 
-// Depth budget for the terrain layers (all below entities at depth ≥ 1).
-const D_BASE = 0;
-const D_RUT = 0.1;
-const D_SCATTER = 0.15;
-const D_EDGE = 0.2;
-const D_CORNER = 0.25;
+// Depth budget above the terrain layers (see Terrain.js), below entities (≥ 1).
 const D_GRID = 0.5;
 const D_DECOR = 0.6;
 
@@ -51,13 +46,6 @@ const BLOCK_REASON = {
 // for DAÑO/CADENCIA/ALCANCE; a label hanging over a 32px tile does not.
 const TRACK_SHORT = { damage: 'DMG', fireRate: 'CAD', range: 'ALC' };
 
-/** Stable per-cell hash — same cell always draws the same variant. */
-function cellHash(col, row) {
-    let h = Math.imul(col + 1, 374761393) ^ Math.imul(row + 1, 668265263);
-    h = Math.imul(h ^ (h >>> 13), 1274126177);
-    return (h ^ (h >>> 16)) >>> 0;
-}
-
 export class GameScene extends Phaser.Scene {
     constructor() {
         super('GameScene');
@@ -66,6 +54,9 @@ export class GameScene extends Phaser.Scene {
     init(data) {
         this.initData = data || {};
         this.levelData = data?.levelData || (data?.levelId ? getLevelById(data.levelId) : DEFAULT_LEVEL);
+        // What the ground is made of. Paint only — the rules are the same on
+        // every biome.
+        this.biome = resolveBiome(this.levelData.biome);
     }
 
     create() {
@@ -511,10 +502,12 @@ export class GameScene extends Phaser.Scene {
                 this._paintCell(c, r);
                 if (this.gridSystem.grid[r][c] === TILE.BREAKABLE) {
                     this.breakableBlocks.set(`${c},${r}`, this.gridSystem.breakableHp(c, r));
-                    this._setDecor(c, r, `breakable_${cellHash(c, r) % BREAKABLE_VARIANTS}`);
+                    this._setDecor(c, r, breakableKey(this.biome, c, r));
                 }
             }
         }
+
+        this._renderProps();
 
         // Faint build grid — corner marks instead of full lines for a spacious feel
         this.buildGrid = this.add.graphics().setDepth(D_GRID).setVisible(false);
@@ -546,79 +539,36 @@ export class GameScene extends Phaser.Scene {
             .setDepth(D_DECOR);
     }
 
-    _isGrass(col, row) {
-        if (!this.gridSystem.inBounds(col, row)) return false;
-        return this.gridSystem.grid[row][col] === TILE.GRASS;
-    }
-
-    _isRoad(col, row) {
-        if (!this.gridSystem.inBounds(col, row)) return false;
-        return this.gridSystem.grid[row][col] !== TILE.GRASS;
+    /**
+     * The town around a 'city' board (see Terrain.townProps). Each house, tree
+     * and stall takes its cell, so nothing is built through a roof.
+     */
+    _renderProps() {
+        if (!BIOMES[this.biome].town) return;
+        for (const p of townProps(this.gridSystem)) {
+            this.add.image(p.x, p.y, safeTexture(this, p.key, 'tile_barricade'))
+                .setOrigin(0, 0).setDepth(D_DECOR);
+            for (const cell of p.cells) this.occupiedCells.add(cell);
+        }
     }
 
     /**
      * (Re)builds the terrain sprites for one cell: base tile plus whatever
-     * transition overlays its neighbours call for.
+     * transition overlays its neighbours call for (see Terrain.cellLayers).
      */
     _paintCell(col, row) {
         const key = `${col},${row}`;
         const prev = this.tileNodes.get(key);
         if (prev) for (const s of prev) s.destroy();
 
-        const nodes = [];
         const x = col * TILE_SIZE;
         const y = row * TILE_SIZE;
-        const h = cellHash(col, row);
-
-        const put = (texture, depth) => {
-            const img = this.add
-                .image(x, y, safeTexture(this, texture, 'grass_0'))
-                .setOrigin(0, 0).setDepth(depth);
-            nodes.push(img);
-            return img;
-        };
-
-        // Mirroring the full-bleed base tile turns N variants into 4N patterns,
-        // which is what stops the lawn from reading as a repeated stamp.
-        const putBase = (texture) => {
-            put(texture, D_BASE)
-                .setFlipX(((h >>> 17) & 1) === 1)
-                .setFlipY(((h >>> 18) & 1) === 1);
-        };
-
-        const up = this._isRoad(col, row - 1);
-        const down = this._isRoad(col, row + 1);
-        const left = this._isRoad(col - 1, row);
-        const right = this._isRoad(col + 1, row);
-
-        if (this._isGrass(col, row)) {
-            putBase(`grass_${h % GRASS_VARIANTS}`);
-            // Dirt kicked onto the verge by whatever walks past
-            if (up) put('scat_top', D_SCATTER);
-            if (down) put('scat_bottom', D_SCATTER);
-            if (left) put('scat_left', D_SCATTER);
-            if (right) put('scat_right', D_SCATTER);
-        } else {
-            putBase(`dirt_${(h >>> 3) % DIRT_VARIANTS}`);
-
-            // Ruts follow the direction of travel so the road reads continuous
-            const rv = (h >>> 7) % RUT_VARIANTS;
-            if (left && right && !(up && down)) put(`rut_h_${rv}`, D_RUT);
-            else if (up && down && !(left && right)) put(`rut_v_${rv}`, D_RUT);
-
-            // Grass overhanging each side that borders a lawn
-            const ev = (h >>> 11) % EDGE_VARIANTS;
-            if (this._isGrass(col, row - 1)) put(`edge_top_${ev}`, D_EDGE);
-            if (this._isGrass(col, row + 1)) put(`edge_bottom_${ev}`, D_EDGE);
-            if (this._isGrass(col - 1, row)) put(`edge_left_${ev}`, D_EDGE);
-            if (this._isGrass(col + 1, row)) put(`edge_right_${ev}`, D_EDGE);
-
-            // Inside corners: grass pokes through where two road tiles meet
-            if (this._isGrass(col - 1, row - 1) && up && left) put('corner_tl', D_CORNER);
-            if (this._isGrass(col + 1, row - 1) && up && right) put('corner_tr', D_CORNER);
-            if (this._isGrass(col - 1, row + 1) && down && left) put('corner_bl', D_CORNER);
-            if (this._isGrass(col + 1, row + 1) && down && right) put('corner_br', D_CORNER);
-        }
+        const fallback = biomeKey(this.biome, 'grass_0');
+        const nodes = cellLayers(this.gridSystem, this.biome, col, row).map(l =>
+            this.add.image(x, y, safeTexture(this, l.key, fallback))
+                .setOrigin(0, 0).setDepth(l.depth)
+                .setFlip(!!l.flipX, !!l.flipY)
+        );
 
         this.tileNodes.set(key, nodes);
     }
@@ -643,7 +593,7 @@ export class GameScene extends Phaser.Scene {
         const s = this.add.image(
             col * TILE_SIZE + TILE_SIZE / 2,
             row * TILE_SIZE + TILE_SIZE / 2,
-            safeTexture(this, texture, 'breakable_0')
+            safeTexture(this, texture, biomeKey(this.biome, 'breakable_0'))
         ).setDepth(D_DECOR).setFlipX(((cellHash(col, row) >>> 19) & 1) === 1);
         this.decor.set(key, s);
     }
