@@ -24,11 +24,13 @@ export class Temple {
 
         const pos = scene.gridSystem.gridToWorld(col, row);
 
-        // The absorption field stays faintly visible at all times — the player
-        // has to be able to plan mote coverage without hovering every temple.
-        this.field = scene.add.circle(pos.x, pos.y, this.data.absorbRadius, this.data.color, 0.05);
-        this.field.setStrokeStyle(1, this.data.color, 0.22);
-        this.field.setDepth(0.9);
+        // The absorption field shows only under the cursor or while pinned: a
+        // ring per temple, always on, buried the board once there were a few.
+        this.field = scene.add.circle(pos.x, pos.y, this.data.absorbRadius, this.data.color, 0.12);
+        this.field.setStrokeStyle(1, this.data.color, 0.5);
+        this.field.setDepth(0.9).setVisible(false);
+        this._hovered = false;
+        this._pinned = false;
 
         // Ground glow under the building itself
         this.glow = scene.add.circle(pos.x, pos.y + 9, 13, this.data.color, 0.18);
@@ -91,9 +93,23 @@ export class Temple {
     get absorbRadius() { return this.data.absorbRadius; }
 
     _hover(on) {
-        if (!this.alive) return;
-        this.field.setFillStyle(this.data.color, on ? 0.12 : 0.05);
-        this.field.setStrokeStyle(1, this.data.color, on ? 0.5 : 0.22);
+        this._hovered = on;
+        this._refreshField();
+    }
+
+    /** Pinned by a click (GameScene.selectStructure): the field stays up. */
+    setSelected(on) {
+        this._pinned = on;
+        this._refreshField();
+    }
+
+    /**
+     * The field is the promise "motes in here get drunk". While a sillar holds
+     * the temple shut that promise is false, so it never shows then.
+     */
+    _refreshField() {
+        if (!this.alive || !this.field) return;
+        this.field.setVisible((this._hovered || this._pinned) && !this.disabled);
     }
 
     // ─── Sabotage ───────────────────────────────────────
@@ -120,9 +136,7 @@ export class Temple {
 
         if (!wasOff) {
             this._applyTint();
-            // The field is the promise "motes in here get drunk". While it is
-            // shut that promise is false, so the ring has to go with it.
-            this.field.setVisible(false);
+            this._refreshField();
             this.glow.setFillStyle(0x000000, 0.25);
             this.scene.events.emit('temple-sabotaged', this);
         }
@@ -151,7 +165,7 @@ export class Temple {
 
         this.disabledTimer = 0;
         this._applyTint();
-        this.field.setVisible(true);
+        this._refreshField();
         this.glow.setFillStyle(this.data.color, 0.18);
         this.scene.events.emit('temple-restored', this);
     }
