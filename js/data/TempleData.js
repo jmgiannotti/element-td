@@ -45,7 +45,7 @@ export const TEMPLE_ELEMENTS = [
 ];
 
 export const TEMPLE_DATA = Object.fromEntries(
-    Object.entries(TOWER_DATA).map(([el, t]) => [el, {
+    Object.entries(TOWER_DATA).filter(([, t]) => t.tier < 3).map(([el, t]) => [el, {
         element: el,
         name: `Templo de ${t.name}`,
         shortName: t.name,
@@ -53,6 +53,7 @@ export const TEMPLE_DATA = Object.fromEntries(
         colorDark: t.colorDark,
         emoji: t.emoji,
         isHybrid: t.isHybrid,
+        tier: t.tier,
         // A hybrid temple costs you two elemental upgrade trees, so it has to
         // pay for itself: it reaches further and refines more out of each mote.
         absorbRadius: t.isHybrid ? 132 : 104,

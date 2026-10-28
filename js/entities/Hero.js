@@ -16,12 +16,11 @@ import { pointerWorld } from '../systems/Viewport.js';
 const SWING_MS = 260;
 const WALK_FRAME_MS = 145;
 
-const SPAWN_COL = 10;
-const SPAWN_ROW = 7;
-
 export class Hero {
     constructor(scene, col, row) {
         this.scene = scene;
+        // Where the hero (re)appears, as the level placed it.
+        this.spawnCell = { col, row };
 
         const pos = scene.gridSystem.gridToWorld(col, row);
 
@@ -611,7 +610,9 @@ export class Hero {
 
         // ── Auto-attack nearby enemies ──────────
         // Suppressed mid-cast: the ability is the action right now.
-        if (this.busy <= 0 && time - this.lastAttack >= this.attackRate) {
+        // EGIDA quickens the swing; it never touches the damage.
+        const rate = this.hasteTimer > 0 ? this.attackRate / 1.3 : this.attackRate;
+        if (this.busy <= 0 && time - this.lastAttack >= rate) {
             const target = this._findNearest();
             if (target) {
                 target.takeDamage(this.attackDamage);
@@ -682,6 +683,7 @@ export class Hero {
         if (this.busy > 0) this.busy = Math.max(0, this.busy - delta);
         if (this.channelTimer > 0) this.channelTimer = Math.max(0, this.channelTimer - delta);
         if (this.invuln > 0) this.invuln = Math.max(0, this.invuln - delta);
+        if (this.hasteTimer > 0) this.hasteTimer = Math.max(0, this.hasteTimer - delta);
 
         if (this.comboTimer > 0) {
             this.comboTimer = Math.max(0, this.comboTimer - delta);
@@ -787,6 +789,19 @@ export class Hero {
         else this.hpFill.fillColor = 0xEF5350;
     }
 
+    /** EGIDA: a share of max HP back. Returns how much actually healed. */
+    heal(fraction) {
+        if (this.isDead) return 0;
+        const before = this.hp;
+        this.hp = Math.min(this.maxHp, this.hp + this.maxHp * fraction);
+        this._updateHpBar();
+        return this.hp - before;
+    }
+
+    haste(ms) {
+        if (!this.isDead) this.hasteTimer = Math.max(this.hasteTimer || 0, ms);
+    }
+
     takeDamage(amount) {
         if (this.isDead) return;
 
@@ -884,7 +899,7 @@ export class Hero {
         this._setPose('stand');
         if (heroArtAnimates(this.scene)) this.sprite.setFrame(HERO_SPRITE.idleFrame);
 
-        const pos = this.scene.gridSystem.gridToWorld(SPAWN_COL, SPAWN_ROW);
+        const pos = this.scene.gridSystem.gridToWorld(this.spawnCell.col, this.spawnCell.row);
         this.posX = pos.x;
         this.posY = pos.y;
         this.sprite.setPosition(pos.x, pos.y);

@@ -2,6 +2,7 @@ import * as Phaser from 'phaser';
 import {
     TEMPLE_DATA, UPGRADE_TRACKS, TRACK_ORDER, templeCost, upgradeCost,
 } from '../data/TempleData.js';
+import { TOWER_DATA } from '../data/TowerData.js';
 
 /**
  * Owns everything about temples: what the next one costs, which motes each one
@@ -61,6 +62,12 @@ export class TempleSystem {
 
     /** Multiplier a tower applies to one of its base stats. */
     multiplier(element, track) {
+        // A legendary has no temple; it rides the better of its parents' trees.
+        const parents = TOWER_DATA[element]?.parents;
+        if (parents) {
+            const ms = parents.map(p => this.multiplier(p, track));
+            return track === 'fireRate' ? Math.min(...ms) : Math.max(...ms);
+        }
         const lvl = this.levelOf(element, track);
         if (lvl === 0) return 1;
         const bonus = UPGRADE_TRACKS[track].step * lvl;
@@ -87,7 +94,9 @@ export class TempleSystem {
 
         // Towers cache nothing, but their range ring is a real display object.
         for (const tower of this.scene.towers) {
-            if (tower.alive && tower.element === element) tower.refreshStats();
+            if (tower.alive && (tower.element === element || tower.data.parents?.includes(element))) {
+                tower.refreshStats();
+            }
         }
         for (const temple of this.scene.temples) {
             if (temple.alive && temple.element === element) temple.celebrate();

@@ -2,6 +2,8 @@ import * as Phaser from 'phaser';
 import { SPELLS, SPELL_ORDER } from '../data/SpellData.js';
 import { SOUL, MARBLE } from '../data/Palette.js';
 import { audio } from './AudioSystem.js';
+import { TILE } from './GridSystem.js';
+import { Sentinel } from '../entities/Sentinel.js';
 
 /**
  * Casting, cooldowns, and the show each spell puts on.
@@ -27,12 +29,14 @@ export const REFUSAL = {
     DEAD: 'dead',
     COOLING: 'cooling',
     MANA: 'mana',
+    ROAD: 'road',
 };
 
 const REFUSAL_TEXT = {
     [REFUSAL.DEAD]: 'Vesper no esta',
     [REFUSAL.COOLING]: 'todavia no',
     [REFUSAL.MANA]: 'falta ✦',
+    [REFUSAL.ROAD]: 'solo sobre el camino',
 };
 
 export class SpellSystem {
@@ -122,6 +126,29 @@ export class SpellSystem {
     }
 
     /**
+     * Whether this spell may land on (x, y). Separate from refusal() because it
+     * is about the point, not the caster: the cursor asks it on every move, and
+     * a bad point keeps the spell armed rather than spending the click.
+     */
+    targetRefusal(key, x, y) {
+        const s = SPELLS[key];
+        if (!s?.roadOnly) return null;
+        const { col, row } = this.scene.gridSystem.worldToGrid(x, y);
+        return this.scene.gridSystem.grid[row]?.[col] === TILE.PATH ? null : REFUSAL.ROAD;
+    }
+
+    /** Says a target refusal over the point itself. */
+    announceTargetRefusal(key, x, y) {
+        const why = this.targetRefusal(key, x, y);
+        if (!why) return false;
+        audio.play('deny');
+        if (this.scene.floating) {
+            this.scene.floating.show(x, y - 14, REFUSAL_TEXT[why], { color: '#FF8A80', size: 7, rise: 14 });
+        }
+        return true;
+    }
+
+    /**
      * Fire a spell at a point. Returns false — and says why, where the player is
      * looking — when it cannot, so the button and the hotkey never have to
      * duplicate the check.
@@ -132,6 +159,7 @@ export class SpellSystem {
         if (!perform) return false;
 
         if (this.announceRefusal(key)) return false;
+        if (this.announceTargetRefusal(key, x, y)) return false;
 
         // Checked above, but spendMana is the one that actually moves the
         // number — going through it keeps the 'mana-changed' event honest.
@@ -146,6 +174,8 @@ export class SpellSystem {
     /** key → the routine that plays it. A new spell adds one line here. */
     _performer(key) {
         if (key === 'luna') return this._castLuna;
+        if (key === 'centinelas') return this._castCentinelas;
+        if (key === 'egida') return this._castEgida;
         return null;
     }
 
@@ -380,6 +410,138 @@ export class SpellSystem {
         if (hits === 0 && scene.floating) {
             scene.floating.show(x, y - 26, 'sin blancos', {
                 color: '#78909C', size: 7, rise: 16,
+            });
+        }
+    }
+
+    // ─── CENTINELAS ─────────────────────────────────────
+    /**
+     * A rune flashes where the player points — road or grass — and three
+     * soldiers step out of it in a triangle. From there they hunt on their own
+     * (see Sentinel): onto the grass in front of a temple to catch a golem on
+     * its way to it, then on to whatever else is near.
+     */
+    _castCentinelas(spell, x, y) {
+        const scene = this.scene;
+        const hero = scene.hero;
+        const at = { x, y };
+
+        hero.lookAt(at.x, at.y);
+        hero.channel(spell.channelMs);
+        audio.play('cast');
+
+        this._rune(at.x, at.y, spell.color);
+
+        scene.time.delayedCall(spell.channelMs, () => {
+            audio.play('summon');
+            if (!scene.sentinels) scene.sentinels = [];
+            for (const [dx, dy] of [[0, -10], [-10, 7], [10, 7]].slice(0, spell.count)) {
+                scene.sentinels.push(new Sentinel(scene, at.x + dx, at.y + dy, spell, { x: dx, y: dy }));
+            }
+        });
+    }
+
+    /** The runic flash a summon steps out of: a turning sigil, a ring, a flare. */
+    _rune(x, y, color) {
+        const scene = this.scene;
+        const sigil = scene.add.rectangle(x, y, 22, 22, color, 0.08)
+            .setStrokeStyle(1, color, 0.9).setAngle(45).setDepth(3);
+        const ring = scene.add.circle(x, y, 14, color, 0).setStrokeStyle(1, SOUL.light, 0.8).setDepth(3);
+        scene.tweens.add({
+            targets: sigil, angle: 135, scale: 1.25, alpha: 0,
+            duration: this._vfxMs(620), ease: 'Quad.easeOut', onComplete: () => sigil.destroy(),
+        });
+        scene.tweens.add({
+            targets: ring, scale: 1.8, alpha: 0,
+            duration: this._vfxMs(520), ease: 'Quad.easeOut', onComplete: () => ring.destroy(),
+        });
+        const flare = scene.add.rectangle(x, y - 10, 3, 28, 0xffffff, 0.8)
+            .setDepth(23).setBlendMode(Phaser.BlendModes.ADD);
+        scene.tweens.add({
+            targets: flare, scaleX: 0.2, alpha: 0,
+            duration: this._vfxMs(380), ease: 'Quad.easeIn', onComplete: () => flare.destroy(),
+        });
+    }
+
+    // ─── EGIDA ──────────────────────────────────────────
+    /**
+     * A dome of green light settles over the circle. Everything friendly in it
+     * is mended or quickened, and each one says so with its own number — a
+     * heal nobody can see is a heal nobody plans around.
+     */
+    _castEgida(spell, x, y) {
+        const scene = this.scene;
+        const hero = scene.hero;
+        const r = spell.radius;
+        const inside = (ox, oy) => Phaser.Math.Distance.Between(x, y, ox, oy) <= r;
+
+        hero.lookAt(x, y);
+        hero.channel(spell.channelMs);
+        audio.play('aegis');
+        this._dome(spell, x, y);
+
+        const healed = (who, amount) => {
+            if (amount > 0 && scene.floating) {
+                scene.floating.show(who.x, who.y - 22, `+${Math.round(amount)}`, {
+                    color: spell.colorHex, size: 7, rise: 16,
+                });
+            }
+        };
+
+        if (hero && !hero.isDead && inside(hero.x, hero.y)) {
+            healed(hero, hero.heal(spell.heal));
+            hero.haste(spell.hasteMs);
+        }
+        for (const s of scene.sentinels || []) {
+            if (!s.alive || !inside(s.x, s.y)) continue;
+            healed(s, s.heal(spell.heal));
+            s.haste(spell.hasteMs);
+        }
+        for (const t of scene.towers) {
+            if (t.alive && inside(t.x, t.y)) t.haste(spell.hasteMs);
+        }
+
+        // Barricades have no health to give back; the breakable blocks do, and
+        // every hit they have taken is a step the next enemy does not have to
+        // take. Mended to full, not rebuilt — a block that already fell is road.
+        for (const [key, hp] of scene.breakableBlocks) {
+            const [c, rr] = key.split(',').map(Number);
+            const p = scene.gridSystem.gridToWorld(c, rr);
+            if (!inside(p.x, p.y)) continue;
+            const full = scene.gridSystem.breakableHp(c, rr);
+            if (hp >= full) continue;
+            scene.breakableBlocks.set(key, full);
+            const sprite = scene.decor.get(key);
+            if (sprite) {
+                sprite.setTint(spell.color);
+                scene.time.delayedCall(220, () => { if (sprite.active) sprite.clearTint(); });
+            }
+        }
+    }
+
+    _dome(spell, x, y) {
+        const scene = this.scene;
+        const r = spell.radius;
+        const dome = scene.add.circle(x, y, r, spell.color, 0.16)
+            .setStrokeStyle(2, spell.color, 0.9).setDepth(3).setScale(0.2);
+        scene.tweens.add({
+            targets: dome, scale: 1, duration: this._vfxMs(260), ease: 'Back.easeOut',
+            onComplete: () => scene.tweens.add({
+                targets: dome, alpha: 0, duration: this._vfxMs(700), delay: this._vfxMs(300),
+                onComplete: () => dome.destroy(),
+            }),
+        });
+        // Motes rising out of the ground all over the circle
+        for (let i = 0; i < 18; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const d = Math.sqrt(Math.random()) * r;
+            const px = x + Math.cos(a) * d;
+            const py = y + Math.sin(a) * d;
+            const m = scene.add.rectangle(px, py, 1, 3, i % 3 ? spell.color : 0xffffff).setDepth(22);
+            scene.tweens.add({
+                targets: m, y: py - 18, alpha: 0,
+                duration: this._vfxMs(600 + Math.random() * 400), delay: this._vfxMs(Math.random() * 200),
+                ease: 'Sine.easeOut', onComplete: () => m.destroy(),
             });
         }
     }

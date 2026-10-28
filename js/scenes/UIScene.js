@@ -1,11 +1,12 @@
 import * as Phaser from 'phaser';
-import { ELEMENTS, TOWER_DATA, FUSION_MAP } from '../data/TowerData.js';
+import { ELEMENTS, TOWER_DATA, FUSION_MAP, LEGENDARY_MAP } from '../data/TowerData.js';
 import {
     TEMPLE_DATA, TEMPLE_ELEMENTS, UPGRADE_TRACKS, TRACK_ORDER,
 } from '../data/TempleData.js';
 import { safeTexture } from '../systems/TextureGuard.js';
 import { audio } from '../systems/AudioSystem.js';
 import { BARRICADE_COST, SELL_REFUND } from '../systems/EconomySystem.js';
+import { BARRICADE_ENCHANTS } from '../data/BarricadeData.js';
 import { ENEMY_DATA } from '../data/EnemyData.js';
 import {
     EFFECT, EFFECT_MARK, EFFECT_LABEL, EFFECT_COLOR,
@@ -54,11 +55,14 @@ const HUD_GAP = 36;
 // Wider cells than an ability: a spell carries a price as well as a key, and a
 // price you cannot see is not a price. Stacked rather than continuing the
 // ability row because the tutorial banner owns the strip at y≈456 to the right.
-const SPELL_W = 60;
-const SPELL_H = 28;
-const SPELL_GAP = 66;
-const SPELL_Y = HUD_Y - 52;
-const SPELL_X = HUD_X - HUD_SIZE / 2 + SPELL_W / 2;
+// Spell slots are the same square as Vesper's Q/E, in the same columns, so the
+// two rows read as one block and neither reaches further into the lane.
+const SPELL_SIZE = HUD_SIZE;
+const SPELL_GAP = HUD_GAP;
+// Raised 12px over the Q/E row's spacing to make room for the price line that
+// hangs under each slot.
+const SPELL_Y = HUD_Y - 64;
+const SPELL_X = HUD_X;
 
 export class UIScene extends Phaser.Scene {
     constructor() {
@@ -731,6 +735,7 @@ export class UIScene extends Phaser.Scene {
                 d.specialDesc,
                 'Libera 1 casilla',
             ];
+            if (d.tier === 3) lines.splice(1, 0, 'TORRE LEGENDARIA');
         }
 
         // Opens away from the nearer edge, so a card on a badge at the far left
@@ -850,7 +855,7 @@ export class UIScene extends Phaser.Scene {
      * is what turns "I have 400✦" into a decision instead of a total.
      */
     _buildSpellHud() {
-        this.add.text(HUD_X - HUD_SIZE / 2, SPELL_Y - SPELL_H / 2 - 9, 'HECHIZOS', {
+        this.add.text(HUD_X - HUD_SIZE / 2, SPELL_Y - SPELL_SIZE / 2 - 9, 'HECHIZOS', {
             fontFamily: FONT, fontSize: '8px', color: '#CFDDE9',
             stroke: '#000000', strokeThickness: 3,
         }).setOrigin(0, 0.5).setDepth(50);
@@ -859,36 +864,36 @@ export class UIScene extends Phaser.Scene {
             const s = SPELLS[key];
             const x = SPELL_X + i * SPELL_GAP;
 
-            const bg = this.add.rectangle(x, SPELL_Y, SPELL_W, SPELL_H, 0x12122a, 0.86)
+            const bg = this.add.rectangle(x, SPELL_Y, SPELL_SIZE, SPELL_SIZE, 0x12122a, 0.86)
                 .setStrokeStyle(2, s.color)
                 .setDepth(50)
                 .setInteractive({ useHandCursor: true });
 
-            const icon = this.add.image(x - 20, SPELL_Y, safeTexture(this, s.icon, 'mana_mote'))
-                .setScale(0.8)
+            // Laid out exactly like Vesper's Q/E right below: the picture in
+            // the upper half, the key along the bottom edge. The price is the
+            // one thing a Q/E button does not have, so it hangs underneath.
+            const icon = this.add.image(x, SPELL_Y - 3, safeTexture(this, s.icon, 'mana_mote'))
+                .setScale(0.6)
                 .setDepth(52);
 
-            const hot = this.add.text(x - 3, SPELL_Y - 6, s.hotkey, {
+            const hot = this.add.text(x, SPELL_Y + 10, s.hotkey, {
                 fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
                 stroke: '#000000', strokeThickness: 3,
-            }).setOrigin(0, 0.5).setDepth(52);
+            }).setOrigin(0.5).setDepth(53);
 
-            const cost = this.add.text(x - 3, SPELL_Y + 6, `${s.cost}`, {
-                fontFamily: FONT, fontSize: '8px', color: '#B388FF',
+            const cost = this.add.text(x, SPELL_Y + SPELL_SIZE / 2 + 7, `${s.cost}`, {
+                fontFamily: FONT, fontSize: '7px', color: '#B388FF',
                 stroke: '#000000', strokeThickness: 3,
-            }).setOrigin(0, 0.5).setDepth(52);
+            }).setOrigin(0.5).setDepth(53);
 
-            const wipe = this.add.rectangle(x, SPELL_Y + (SPELL_H - 4) / 2, SPELL_W - 4, 0, 0x000000, 0.66)
+            const wipe = this.add.rectangle(x, SPELL_Y + (SPELL_SIZE - 4) / 2, SPELL_SIZE - 4, 0, 0x000000, 0.66)
                 .setOrigin(0.5, 1)
                 .setDepth(51);
 
-            // Over the icon, not over the middle of the cell: the right half
-            // already holds the key and the price, and a countdown parked on
-            // top of them makes all three unreadable at once.
-            const timer = this.add.text(x - 20, SPELL_Y, '', {
+            const timer = this.add.text(x, SPELL_Y - 3, '', {
                 fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
                 stroke: '#000000', strokeThickness: 3,
-            }).setOrigin(0.5).setDepth(53);
+            }).setOrigin(0.5).setDepth(54);
 
             bg.on('pointerdown', (pointer) => {
                 pointer.event.stopPropagation();
@@ -916,7 +921,7 @@ export class UIScene extends Phaser.Scene {
 
         for (const btn of this.spellBtns) {
             const pct = ss.cooldownPct(btn.key);
-            btn.wipe.setSize(SPELL_W - 4, Math.max(0, (SPELL_H - 4) * pct));
+            btn.wipe.setSize(SPELL_SIZE - 4, Math.max(0, (SPELL_SIZE - 4) * pct));
             btn.wipe.setVisible(pct > 0);
 
             const cooling = pct > 0;
@@ -1247,6 +1252,14 @@ export class UIScene extends Phaser.Scene {
             this._updateManaBar();
         });
 
+        on('barricade-enchanted', (type) => {
+            const e = BARRICADE_ENCHANTS[type];
+            this._flashNotification(`Barricada de ${e.name}: ${e.desc.toLowerCase()}`,
+                `#${e.color.toString(16).padStart(6, '0')}`);
+            this._updateAffordability();
+            this._updateManaBar();
+        });
+
         on('fusion-complete', (el, kind) => {
             const d = kind === 'temple' ? TEMPLE_DATA[el] : TOWER_DATA[el];
             const what = kind === 'temple' ? `Templo de ${d.shortName}` : d.name;
@@ -1540,37 +1553,57 @@ export class UIScene extends Phaser.Scene {
         container.add(this.add.text(0, -113, 'Las que brillan tienen con quien fusionar.', {
             fontFamily: FONT, fontSize: '8px', color: '#78909C',
         }).setOrigin(0.5));
-        container.add(this.add.text(0, -100, 'Igual para templos. Nace donde la soltaste.', {
-            fontFamily: FONT, fontSize: '8px', color: '#78909C',
-        }).setOrigin(0.5));
 
-        // Derived from FUSION_MAP so the table can never drift from the rules.
-        Object.entries(FUSION_MAP).forEach(([pair, result], i) => {
+        const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
+
+        // One recipe: a + b = result, then the result's name and what it does.
+        // Two columns, so ten recipes fit without shrinking the type.
+        const recipe = (pair, result, col, y, gold) => {
             const [a, b] = pair.split('+');
-            const y = -70 + i * 40;
             const d = TOWER_DATA[result];
+            const x0 = col === 0 ? -222 : 6;
+
+            if (gold) {
+                container.add(this.add.rectangle(x0 + 108, y, 220, 32, 0x2a210a, 0.35)
+                    .setStrokeStyle(1, 0x8a5c05, 0.6));
+            }
 
             const icon = (x, el) => container.add(
-                this.add.sprite(x, y, safeTexture(this, `tower_${el}`, 'tower_earth')).setScale(0.9)
+                this.add.sprite(x0 + x, y, safeTexture(this, `tower_${el}`, 'tower_earth')).setScale(0.8)
             );
             const glyph = (x, t) => container.add(
-                this.add.text(x, y, t, {
+                this.add.text(x0 + x, y, t, {
                     fontFamily: FONT, fontSize: '8px', color: '#78909C',
                 }).setOrigin(0.5)
             );
 
-            icon(-190, a);
-            glyph(-160, '+');
-            icon(-130, b);
-            glyph(-100, '=');
-            icon(-70, result);
+            icon(12, a);
+            glyph(28, '+');
+            icon(44, b);
+            glyph(60, '=');
+            icon(76, result);
 
-            container.add(this.add.text(-44, y - 6, d.name, {
-                fontFamily: FONT, fontSize: '8px', color: `#${d.color.toString(16).padStart(6, '0')}`,
+            container.add(this.add.text(x0 + 92, y - 6, d.name, {
+                fontFamily: FONT, fontSize: '7px', color: hex(d.color),
             }).setOrigin(0, 0.5));
-            container.add(this.add.text(-44, y + 9, d.specialDesc, {
-                fontFamily: FONT, fontSize: '8px', color: '#78909C',
+            container.add(this.add.text(x0 + 92, y + 7, d.specialDesc, {
+                fontFamily: FONT, fontSize: '7px', color: '#78909C',
             }).setOrigin(0, 0.5));
+        };
+
+        const header = (y, text, color) => container.add(
+            this.add.text(0, y, text, { fontFamily: FONT, fontSize: '8px', color }).setOrigin(0.5)
+        );
+
+        // Both tables are derived from the maps, so they can never drift from the rules.
+        header(-94, 'HIBRIDOS  ·  torres y templos', '#B0BEC5');
+        Object.entries(FUSION_MAP).forEach(([pair, result], i) => {
+            recipe(pair, result, i % 2, -70 + Math.floor(i / 2) * 36, false);
+        });
+
+        header(-4, 'LEGENDARIAS  ·  dos hibridos distintos', '#FFD54F');
+        Object.entries(LEGENDARY_MAP).forEach(([pair, result], i) => {
+            recipe(pair, result, i % 2, 22 + Math.floor(i / 2) * 36, true);
         });
     }
 

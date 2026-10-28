@@ -19,6 +19,9 @@ export class Tower {
         this.fusionHint = false;
         this.stunTimer = 0;
         this.stunGfx = null;
+        // EGIDA: ms left of +30% attack speed, and the clock for its sparks
+        this.hasteTimer = 0;
+        this._hasteFx = 0;
         this.fireTimer = 0;
         this.alive = true;
         this.totalDamageDealt = 0;
@@ -96,14 +99,20 @@ export class Tower {
             : 1;
     }
 
+    /** Bonus from the seal under this tower, if it shares an element. */
+    _seal(stat) {
+        const seals = this.scene.sealSystem;
+        return seals ? seals.multiplier(this.col, this.row, this.element, stat) : 1;
+    }
+
     get damage() {
         const lvlBonus = 1 + (this.level - 1) * TOWER_UPGRADE.DAMAGE_STEP;
-        return this.data.damage * lvlBonus * this._mult('damage');
+        return this.data.damage * lvlBonus * this._mult('damage') * this._seal('damage');
     }
 
     get range() {
         const lvlBonus = 1 + (this.level - 1) * TOWER_UPGRADE.RANGE_STEP;
-        return this.data.range * lvlBonus * this._mult('range');
+        return this.data.range * lvlBonus * this._mult('range') * this._seal('range');
     }
 
     get fireRate() { return this.data.fireRate * this._mult('fireRate'); }
@@ -157,7 +166,12 @@ export class Tower {
             return; // Cannot attack while stunned
         }
 
-        const rate = this.empowered ? this.fireRate * 0.75 : this.fireRate;
+        let rate = this.empowered ? this.fireRate * 0.75 : this.fireRate;
+        if (this.hasteTimer > 0) {
+            this.hasteTimer -= delta;
+            rate /= 1.3;
+            this._hasteSpark(delta);
+        }
         this.fireTimer -= delta;
 
         if (this.fireTimer <= 0) {
@@ -167,6 +181,24 @@ export class Tower {
                 this.fireTimer = rate;
             }
         }
+    }
+
+    /** EGIDA: +30% attack speed for `ms`. */
+    haste(ms) {
+        if (this.alive) this.hasteTimer = Math.max(this.hasteTimer, ms);
+    }
+
+    /** While hasted, a spark of the aegis green climbs the pedestal now and then. */
+    _hasteSpark(delta) {
+        this._hasteFx -= delta;
+        if (this._hasteFx > 0) return;
+        this._hasteFx = 180;
+        const x = this.x + (Math.random() * 2 - 1) * 9;
+        const s = this.scene.add.rectangle(x, this.y + 10, 1, 2, 0x8EECC4, 1).setDepth(7);
+        this.scene.tweens.add({
+            targets: s, y: this.y - 10, alpha: 0, duration: 520, ease: 'Sine.easeOut',
+            onComplete: () => s.destroy(),
+        });
     }
 
     /** Stun tower, disabling attacks for durationMs */

@@ -57,8 +57,16 @@ export function elementName(element) {
  */
 export function effectOf(towerElement, enemyData) {
     if (!enemyData || !towerElement) return EFFECT.NORMAL;
-    if (enemyData.weakness?.includes(towerElement)) return EFFECT.SUPER;
-    if (enemyData.resistance?.includes(towerElement)) return EFFECT.RESIST;
+    const t = TOWER_DATA[towerElement];
+    // A legendary answers to its own name and to both hybrids it came from.
+    const names = t?.parents ? [towerElement, ...t.parents] : [towerElement];
+    const hits = (list) => !!list && names.some(n => list.includes(n));
+
+    // Templo Ancestral holds all four elements: it always finds the weak one,
+    // and nothing can shrug off all four.
+    if (t?.alwaysSuper) return enemyData.weakness?.length ? EFFECT.SUPER : EFFECT.NORMAL;
+    if (hits(enemyData.weakness)) return EFFECT.SUPER;
+    if (!t?.ignoresResist && hits(enemyData.resistance)) return EFFECT.RESIST;
     return EFFECT.NORMAL;
 }
 

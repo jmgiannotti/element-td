@@ -48,14 +48,21 @@ export const RUT_VARIANTS = 2;
 export const BREAKABLE_VARIANTS = 3;
 
 export const TOWER_KEYS = ['water', 'air', 'fire', 'earth', 'ice', 'storm', 'lava', 'mud'];
+// Tier 3 towers. Towers and bolts only — a legendary has no temple.
+export const LEGENDARY_KEYS = ['blizzard', 'ashstorm', 'obsidian', 'glacier', 'geyser', 'ancestral'];
 const ENEMY_KEYS = ['slime', 'golem', 'specter', 'dragon', 'boss_titan', 'boss_dragon', 'boss_specter'];
 const SIDES = ['top', 'bottom', 'left', 'right'];
 
 /** Every texture key the game can request once BootScene has finished. */
 export function expectedTextureKeys() {
     const keys = ['hero_shadow', 'mana_mote', 'tile_barricade',
+        'tile_barricade_spikes', 'tile_barricade_frost',
+        'seal_water', 'seal_air', 'seal_fire', 'seal_earth',
+        'seal_water_frame', 'seal_air_frame', 'seal_fire_frame', 'seal_earth_frame',
+        'seal_water_on', 'seal_air_on', 'seal_fire_on', 'seal_earth_on',
+        'seal_water_halo', 'seal_air_halo', 'seal_fire_halo', 'seal_earth_halo',
         'gate_spawn', 'gate_exit', HERO_GLOW_KEY, HERO_SLASH_KEY,
-        'spell_moon', 'spell_moon_ring',
+        'spell_moon', 'spell_moon_ring', 'sentinel',
         'btn_bg', 'btn_bg_sel', 'btn_bg_off', 'btn_build', 'btn_build_sel'];
 
     // One icon per spell, named off the table so a new spell fails the boot
@@ -91,6 +98,7 @@ export function expectedTextureKeys() {
     }
     for (const c of ['tl', 'tr', 'bl', 'br']) keys.push(`corner_${c}`);
     for (const el of TOWER_KEYS) keys.push(`tower_${el}`, `proj_${el}`, `temple_${el}`);
+    for (const el of LEGENDARY_KEYS) keys.push(`tower_${el}`, `proj_${el}`);
     for (const e of ENEMY_KEYS) keys.push(`enemy_${e}`);
 
     return keys;
@@ -167,6 +175,7 @@ export class BootScene extends Phaser.Scene {
         this._generateCorners();
         this._generateScatter();
         this._generateObstacles();
+        this._generateSeals();
         this._generateTowers();
         this._generateTemples();
         this._generateEnemies();
@@ -546,41 +555,219 @@ export class BootScene extends Phaser.Scene {
 
         // Barricade — a rune-locked gate of granite and gold. Reads as "closed"
         // at a glance, which is the only thing it has to say.
-        this._draw('tile_barricade', 32, 32, (g) => {
-            groundShadow(g, 16, 29, 12, 2, 0.28);
+        this._draw('tile_barricade', 32, 32, (g) => this._barricade(g, GOLD));
 
-            // Two posts
-            for (const x of [3, 24]) {
-                g.fillStyle(STONE.deep);  g.fillRect(x, 3, 5, 26);
-                g.fillStyle(STONE.mid);   g.fillRect(x + 1, 4, 3, 24);
-                g.fillStyle(STONE.light); g.fillRect(x + 1, 4, 1, 24);
-                g.fillStyle(STONE.dark);  g.fillRect(x + 3, 4, 1, 24);
-                g.fillStyle(STONE.glow);  g.fillRect(x + 1, 4, 3, 1);
-                g.fillStyle(STONE.deep);  g.fillRect(x + 1, 15, 3, 1);
+        // Enchanted barricades (US 11.1). The same gate, so a maze still reads
+        // as one wall; what changed is what sticks out of it and the colour of
+        // the seal, which is where the eye goes first.
+        this._draw('tile_barricade_spikes', 32, 32, (g) => {
+            this._barricade(g, EL.air);
+            this._spikes(g);
+        });
+        this._draw('tile_barricade_frost', 32, 32, (g) => {
+            this._barricade(g, EL.ice);
+            this._frost(g);
+        });
+    }
+
+    /** The gate itself. `seal` is the ramp for the rivets and the central seal. */
+    _barricade(g, seal) {
+        groundShadow(g, 16, 29, 12, 2, 0.28);
+
+        // Two posts
+        for (const x of [3, 24]) {
+            g.fillStyle(STONE.deep);  g.fillRect(x, 3, 5, 26);
+            g.fillStyle(STONE.mid);   g.fillRect(x + 1, 4, 3, 24);
+            g.fillStyle(STONE.light); g.fillRect(x + 1, 4, 1, 24);
+            g.fillStyle(STONE.dark);  g.fillRect(x + 3, 4, 1, 24);
+            g.fillStyle(STONE.glow);  g.fillRect(x + 1, 4, 3, 1);
+            g.fillStyle(STONE.deep);  g.fillRect(x + 1, 15, 3, 1);
+        }
+
+        // Three cross beams
+        for (const y of [7, 15, 23]) {
+            g.fillStyle(STONE.deep);  g.fillRect(2, y, 28, 6);
+            g.fillStyle(STONE.mid);   g.fillRect(3, y + 1, 26, 4);
+            g.fillStyle(STONE.light); g.fillRect(3, y + 1, 26, 1);
+            g.fillStyle(STONE.dark);  g.fillRect(3, y + 4, 26, 1);
+            for (let x = 6; x < 27; x += 6) {
+                g.fillStyle(STONE.deep); g.fillRect(x, y + 1, 1, 4);
             }
+        }
 
-            // Three cross beams
-            for (const y of [7, 15, 23]) {
-                g.fillStyle(STONE.deep);  g.fillRect(2, y, 28, 6);
-                g.fillStyle(STONE.mid);   g.fillRect(3, y + 1, 26, 4);
-                g.fillStyle(STONE.light); g.fillRect(3, y + 1, 26, 1);
-                g.fillStyle(STONE.dark);  g.fillRect(3, y + 4, 26, 1);
-                for (let x = 6; x < 27; x += 6) {
-                    g.fillStyle(STONE.deep); g.fillRect(x, y + 1, 1, 4);
+        // Rivets and the seal in the middle
+        for (const [x, y] of [[4, 8], [26, 8], [4, 24], [26, 24]]) {
+            g.fillStyle(seal.dark);  g.fillRect(x, y, 3, 3);
+            g.fillStyle(seal.light); g.fillRect(x, y, 2, 2);
+            g.fillStyle(seal.glow);  g.fillRect(x, y, 1, 1);
+        }
+        g.fillStyle(seal.mid, 0.22); g.fillRect(11, 12, 10, 10);
+        volume(g, profile(12, [
+            [15, 16], [14, 17], [13, 18], [12, 19], [13, 18], [14, 17], [15, 16],
+        ]), seal, { spec: 0.22 });
+    }
+
+    /**
+     * PUAS — iron spikes driven through the beams, points out on both faces.
+     * Sideways, not up: the threat is to whoever walks *past*, and spikes on
+     * top would say "don't climb", which nobody here does.
+     */
+    _spikes(g) {
+        const IRON = EL.air;
+        const spike = (y, dir) => {
+            // dir -1 points left out of the left post, +1 right out of the right
+            const base = dir < 0 ? 2 : 29;
+            for (let i = 0; i < 3; i++) {
+                const x = base + dir * i;
+                const h = 3 - i;
+                g.fillStyle(IRON.deep);  g.fillRect(x, y - (h >> 1) - 1, 1, h + 2);
+                g.fillStyle(i === 0 ? IRON.mid : IRON.light);
+                g.fillRect(x, y - (h >> 1), 1, Math.max(1, h));
+            }
+            g.fillStyle(IRON.glow); g.fillRect(base + dir * 2, y, 1, 1);
+        };
+        for (const y of [9, 17, 25]) { spike(y, -1); spike(y, 1); }
+
+        // And through the faces of the beams, point towards the viewer
+        for (const [x, y] of [[9, 9], [21, 9], [9, 17], [21, 17], [9, 25], [21, 25]]) {
+            g.fillStyle(IRON.deep);  g.fillRect(x - 1, y - 1, 3, 3);
+            g.fillStyle(IRON.mid);   g.fillRect(x - 1, y - 1, 2, 2);
+            g.fillStyle(IRON.glow);  g.fillRect(x - 1, y - 1, 1, 1);
+        }
+    }
+
+    /** ESCARCHA — rime on the beams and icicles hanging off them. */
+    _frost(g) {
+        const I = EL.ice;
+        // Rime along the top of each beam, heavier on the lit side
+        for (const y of [7, 15, 23]) {
+            g.fillStyle(I.light, 0.85); g.fillRect(3, y, 22, 1);
+            g.fillStyle(I.glow);        g.fillRect(3, y, 9, 1);
+            g.fillStyle(I.mid, 0.5);    g.fillRect(3, y + 1, 26, 1);
+        }
+        // Caps on the posts
+        for (const x of [3, 24]) {
+            g.fillStyle(I.light); g.fillRect(x, 2, 5, 2);
+            g.fillStyle(I.glow);  g.fillRect(x, 2, 2, 1);
+        }
+        // Icicles under the beams, uneven so they read as grown, not cut
+        for (const [x, y, len] of [[5, 13, 2], [12, 13, 1], [22, 13, 2], [8, 21, 2], [19, 21, 1], [26, 21, 2], [11, 29, 1], [20, 29, 2]]) {
+            g.fillStyle(I.mid);   g.fillRect(x, y, 2, 1);
+            g.fillStyle(I.light); g.fillRect(x, y + 1, 1, len);
+            g.fillStyle(0xffffff, 0.8); g.fillRect(x, y, 1, 1);
+        }
+    }
+
+    // ─── Elemental seals (32×32) ────────────────────────
+    /**
+     * A seal is not ground — the lawn under it stays clean. It is a cluster of
+     * crystals in the element's colour and a dotted frame on the tile's edge:
+     * the same outlined, flat-faceted pixel art as the pedestals and the cyan
+     * shards in the grass, so it reads as something placed in the world rather
+     * than a stain on it.
+     *
+     * Four textures per element, which SealSystem swaps between:
+     *   seal_<el>        the cluster, for an empty tile
+     *   seal_<el>_frame  the dotted frame, for an empty tile
+     *   seal_<el>_on     lit frame + four corner crystals, once a matching
+     *                    tower stands there — kept clear of the pedestal
+     *   seal_<el>_halo   the light under the pedestal's footing, pulsed
+     */
+    _generateSeals() {
+        const RAMPS = {
+            fire:  EL.fire,
+            water: EL.ice,
+            earth: ramp(0x1a2608, 0x3d5a14, 0x7a9a2a, 0xc8d25a, 0xfff0a8),
+            air:   ramp(0x241c48, 0x5a4a9a, 0xa898d8, 0xe4ddff, 0xffffff),
+        };
+
+        // One faceted crystal: 1px dark outline, lit left face, shaded right
+        // face, a bright ridge, a white glint. `base` is the row it stands on.
+        const crystal = (g, cx, base, h, w, r) => {
+            const top = base - h + 1;
+            const spans = [];
+            for (let y = top; y <= base; y++) {
+                const i = y - top;
+                const half = i === 0 ? 0 : i === 1 ? Math.max(0, w - 1) : w;
+                spans.push([cx - half, cx + half]);
+            }
+            const filled = new Set();
+            spans.forEach(([x0, x1], i) => { for (let x = x0; x <= x1; x++) filled.add(`${x},${top + i}`); });
+            g.fillStyle(r.deep);
+            for (const key of filled) {
+                const [x, y] = key.split(',').map(Number);
+                for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+                    if (!filled.has(`${x + dx},${y + dy}`)) g.fillRect(x + dx, y + dy, 1, 1);
                 }
             }
+            spans.forEach(([x0, x1], i) => {
+                const y = top + i;
+                for (let x = x0; x <= x1; x++) {
+                    let c = x < cx ? r.light : x === cx ? r.mid : r.dark;
+                    if (y === base) c = x <= cx ? r.mid : r.dark;     // the foot sits in shadow
+                    g.fillStyle(c); g.fillRect(x, y, 1, 1);
+                }
+            });
+            g.fillStyle(r.glow); g.fillRect(cx, top, 1, Math.min(2, h));        // lit ridge tip
+            g.fillStyle(0xffffff); g.fillRect(cx - Math.min(1, w), top + 2, 1, 1);  // glint
+        };
 
-            // Gold rivets and the seal in the middle
-            for (const [x, y] of [[4, 8], [26, 8], [4, 24], [26, 24]]) {
-                g.fillStyle(GOLD.dark);  g.fillRect(x, y, 3, 3);
-                g.fillStyle(GOLD.light); g.fillRect(x, y, 2, 2);
-                g.fillStyle(GOLD.glow);  g.fillRect(x, y, 1, 1);
-            }
-            g.fillStyle(GOLD.mid, 0.22); g.fillRect(11, 12, 10, 10);
-            volume(g, profile(12, [
-                [15, 16], [14, 17], [13, 18], [12, 19], [13, 18], [14, 17], [15, 16],
-            ]), GOLD, { spec: 0.22 });
-        });
+        // The tile's edge, one pixel in, so two seals side by side never fuse.
+        const ring = [];
+        for (let i = 1; i <= 30; i++) ring.push([i, 1], [i, 30]);
+        for (let i = 2; i <= 29; i++) ring.push([1, i], [30, i]);
+
+        for (const [el, r] of Object.entries(RAMPS)) {
+            this._draw(`seal_${el}`, 32, 32, (g) => {
+                groundShadow(g, 16, 22, 8, 2, 0.35);
+                crystal(g, 11, 21, 6, 1, r);
+                crystal(g, 21, 21, 5, 1, r);
+                crystal(g, 16, 22, 10, 2, r);      // the tall one in front
+            });
+
+            this._draw(`seal_${el}_frame`, 32, 32, (g) => {
+                // Dotted, with full corners so the frame reads as a frame
+                for (const [x, y] of ring) {
+                    const corner = (x <= 3 || x >= 28) && (y <= 3 || y >= 28);
+                    if (corner || (x + y) % 3 === 0) {
+                        g.fillStyle(corner ? r.light : r.mid, corner ? 0.9 : 0.6);
+                        g.fillRect(x, y, 1, 1);
+                    }
+                }
+            });
+
+            this._draw(`seal_${el}_on`, 32, 32, (g) => {
+                // A soft band either side of a clean, solid 1px line
+                g.fillStyle(r.mid, 0.25);
+                for (const [x, y] of ring) {
+                    g.fillRect(x === 1 ? 0 : x === 30 ? 31 : x, y === 1 ? 0 : y === 30 ? 31 : y, 1, 1);
+                    g.fillRect(x === 1 ? 2 : x === 30 ? 29 : x, y === 1 ? 2 : y === 30 ? 29 : y, 1, 1);
+                }
+                g.fillStyle(r.light);
+                for (const [x, y] of ring) g.fillRect(x, y, 1, 1);
+
+                // Four small crystals keeping watch at the corners, clear of
+                // the pedestal (x 5–27) and of its head
+                crystal(g, 4, 7, 4, 1, r);
+                crystal(g, 27, 7, 4, 1, r);
+                crystal(g, 3, 29, 4, 1, r);
+                crystal(g, 28, 29, 4, 1, r);
+            });
+
+            this._draw(`seal_${el}_halo`, 32, 32, (g) => {
+                // Light pooled under the footing: it shows past the plinth's
+                // sides and below it, which is what makes the base look lit.
+                for (const [rx, ry, a] of [[15, 6, 0.12], [13, 5, 0.18], [11, 4, 0.22]]) {
+                    for (let y = -ry; y <= ry; y++) {
+                        const t = 1 - (y * y) / ((ry + 0.4) * (ry + 0.4));
+                        const w = Math.round(rx * Math.sqrt(Math.max(0, t)));
+                        if (w <= 0) continue;
+                        g.fillStyle(r.mid, a);
+                        g.fillRect(16 - w, 26 + y, w * 2, 1);
+                    }
+                }
+            });
+        }
     }
 
     // ─── Towers (32×32) ─────────────────────────────────
@@ -605,6 +792,210 @@ export class BootScene extends Phaser.Scene {
                 heads[el](g);
             });
         }
+
+        const legends = {
+            blizzard: (g) => this._headBlizzard(g),
+            ashstorm: (g) => this._headAshstorm(g),
+            obsidian: (g) => this._headObsidian(g),
+            glacier: (g) => this._headGlacier(g),
+            geyser: (g) => this._headGeyser(g),
+            ancestral: (g) => this._headAncestral(g),
+        };
+
+        for (const el of LEGENDARY_KEYS) {
+            this._draw(`tower_${el}`, 32, 32, (g) => {
+                this._pedestal(g, EL[el]);
+                this._gild(g);
+                legends[el](g);
+            });
+        }
+    }
+
+    /**
+     * What makes a pedestal legendary: the same stone, gilt. Gold is the colour
+     * the game spends on rank — upgrade pips, the selection ring — so a gold
+     * cornice says "tier 3" without a word, and keeps all fourteen towers one
+     * family.
+     */
+    _gild(g) {
+        // Cornice lip, lit from the left like every other edge on the board
+        g.fillStyle(GOLD.dark);  g.fillRect(8, 16, 16, 1);
+        g.fillStyle(GOLD.mid);   g.fillRect(8, 16, 12, 1);
+        g.fillStyle(GOLD.light); g.fillRect(8, 16, 6, 1);
+        g.fillStyle(GOLD.glow);  g.fillRect(9, 16, 2, 1);
+        g.fillStyle(GOLD.dark);  g.fillRect(8, 19, 16, 1);
+
+        // Studs at the footing's corners
+        for (const x of [6, 24]) {
+            g.fillStyle(GOLD.dark);  g.fillRect(x, 25, 2, 2);
+            g.fillStyle(GOLD.light); g.fillRect(x, 25, 1, 1);
+        }
+
+        // The rune gets a setting, like a stone in a ring
+        g.fillStyle(GOLD.mid);   g.fillRect(12, 21, 1, 1); g.fillRect(19, 21, 1, 1);
+        g.fillStyle(GOLD.light); g.fillRect(15, 24, 2, 1);
+    }
+
+    /** VENTISCA — ice shards gathered under a storm orb, snow whirling round. */
+    _headBlizzard(g) {
+        const p = EL.blizzard;
+        volume(g, taper(8, 15, 2, 4, 10, 1.2), p, { lu: 0.3, lv: 0.35, spec: 0.16 });
+        volume(g, taper(6, 15, 2, 4, 22, 1.2), p, { lu: 0.3, lv: 0.35, spec: 0.16 });
+        volume(g, taper(5, 15, 2, 5, 16, 1.2), p, { lu: 0.3, lv: 0.25, spec: 0.16 });
+        g.fillStyle(p.glow); g.fillRect(14, 7, 1, 7);
+        g.fillStyle(p.deep, 0.6); g.fillRect(18, 8, 1, 7);
+
+        // The orb the shards grew towards
+        g.fillStyle(EL.storm.mid, 0.18); g.fillRect(11, 0, 10, 7);
+        volume(g, ellipse(16, 3, 3, 3), EL.storm, { spec: 0.22 });
+        g.fillStyle(EL.storm.glow); g.fillRect(15, 2, 2, 1);
+        g.fillStyle(0xffffff); g.fillRect(14, 1, 1, 1);
+
+        // A bolt down into the tallest shard
+        line(g, 18, 5, 19, 7, EL.storm.glow);
+
+        // Snow, blown on a curve so it reads as wind and not as noise
+        for (const [x, y, a] of [[6, 3, 1], [8, 1, 0.7], [25, 4, 1], [27, 7, 0.7],
+            [5, 9, 0.8], [26, 11, 0.9], [23, 1, 0.6]]) {
+            g.fillStyle(0xffffff, a); g.fillRect(x, y, 1, 1);
+        }
+        g.fillStyle(p.light, 0.6); g.fillRect(6, 5, 3, 1); g.fillRect(23, 9, 3, 1);
+    }
+
+    /** TORMENTA DE CENIZA — a volcano under its own ash cloud, struck by lightning. */
+    _headAshstorm(g) {
+        const p = EL.ashstorm;
+        volume(g, taper(7, 15, 3, 9, 16, 1.05), BASALT, { lu: 0.3, lv: 0.28, spec: 0.13 });
+
+        // Crater
+        g.fillStyle(BASALT.light); g.fillRect(13, 7, 6, 1);
+        g.fillStyle(EL.lava.mid);  g.fillRect(14, 8, 4, 1);
+        g.fillStyle(EL.lava.glow); g.fillRect(15, 8, 2, 1);
+        // Magma seams down the flank
+        g.fillStyle(EL.lava.mid); g.fillRect(13, 10, 1, 3); g.fillRect(19, 11, 1, 3);
+        g.fillStyle(EL.lava.light); g.fillRect(13, 10, 1, 1);
+
+        // The ash cloud, heavy and low
+        volume(g, ellipse(12, 3, 4, 2), BASALT, { lu: 0.3, lv: 0.2, spec: 0.1 });
+        volume(g, ellipse(20, 3, 5, 3), BASALT, { lu: 0.3, lv: 0.2, spec: 0.1 });
+        g.fillStyle(p.mid, 0.35); g.fillRect(10, 5, 14, 1);
+
+        // Lightning out of the cloud, into the crater
+        g.fillStyle(p.dark, 0.6);
+        for (const [x, y] of [[18, 5], [17, 6], [18, 7]]) g.fillRect(x - 1, y, 3, 1);
+        g.fillStyle(p.glow);
+        for (const [x, y] of [[18, 5], [17, 6], [18, 7]]) g.fillRect(x, y, 1, 1);
+
+        // Embers in the wind
+        g.fillStyle(p.light); g.fillRect(7, 7, 1, 1); g.fillRect(25, 8, 1, 1);
+        g.fillStyle(p.glow, 0.8); g.fillRect(26, 1, 1, 1); g.fillRect(6, 1, 1, 1);
+    }
+
+    /** OBSIDIANA — a spire of black glass, fire still in its heart. */
+    _headObsidian(g) {
+        const p = EL.obsidian;
+        volume(g, taper(10, 15, 1, 3, 9, 1), p, { lu: 0.3, lv: 0.3, spec: 0.12 });
+        volume(g, taper(11, 15, 1, 2, 23, 1), p, { lu: 0.3, lv: 0.3, spec: 0.12 });
+        volume(g, taper(0, 15, 1, 6, 16, 0.85), p, { lu: 0.3, lv: 0.2, spec: 0.1, band: 0.22 });
+
+        // Facets: glass is planes and edges
+        g.fillStyle(p.light, 0.85); g.fillRect(14, 3, 1, 11);
+        g.fillStyle(p.deep); g.fillRect(18, 5, 1, 10);
+        g.fillStyle(0xffffff); g.fillRect(14, 2, 1, 2); g.fillRect(8, 11, 1, 1);
+
+        // The lava it was quenched from, still glowing through a crack
+        const crack = [[16, 5], [17, 6], [16, 7], [16, 8], [15, 9], [16, 10], [17, 11], [16, 12]];
+        g.fillStyle(EL.lava.mid, 0.5);
+        for (const [x, y] of crack) g.fillRect(x - 1, y, 3, 1);
+        g.fillStyle(EL.lava.light);
+        for (const [x, y] of crack) g.fillRect(x, y, 1, 1);
+        g.fillStyle(EL.lava.glow); g.fillRect(16, 8, 1, 1);
+
+        // Frost on the edge it was quenched in
+        g.fillStyle(EL.ice.light, 0.8); g.fillRect(12, 9, 1, 3);
+    }
+
+    /** GLACIAR — an iceberg breaking out of the bog. */
+    _headGlacier(g) {
+        const p = EL.glacier;
+        const m = EL.mud;
+        volume(g, taper(10, 15, 10, 7, 16, 1.4), STONE_HI, { lu: 0.28, lv: 0.18 });
+        g.fillStyle(STONE_HI.glow); g.fillRect(7, 10, 18, 1);
+
+        volume(g, rough(taper(1, 11, 3, 8, 16, 0.7), 0x61AC, 1), p, { lu: 0.3, lv: 0.25, spec: 0.16 });
+        // Cleaved faces
+        g.fillStyle(p.glow); g.fillRect(13, 2, 3, 1); g.fillRect(12, 3, 1, 5);
+        g.fillStyle(p.dark); g.fillRect(19, 3, 1, 8);
+        g.fillStyle(p.deep, 0.6); g.fillRect(18, 4, 1, 7);
+        g.fillStyle(0xffffff); g.fillRect(13, 3, 1, 2);
+
+        // Bog lapping at its foot
+        g.fillStyle(m.dark);  g.fillRect(8, 11, 16, 1);
+        g.fillStyle(m.mid);   g.fillRect(9, 11, 5, 1); g.fillRect(19, 11, 4, 1);
+        g.fillStyle(m.light); g.fillRect(10, 11, 2, 1);
+
+        // Cold coming off it
+        g.fillStyle(p.light, 0.5); g.fillRect(6, 4, 1, 1); g.fillRect(25, 6, 1, 1); g.fillRect(24, 1, 1, 1);
+        g.fillStyle(p.light, 0.3); g.fillRect(9, 16, 14, 1);
+    }
+
+    /** GEISER — a boiling spring throwing up a column of scalding water. */
+    _headGeyser(g) {
+        const p = EL.geyser;
+        volume(g, taper(10, 15, 10, 7, 16, 1.4), STONE_HI, { lu: 0.28, lv: 0.18 });
+        g.fillStyle(STONE_HI.glow); g.fillRect(7, 10, 18, 1);
+
+        // The spring, lit from below by the lava under it
+        volume(g, ellipse(16, 11, 8, 1), p, { outline: false, spec: 0.24 });
+        g.fillStyle(EL.lava.mid); g.fillRect(9, 11, 2, 1); g.fillRect(21, 11, 2, 1);
+        g.fillStyle(EL.lava.glow); g.fillRect(10, 11, 1, 1);
+
+        // The jet: narrow at the vent, fraying as it climbs. A solid cap on top
+        // reads as a mushroom; water breaking into drops reads as a geyser.
+        volume(g, taper(1, 10, 1, 3, 16, 1.3), p, { lu: 0.3, lv: 0.4, spec: 0.2 });
+        g.fillStyle(p.glow); g.fillRect(15, 2, 1, 8);
+        g.fillStyle(0xffffff, 0.9); g.fillRect(15, 1, 1, 2);
+
+        // Spray falling back on both sides, arcing outward
+        const drops = [[13, 1], [11, 2], [10, 4], [9, 6], [19, 1], [21, 2], [22, 4], [23, 6]];
+        g.fillStyle(p.mid);
+        for (const [x, y] of drops) g.fillRect(x, y, 1, 2);
+        g.fillStyle(p.light);
+        for (const [x, y] of drops) g.fillRect(x, y, 1, 1);
+
+        // Steam
+        g.fillStyle(0xffffff, 0.35); g.fillRect(6, 1, 3, 2); g.fillRect(24, 0, 3, 2);
+        g.fillStyle(0xffffff, 0.2); g.fillRect(25, 2, 2, 1); g.fillRect(16, 0, 2, 1);
+    }
+
+    /** TEMPLO ANCESTRAL — a mossed monolith, the four elements orbiting its eye. */
+    _headAncestral(g) {
+        const p = EL.ancestral;
+        volume(g, taper(2, 15, 4, 5, 16, 1), STONE_HI, { lu: 0.28, lv: 0.2, spec: 0.1 });
+        // Moss over the cap and down one side
+        volume(g, ellipse(16, 2, 4, 1), p, { spec: 0.24 });
+        g.fillStyle(p.mid); g.fillRect(12, 4, 1, 5); g.fillRect(13, 4, 1, 2);
+        g.fillStyle(p.light); g.fillRect(12, 4, 1, 2);
+
+        // The eye carved into the face, lit with all four at once
+        g.fillStyle(p.mid, 0.25); g.fillRect(13, 6, 7, 6);
+        blit(g, [
+            '.aaa.',
+            'abcba',
+            '.aaa.',
+        ], { a: p.dark, b: p.light, c: p.glow }, 14, 7);
+        g.fillStyle(STONE_HI.deep); g.fillRect(14, 12, 5, 1);
+
+        // The four elements, set at the corners like the points of a compass
+        const gem = (x, y, r) => {
+            g.fillStyle(r.mid, 0.3); g.fillRect(x - 1, y - 1, 4, 4);
+            g.fillStyle(r.dark); g.fillRect(x, y, 2, 2);
+            g.fillStyle(r.light); g.fillRect(x, y, 1, 1);
+        };
+        gem(7, 3, EL.water);
+        gem(23, 3, EL.air);
+        gem(7, 10, EL.fire);
+        gem(23, 10, EL.earth);
     }
 
     /** The pedestal all eight towers stand on. */
@@ -1654,7 +2045,50 @@ export class BootScene extends Phaser.Scene {
             },
         };
 
-        for (const el of TOWER_KEYS) {
+        Object.assign(shapes, {
+            blizzard: (g, p) => {
+                // A snowflake, which no other bolt is: six arms, not a blob
+                g.fillStyle(p.mid, 0.6); g.fillRect(11, 4, 5, 5);
+                g.fillStyle(p.light);
+                g.fillRect(13, 2, 1, 9); g.fillRect(10, 6, 7, 1);
+                g.fillRect(11, 4, 1, 1); g.fillRect(15, 4, 1, 1);
+                g.fillRect(11, 8, 1, 1); g.fillRect(15, 8, 1, 1);
+                g.fillStyle(0xffffff); g.fillRect(13, 6, 1, 1);
+            },
+            ashstorm: (g, p) => {
+                volume(g, rough(ellipse(13, 6, 3, 3), 0xA5A5, 1), BASALT, { spec: 0.14 });
+                g.fillStyle(p.light); g.fillRect(12, 5, 2, 2);
+                g.fillStyle(p.glow); g.fillRect(16, 3, 1, 1); g.fillRect(15, 4, 1, 1); g.fillRect(16, 5, 1, 1);
+            },
+            obsidian: (g, p) => {
+                volume(g, profile(3, [
+                    [15, 17], [12, 17], [10, 16], [10, 16], [12, 15], [14, 15],
+                ]), p, { spec: 0.14 });
+                g.fillStyle(0xffffff); g.fillRect(15, 4, 1, 2);
+                g.fillStyle(EL.lava.light); g.fillRect(12, 6, 2, 1);
+            },
+            glacier: (g, p) => {
+                volume(g, rough(ellipse(13, 6, 4, 4), 0x9C3E, 1), p, { spec: 0.2 });
+                g.fillStyle(p.glow); g.fillRect(11, 3, 3, 1); g.fillRect(11, 4, 1, 2);
+                g.fillStyle(0xffffff); g.fillRect(12, 4, 1, 1);
+            },
+            geyser: (g, p) => {
+                volume(g, teardrop(13, 2, 10, 3), p, { spec: 0.22 });
+                g.fillStyle(0xffffff, 0.85); g.fillRect(12, 5, 1, 2);
+                g.fillStyle(0xffffff, 0.35); g.fillRect(8, 2, 2, 2); g.fillRect(6, 8, 2, 1);
+            },
+            ancestral: (g, p) => {
+                volume(g, ellipse(13, 6, 4, 4), p, { spec: 0.22 });
+                // One pixel of each element on the orb's rim
+                g.fillStyle(EL.water.light); g.fillRect(12, 2, 2, 1);
+                g.fillStyle(EL.air.glow);    g.fillRect(16, 5, 1, 2);
+                g.fillStyle(EL.fire.light);  g.fillRect(12, 9, 2, 1);
+                g.fillStyle(EL.earth.light); g.fillRect(9, 5, 1, 2);
+                g.fillStyle(0xffffff); g.fillRect(12, 5, 1, 1);
+            },
+        });
+
+        for (const el of [...TOWER_KEYS, ...LEGENDARY_KEYS]) {
             const p = EL[el];
             this._draw(`proj_${el}`, 18, 12, (g) => {
                 // Tail first: a wedge of the element's own light, thinning and
@@ -1785,6 +2219,97 @@ export class BootScene extends Phaser.Scene {
                 }
             }
             g.fillStyle(SOUL.light, 0.55); g.fillRect(4, 10, 1, 4);
+        });
+
+        this._generateSentinelArt();
+    }
+
+    /**
+     * CENTINELAS ARCANOS and EGIDA: the soldier and both button icons.
+     *
+     * The soldier is Vesper's kind of sprite — dark outline, flat lit and
+     * shaded faces — at two thirds the size, and empty: a floating suit of
+     * violet-grey plate with nothing in it but the cyan light behind the visor.
+     * No legs, so it reads as summoned rather than recruited.
+     */
+    _generateSentinelArt() {
+        const PLATE = ramp(0x120e22, 0x2c2444, 0x4a3d6e, 0x7a68a8, 0xb8a8e0);
+        const BLADE = ramp(0x0a3a4c, 0x1d7fa0, 0x4fc8e8, 0x9ff0ff, 0xffffff);
+        const AEGIS = ramp(0x0e3a2c, 0x1f6e54, 0x3fae86, 0x8eecc4, 0xe8fff4);
+
+        // The visor: a slit of light across the helm, brightest at its centre
+        const visor = (g, x0, y, w) => {
+            g.fillStyle(BLADE.deep); g.fillRect(x0 - 1, y - 1, w + 2, 3);
+            g.fillStyle(BLADE.mid);  g.fillRect(x0, y, w, 1);
+            g.fillStyle(BLADE.glow); g.fillRect(x0 + (w >> 1) - 1, y, 2, 1);
+        };
+
+        this._draw('sentinel', 24, 24, (g) => {
+            // Plates that trail below, apart from each other: nothing joins them
+            volume(g, profile(17, [[9, 13], [10, 12]]), PLATE, { lu: 0.3, lv: 0.2, spec: 0.1 });
+            volume(g, profile(20, [[10, 12]]), PLATE, { lu: 0.3, lv: 0.2, spec: 0.1, flat: true });
+
+            // Cuirass, wide at the shoulders and tapering to nothing
+            volume(g, taper(9, 15, 4, 2, 11, 1), PLATE, { lu: 0.3, lv: 0.25, spec: 0.12 });
+            // The rune on the chest, lit from inside
+            g.fillStyle(BLADE.light); g.fillRect(10, 11, 1, 2);
+            g.fillStyle(BLADE.glow);  g.fillRect(10, 11, 1, 1);
+
+            // Pauldrons
+            volume(g, ellipse(6, 9, 2, 2), STONE_HI, { spec: 0.2 });
+            volume(g, ellipse(16, 9, 2, 2), STONE_HI, { spec: 0.2 });
+            // Sword hand, on the right pauldron's side
+            g.fillStyle(STONE_HI.deep); g.fillRect(14, 13, 3, 2);
+            g.fillStyle(STONE_HI.light); g.fillRect(14, 13, 2, 1);
+
+            // Helm, with a short crest
+            volume(g, ellipse(11, 5, 4, 4), PLATE, { lu: 0.3, lv: 0.3, spec: 0.14 });
+            g.fillStyle(PLATE.deep);  g.fillRect(10, 0, 2, 2);
+            g.fillStyle(PLATE.glow);  g.fillRect(10, 0, 1, 1);
+            visor(g, 8, 5, 6);
+
+            // Energy sword, raised in the right hand and drawn last: it is the
+            // one thing on the soldier that is not violet, so it goes in front.
+            const blade = [];
+            for (let i = 0; i < 12; i++) blade.push([16 + Math.round(i * 0.45), 13 - i]);
+            g.fillStyle(BLADE.deep);
+            for (const [x, y] of blade) g.fillRect(x - 1, y - 1, 3, 3);
+            for (const [x, y] of blade) {
+                g.fillStyle(y < 5 ? BLADE.glow : BLADE.light); g.fillRect(x, y, 1, 1);
+            }
+            // Crossguard over the fist
+            g.fillStyle(BLADE.deep); g.fillRect(14, 12, 5, 3);
+            g.fillStyle(BLADE.mid);  g.fillRect(15, 13, 3, 1);
+        });
+
+        // Icon: the helm, face-on, big enough to read at button size
+        this._draw('spell_centinelas', 24, 24, (g) => {
+            volume(g, ellipse(12, 11, 8, 9), PLATE, { lu: 0.3, lv: 0.28, spec: 0.12 });
+            g.fillStyle(PLATE.deep); g.fillRect(11, 1, 2, 3);
+            g.fillStyle(PLATE.glow); g.fillRect(11, 1, 1, 2);
+            visor(g, 6, 10, 12);
+            // Cheek guards
+            g.fillStyle(PLATE.dark); g.fillRect(7, 14, 2, 4); g.fillRect(15, 14, 2, 4);
+            g.fillStyle(PLATE.deep); g.fillRect(11, 14, 2, 5);
+            // A sword's tip rising past the helm
+            g.fillStyle(BLADE.deep); g.fillRect(19, 2, 3, 9);
+            g.fillStyle(BLADE.light); g.fillRect(20, 3, 1, 7);
+            g.fillStyle(BLADE.glow); g.fillRect(20, 2, 1, 2);
+        });
+
+        // Icon: a heater shield with a cross of light on it
+        this._draw('spell_egida', 24, 24, (g) => {
+            volume(g, profile(2, [
+                [4, 19], [4, 19], [4, 19], [4, 19], [4, 19], [4, 19], [4, 19],
+                [5, 18], [5, 18], [6, 17], [6, 17], [7, 16], [8, 15], [9, 14],
+                [10, 13], [11, 12],
+            ]), AEGIS, { lu: 0.3, lv: 0.25, spec: 0.14 });
+            // Rim
+            g.fillStyle(AEGIS.glow, 0.7); g.fillRect(5, 3, 14, 1);
+            // The cross, the part that heals
+            g.fillStyle(AEGIS.deep);  g.fillRect(10, 5, 4, 10); g.fillRect(7, 8, 10, 4);
+            g.fillStyle(0xffffff);    g.fillRect(11, 6, 2, 8);  g.fillRect(8, 9, 8, 2);
+            g.fillStyle(AEGIS.light); g.fillRect(11, 9, 2, 2);
         });
     }
 

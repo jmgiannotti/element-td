@@ -8,20 +8,21 @@ export const TILE = {
 };
 
 export const TILE_SIZE = 32;
+// Size of the play area on the fixed 920×480 canvas. Layout only: the grid
+// itself takes its dimensions from the level it is built for.
 export const GRID_COLS = 20;
 export const GRID_ROWS = 15;
 export const GAME_WIDTH = GRID_COLS * TILE_SIZE;
 export const GAME_HEIGHT = GRID_ROWS * TILE_SIZE;
 
-// Backward-compatible fallback
-export const WAYPOINTS = DEFAULT_LEVEL.waypoints;
+const DEFAULT_BREAKABLE_HP = 80;
 
 export class GridSystem {
     constructor(levelData = DEFAULT_LEVEL) {
         this.levelData = levelData || DEFAULT_LEVEL;
         this.cols = this.levelData.cols ?? GRID_COLS;
         this.rows = this.levelData.rows ?? GRID_ROWS;
-        this.waypoints = this.levelData.waypoints || WAYPOINTS;
+        this.waypoints = this.levelData.waypoints;
         this.spawnPoint = this.levelData.spawnPoint || this.waypoints[0];
         this.exitPoint = this.levelData.exitPoint || this.waypoints[this.waypoints.length - 1];
         this.grid = this._buildGrid();
@@ -59,6 +60,19 @@ export class GridSystem {
         return grid;
     }
 
+    /** Starting HP of the breakable block at (col,row), as the level defines it. */
+    breakableHp(col, row) {
+        const block = (this.levelData.breakableBlocks || []).find(b =>
+            col >= b.c1 && col <= b.c2 && row >= b.r1 && row <= b.r2
+        );
+        return block?.hp ?? DEFAULT_BREAKABLE_HP;
+    }
+
+    /** Inside the grid's bounds. */
+    inBounds(col, row) {
+        return col >= 0 && col < this.cols && row >= 0 && row < this.rows;
+    }
+
     _fillBlocks(grid, c1, r1, c2, r2, type) {
         for (let r = r1; r <= r2; r++) {
             for (let c = c1; c <= c2; c++) {
@@ -70,12 +84,12 @@ export class GridSystem {
     }
 
     canBuildTower(col, row) {
-        if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) return false;
+        if (!this.inBounds(col, row)) return false;
         return this.grid[row][col] === TILE.GRASS;
     }
 
     canBuildBarricade(col, row) {
-        if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) return false;
+        if (!this.inBounds(col, row)) return false;
         // Barricades can only be placed on PATH
         return this.grid[row][col] === TILE.PATH;
     }
@@ -96,7 +110,7 @@ export class GridSystem {
 
     /** Cells an enemy is allowed to stand on. Mirrors findPath's filter. */
     isWalkable(col, row) {
-        if (!this.grid || col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) return false;
+        if (!this.grid || !this.inBounds(col, row)) return false;
         const tile = this.grid[row]?.[col];
         return tile !== undefined && tile !== TILE.GRASS && tile !== TILE.BARRICADE;
     }
@@ -131,10 +145,7 @@ export class GridSystem {
             { col, row: row + 1 },
             { col: col - 1, row },
             { col: col + 1, row },
-        ].filter(c =>
-            c.col >= 0 && c.col < GRID_COLS &&
-            c.row >= 0 && c.row < GRID_ROWS
-        );
+        ].filter(c => this.inBounds(c.col, c.row));
     }
 
     /**
@@ -143,13 +154,13 @@ export class GridSystem {
      */
     findPath(startCol, startRow, endCol, endRow) {
         // We use a simple Dijkstra for weighted grid (cost 1 vs 5)
-        const dist = Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(Infinity));
-        const prev = Array.from({ length: GRID_ROWS }, () => Array(GRID_COLS).fill(null));
+        const dist = Array.from({ length: this.rows }, () => Array(this.cols).fill(Infinity));
+        const prev = Array.from({ length: this.rows }, () => Array(this.cols).fill(null));
 
         const queue = [];
         
         // Push start node
-        if (startCol >= 0 && startCol < GRID_COLS) {
+        if (startCol >= 0 && startCol < this.cols) {
             dist[startRow][startCol] = 0;
             queue.push({ col: startCol, row: startRow, cost: 0 });
         } else if (startCol < 0) {
@@ -163,7 +174,7 @@ export class GridSystem {
             const curr = queue.shift();
 
             if (curr.col === endCol && curr.row === endRow) break;
-            if (curr.col === GRID_COLS - 1 && endCol >= GRID_COLS) break; // exit reached
+            if (curr.col === this.cols - 1 && endCol >= this.cols) break; // exit reached
 
             for (const adj of this.getAdjacentCells(curr.col, curr.row)) {
                 const tile = this.grid[adj.row][adj.col];
@@ -184,13 +195,13 @@ export class GridSystem {
         const path = [];
         let curr = null;
 
-        if (endCol >= GRID_COLS) {
+        if (endCol >= this.cols) {
             // Find which cell on the right edge was reached
             let minC = Infinity;
-            for (let r = 0; r < GRID_ROWS; r++) {
-                if (dist[r][GRID_COLS - 1] < minC) {
-                    minC = dist[r][GRID_COLS - 1];
-                    curr = { col: GRID_COLS - 1, row: r };
+            for (let r = 0; r < this.rows; r++) {
+                if (dist[r][this.cols - 1] < minC) {
+                    minC = dist[r][this.cols - 1];
+                    curr = { col: this.cols - 1, row: r };
                 }
             }
             if (minC === Infinity) return null; // No path to exit

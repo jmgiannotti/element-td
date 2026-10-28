@@ -1,10 +1,13 @@
 import * as Phaser from 'phaser';
-import { GridSystem, TILE_SIZE, GAME_WIDTH, GAME_HEIGHT, GRID_COLS, GRID_ROWS, TILE } from '../systems/GridSystem.js';
+import { GridSystem, TILE_SIZE, GAME_WIDTH, GAME_HEIGHT, TILE } from '../systems/GridSystem.js';
 import { DEFAULT_LEVEL, getLevelById } from '../data/LevelData.js';
 import { WaveManager } from '../systems/WaveManager.js';
 import { EconomySystem, BARRICADE_COST, refundValue } from '../systems/EconomySystem.js';
 import { FusionSystem } from '../systems/FusionSystem.js';
 import { TempleSystem } from '../systems/TempleSystem.js';
+import { BarricadeSystem } from '../systems/BarricadeSystem.js';
+import { SealSystem } from '../systems/SealSystem.js';
+import { BARRICADE_ENCHANTS, ENCHANT_ORDER, enchantCostLabel } from '../data/BarricadeData.js';
 import { RouteView } from '../systems/RouteView.js';
 import { FloatingText } from '../systems/FloatingText.js';
 import { TutorialSystem } from '../systems/TutorialSystem.js';
@@ -91,6 +94,8 @@ export class GameScene extends Phaser.Scene {
         this.temples = [];
         this.enemies = [];
         this.projectiles = [];
+        // CENTINELAS ARCANOS currently on the road (see SpellSystem).
+        this.sentinels = [];
         this.manaMotes = [];
         this.occupiedCells = new Set();
         this.breakableBlocks = new Map();
@@ -100,6 +105,8 @@ export class GameScene extends Phaser.Scene {
 
         // TempleSystem reads scene.temples, so it is built after the lists.
         this.templeSystem = new TempleSystem(this);
+        // Enchantments on top of the barricades map above; reads it lazily.
+        this.barricadeSystem = new BarricadeSystem(this);
 
         // ── State ───────────────────────────────
         this.selectedElement = null;
@@ -120,13 +127,14 @@ export class GameScene extends Phaser.Scene {
 
         // ── Render map ──────────────────────────
         this._renderMap();
+        // After the ground is painted; towers read it lazily for their stats.
+        this.sealSystem = new SealSystem(this, this.levelData);
         this.routeView = new RouteView(this);
         // Wave 1 has not started, so the board opens in planning mode.
         this._refreshRouteVisibility();
 
         // ── Hero ────────────────────────────────
-        const heroCol = this.levelData.heroSpawn?.col ?? 10;
-        const heroRow = this.levelData.heroSpawn?.row ?? 7;
+        const { col: heroCol, row: heroRow } = this.levelData.heroSpawn;
         this.hero = new Hero(this, heroCol, heroRow);
 
         // ── Placement preview ───────────────────
@@ -296,6 +304,8 @@ export class GameScene extends Phaser.Scene {
             this._setSpellMode(null);
             this._clearBarricadeProbe();
             this.placementMode = true;
+            // Temples take no seal bonus, so only a tower in hand lights them.
+            this.sealSystem.setHighlight(el);
             this.previewSprite.setTexture(safeTexture(this, `tower_${el}`, 'tower_earth'));
             this.previewRange.setVisible(true);
             // Show the range the tower will actually have, upgrades included.
@@ -309,6 +319,7 @@ export class GameScene extends Phaser.Scene {
         onCustom('select-barricade', () => {
             this.selectedElement = 'barricade';
             this.isBarricadeMode = true;
+            this.sealSystem.setHighlight(null);
             this.isTempleMode = false;
             this._setSellMode(false);
             this._setSpellMode(null);
@@ -324,6 +335,7 @@ export class GameScene extends Phaser.Scene {
             this.selectedElement = el;
             this.isTempleMode = true;
             this.isBarricadeMode = false;
+            this.sealSystem.setHighlight(null);
             this._setSellMode(false);
             this._setSpellMode(null);
             this._clearBarricadeProbe();
@@ -355,6 +367,10 @@ export class GameScene extends Phaser.Scene {
         // Shutdown event to clean up static pools and systems
         this.events.on('shutdown', () => {
             this.input.keyboard.removeAllListeners();
+            if (this.barricadeSystem) this.barricadeSystem.destroy();
+            if (this.sealSystem) this.sealSystem.destroy();
+            for (const s of this.sentinels || []) s.destroy();
+            this.sentinels = [];
             if (this.particleSystem) {
                 this.particleSystem.destroy();
                 this.particleSystem = null;
@@ -403,7 +419,7 @@ export class GameScene extends Phaser.Scene {
                 temples: this.temples.map(t => ({ col: t.col, row: t.row, element: t.element, paid: t.paidCost })),
                 barricades: Array.from(this.barricades.entries()).map(([key, cost]) => {
                     const [c, r] = key.split(',').map(Number);
-                    return { col: c, row: r, cost };
+                    return { col: c, row: r, cost, enchant: this.barricadeSystem.typeAt(c, r) };
                 }),
                 breakableBlocks: Array.from(this.breakableBlocks.entries()).map(([key, hp]) => {
                     const [c, r] = key.split(',').map(Number);
@@ -416,6 +432,12 @@ export class GameScene extends Phaser.Scene {
             if (this.selectedStructure && this.selectedStructure.alive) {
                 this._refreshStatLabel();
             }
+        });
+        // Only a bare barricade's card quotes a price in maná (Escarcha), and
+        // maná moves every time a temple drinks, so nothing else listens.
+        onCustom('mana-changed', () => {
+            const s = this.selectedStructure;
+            if (s && s.kind === 'barricade' && s.alive) this._refreshStatLabel();
         });
         onCustom('wave-complete', () => {
             this._refreshRouteVisibility();
@@ -471,11 +493,12 @@ export class GameScene extends Phaser.Scene {
         this.tileNodes = new Map();  // 'c,r' → terrain sprites for that cell
         this.decor = new Map();      // 'c,r' → boulder / barricade sprite
 
-        for (let r = 0; r < GRID_ROWS; r++) {
-            for (let c = 0; c < GRID_COLS; c++) {
+        const { cols, rows } = this.gridSystem;
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
                 this._paintCell(c, r);
                 if (this.gridSystem.grid[r][c] === TILE.BREAKABLE) {
-                    this.breakableBlocks.set(`${c},${r}`, 80); // 80 HP for breakable
+                    this.breakableBlocks.set(`${c},${r}`, this.gridSystem.breakableHp(c, r));
                     this._setDecor(c, r, `breakable_${cellHash(c, r) % BREAKABLE_VARIANTS}`);
                 }
             }
@@ -485,8 +508,8 @@ export class GameScene extends Phaser.Scene {
         this.buildGrid = this.add.graphics().setDepth(D_GRID).setVisible(false);
         const MARK = 4;
         this.buildGrid.lineStyle(1, 0xffffff, 0.06);
-        for (let c = 1; c < GRID_COLS; c++) {
-            for (let r = 1; r < GRID_ROWS; r++) {
+        for (let c = 1; c < cols; c++) {
+            for (let r = 1; r < rows; r++) {
                 const gx = c * TILE_SIZE;
                 const gy = r * TILE_SIZE;
                 this.buildGrid.lineBetween(gx - MARK, gy, gx + MARK, gy);
@@ -497,27 +520,27 @@ export class GameScene extends Phaser.Scene {
         // Entrance and exit. Drawn buildings rather than a glyph and an emoji:
         // the two ends of the route are the most important landmarks on the
         // board, and a font is the one thing here that cannot match the art.
-        const enter = this.gridSystem.waypoints[1] || this.gridSystem.spawnPoint;
-        this.add.image(
-            TILE_SIZE / 2, enter.row * TILE_SIZE + TILE_SIZE / 2,
-            safeTexture(this, 'gate_spawn', 'tile_barricade')
-        ).setDepth(D_DECOR);
+        // Both sit on the first/last cell inside the board; the keep stands
+        // one cell in from the edge so it reads as the end of the road.
+        const { spawnPoint: enter, exitPoint: exit } = this.gridSystem;
+        const clampCol = (c) => Phaser.Math.Clamp(c, 0, cols - 1);
+        const clampRow = (r) => Phaser.Math.Clamp(r, 0, rows - 1);
+        const enterPos = this.gridSystem.gridToWorld(clampCol(enter.col), clampRow(enter.row));
+        this.add.image(enterPos.x, enterPos.y, safeTexture(this, 'gate_spawn', 'tile_barricade'))
+            .setDepth(D_DECOR);
 
-        const exit = this.gridSystem.waypoints[this.gridSystem.waypoints.length - 2] || this.gridSystem.exitPoint;
-        this.add.image(
-            (exit.col + 2) * TILE_SIZE + TILE_SIZE / 2,
-            exit.row * TILE_SIZE + TILE_SIZE / 2,
-            safeTexture(this, 'gate_exit', 'tile_barricade')
-        ).setDepth(D_DECOR);
+        const exitPos = this.gridSystem.gridToWorld(clampCol(exit.col) - 1, clampRow(exit.row));
+        this.add.image(exitPos.x, exitPos.y, safeTexture(this, 'gate_exit', 'tile_barricade'))
+            .setDepth(D_DECOR);
     }
 
     _isGrass(col, row) {
-        if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) return false;
+        if (!this.gridSystem.inBounds(col, row)) return false;
         return this.gridSystem.grid[row][col] === TILE.GRASS;
     }
 
     _isRoad(col, row) {
-        if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) return false;
+        if (!this.gridSystem.inBounds(col, row)) return false;
         return this.gridSystem.grid[row][col] !== TILE.GRASS;
     }
 
@@ -592,7 +615,7 @@ export class GameScene extends Phaser.Scene {
     _repaintArea(col, row) {
         for (let r = row - 1; r <= row + 1; r++) {
             for (let c = col - 1; c <= col + 1; c++) {
-                if (c >= 0 && c < GRID_COLS && r >= 0 && r < GRID_ROWS) this._paintCell(c, r);
+                if (this.gridSystem.inBounds(c, r)) this._paintCell(c, r);
             }
         }
     }
@@ -678,6 +701,9 @@ export class GameScene extends Phaser.Scene {
         // it is the one the player is holding a countdown for.
         if (this.spellMode) {
             const key = this.spellMode;
+            // A bad point (CENTINELAS off the road) is said and the spell stays
+            // armed: the click was a miss, not a decision to put it away.
+            if (this.spellSystem.announceTargetRefusal(key, p.x, p.y)) return true;
             this._setSpellMode(null);
             this.spellSystem.cast(key, p.x, p.y);
             return true;
@@ -713,6 +739,15 @@ export class GameScene extends Phaser.Scene {
         const temple = this.temples.find(t => t.alive && t.col === col && t.row === row);
         if (temple) {
             this.selectStructure(temple);
+            return;
+        }
+
+        if (this.barricades.has(`${col},${row}`)) {
+            // Handles are made fresh, so a second click on the same wall has to
+            // hand back the pinned one for selectStructure to let go of it.
+            const pinned = this.selectedStructure;
+            const same = pinned?.kind === 'barricade' && pinned.col === col && pinned.row === row;
+            this.selectStructure(same ? pinned : this.barricadeSystem.handle(col, row));
             return;
         }
 
@@ -754,10 +789,31 @@ export class GameScene extends Phaser.Scene {
         this.upgradeBtnBg.on('pointerdown', (pointer) => {
             if (pointer.button !== 0 && pointer.button !== undefined) return;
             pointer.event.stopPropagation();
-            this._buyTowerUpgrade();
+            if (this.selectedStructure?.kind === 'barricade') this._buyEnchant(ENCHANT_ORDER[0]);
+            else this._buyTowerUpgrade();
         });
 
-        this.statCard.add([this.statCardBg, this.statText, this.upgradeBtnBg, this.upgradeBtnText]);
+        // Second button, only used by a bare barricade: one per enchantment.
+        this.altBtnBg = this.add.rectangle(0, 30, 178, 22, 0x1e1e3a)
+            .setStrokeStyle(1, 0x3a3a5a)
+            .setInteractive({ useHandCursor: true })
+            .setVisible(false);
+        this.altBtnBg.setData('uiBlocker', true);
+        this.altBtnText = this.add.text(0, 30, '', {
+            fontFamily: '"Press Start 2P"',
+            fontSize: '8px',
+            color: '#FFFFFF',
+        }).setOrigin(0.5).setVisible(false);
+        this.altBtnBg.on('pointerdown', (pointer) => {
+            if (pointer.button !== 0 && pointer.button !== undefined) return;
+            pointer.event.stopPropagation();
+            this._buyEnchant(ENCHANT_ORDER[1]);
+        });
+
+        this.statCard.add([
+            this.statCardBg, this.statText, this.upgradeBtnBg, this.upgradeBtnText,
+            this.altBtnBg, this.altBtnText,
+        ]);
     }
 
     /**
@@ -797,6 +853,12 @@ export class GameScene extends Phaser.Scene {
         }
 
         const isTower = t instanceof Tower;
+        if (t.kind === 'barricade') {
+            this._refreshBarricadeCard(t);
+            return;
+        }
+        this.altBtnBg.setVisible(false);
+        this.altBtnText.setVisible(false);
         const ts = this.templeSystem;
         const templeLvl = ts ? ts.totalLevels(t.element) : 0;
 
@@ -813,6 +875,8 @@ export class GameScene extends Phaser.Scene {
                     : 'sin mejoras de templo'
             );
             if (t.empowered) lines.push('potenciada por el heroe');
+            const seal = this.sealSystem.bonusLabel(t.col, t.row, t.element);
+            if (seal) lines.push(seal);
 
             // Upgrade button logic (US 8.1 Gold sink)
             this.upgradeBtnBg.setVisible(true);
@@ -842,11 +906,70 @@ export class GameScene extends Phaser.Scene {
         }
 
         this.statText.setText(lines.join('\n'));
+        this._layoutStatCard(t, isTower ? 1 : 0);
+    }
 
+    /**
+     * A barricade's card: what it does now, and — while it is still bare — the
+     * two enchantments, each on its own button and in its own currency.
+     */
+    _refreshBarricadeCard(t) {
+        const type = this.barricadeSystem.typeAt(t.col, t.row);
+        const lines = [];
+
+        if (type) {
+            const e = BARRICADE_ENCHANTS[type];
+            lines.push(`Barricada de ${e.name}`);
+            lines.push(e.desc);
+            lines.push('Bloquea el paso');
+            this.upgradeBtnBg.setVisible(false);
+            this.upgradeBtnText.setVisible(false);
+            this.altBtnBg.setVisible(false);
+            this.altBtnText.setVisible(false);
+            this.statText.setText(lines.join('\n'));
+            this._layoutStatCard(t, 0);
+            return;
+        }
+
+        lines.push('Barricada');
+        lines.push('Bloquea el paso');
+        lines.push('Encantala: afecta a quien');
+        lines.push('camine a su lado');
+        this.statText.setText(lines.join('\n'));
+
+        const paint = (bg, txt, enchantType) => {
+            const e = BARRICADE_ENCHANTS[enchantType];
+            const ok = this.barricadeSystem.canAfford(enchantType);
+            const hex = `#${e.color.toString(16).padStart(6, '0')}`;
+            bg.setVisible(true);
+            txt.setVisible(true);
+            txt.setText(`${e.name.toUpperCase()}  ${enchantCostLabel(enchantType)}`);
+            txt.setColor(ok ? hex : '#888899');
+            bg.fillColor = ok ? 0x241d3d : 0x16162a;
+            bg.setStrokeStyle(1, ok ? e.color : 0x3a3a5a);
+        };
+        paint(this.upgradeBtnBg, this.upgradeBtnText, ENCHANT_ORDER[0]);
+        paint(this.altBtnBg, this.altBtnText, ENCHANT_ORDER[1]);
+        this._layoutStatCard(t, 2);
+    }
+
+    _buyEnchant(type) {
+        const t = this.selectedStructure;
+        if (!t || t.kind !== 'barricade' || !t.alive) return;
+        if (this.barricadeSystem.enchant(t.col, t.row, type)) {
+            this._refreshStatLabel();
+        } else {
+            audio.play('deny');
+            this.cameras.main.shake(90, 0.003);
+        }
+    }
+
+    /** Sizes the card around its text and `buttons` stacked buttons, then places it. */
+    _layoutStatCard(t, buttons) {
         // Measure content dimensions and adapt card size
         const textBounds = this.statText.getBounds();
         const cardW = Math.max(198, textBounds.width + 20);
-        const cardH = isTower ? textBounds.height + 44 : textBounds.height + 18;
+        const cardH = textBounds.height + 18 + buttons * 26;
 
         this.statCardBg.setSize(cardW, cardH);
         if (this.statCardBg.input && this.statCardBg.input.hitArea) {
@@ -854,16 +977,18 @@ export class GameScene extends Phaser.Scene {
         }
         this.statText.setPosition(-cardW / 2 + 10, -cardH / 2 + 8);
 
-        if (isTower) {
-            const btnW = cardW - 16;
-            const btnH = 22;
-            this.upgradeBtnBg.setSize(btnW, btnH);
-            if (this.upgradeBtnBg.input && this.upgradeBtnBg.input.hitArea) {
-                this.upgradeBtnBg.input.hitArea.setSize(btnW, btnH);
-            }
-            this.upgradeBtnBg.setPosition(0, cardH / 2 - 16);
-            this.upgradeBtnText.setPosition(0, cardH / 2 - 16);
-        }
+        const btnW = cardW - 16;
+        const btnH = 22;
+        // Bottom-up, so with two buttons the first one sits above the second.
+        const stack = [[this.upgradeBtnBg, this.upgradeBtnText], [this.altBtnBg, this.altBtnText]]
+            .slice(0, buttons);
+        stack.forEach(([bg, txt], i) => {
+            const y = cardH / 2 - 16 - (buttons - 1 - i) * 26;
+            bg.setSize(btnW, btnH);
+            if (bg.input && bg.input.hitArea) bg.input.hitArea.setSize(btnW, btnH);
+            bg.setPosition(0, y);
+            txt.setPosition(0, y);
+        });
 
         // Clamp and position above/below the structure
         const clampedX = Phaser.Math.Clamp(
@@ -927,10 +1052,19 @@ export class GameScene extends Phaser.Scene {
         // show before the click are where it reaches and what it takes.
         if (this.spellMode) {
             const spell = SPELLS[this.spellMode];
-            this.spellCursor.setPosition(p.x, p.y).setVisible(true);
+            const bad = this.spellSystem.targetRefusal(this.spellMode, p.x, p.y);
+            // A road-only spell snaps to the cell it will actually land on.
+            let at = p;
+            if (spell.roadOnly) {
+                const c = this.gridSystem.worldToGrid(p.x, p.y);
+                at = this.gridSystem.gridToWorld(c.col, c.row);
+            }
+            this.spellCursor.setPosition(at.x, at.y).setVisible(true);
+            this.spellCursor.setStrokeStyle(1, bad ? 0xFF5252 : spell.color, bad ? 0.8 : 0.5);
             this._showCursorLabel(
-                { x: p.x, y: p.y - spell.radius + 14 },
-                `${spell.label}  ${spell.cost}✦`, spell.colorHex,
+                { x: at.x, y: at.y - spell.radius - 8 },
+                bad ? 'solo sobre el camino' : `${spell.label}  ${spell.cost}✦`,
+                bad ? '#FF8A80' : spell.colorHex,
             );
             return;
         }
@@ -966,7 +1100,18 @@ export class GameScene extends Phaser.Scene {
             else this.cursorLabel.setVisible(false);
         } else {
             ok = this.gridSystem.canBuildTower(col, row) && !this.occupiedCells.has(`${col},${row}`);
-            this.cursorLabel.setVisible(false);
+            const el = this.selectedElement;
+            const isTower = !this.isTempleMode && TOWER_DATA[el];
+            const bonus = ok && isTower ? this.sealSystem.bonusLabel(col, row, el) : null;
+            if (bonus) this._showCursorLabel(pos, bonus, '#FFD54F');
+            else this.cursorLabel.setVisible(false);
+            // The ring previews the range the tower will really have on this cell.
+            if (isTower) {
+                this.previewRange.setRadius(
+                    TOWER_DATA[el].range * this.templeSystem.multiplier(el, 'range')
+                    * this.sealSystem.multiplier(col, row, el, 'range')
+                );
+            }
         }
 
         // The ghost only appears on buildable ground; drawing it over an
@@ -1167,6 +1312,7 @@ export class GameScene extends Phaser.Scene {
         const pos = this.gridSystem.gridToWorld(col, row);
 
         if (sale.kind === 'barricade') {
+            this.barricadeSystem.remove(col, row);
             this.barricades.delete(key);
             this.gridSystem.grid[row][col] = TILE.PATH;
             this._setDecor(col, row, null);
@@ -1226,6 +1372,7 @@ export class GameScene extends Phaser.Scene {
         this.selectedElement = null;
         this.isBarricadeMode = false;
         this.isTempleMode = false;
+        this.sealSystem.setHighlight(null);
         this._setSellMode(false);
         this._setSpellMode(null);
         this.previewSprite.setVisible(false);
@@ -1253,6 +1400,13 @@ export class GameScene extends Phaser.Scene {
 
         // Enemies
         for (const e of this.enemies) e.update(time, delta);
+
+        // Summoned soldiers, after the enemies have engaged them this frame
+        for (const s of this.sentinels) s.update(delta);
+
+        // Enchanted barricades, after the enemies have moved this frame
+        this.barricadeSystem.update(delta);
+        this.sealSystem.update(delta);
 
         // Temples, then the motes: a temple whose shutdown expires this frame
         // should be drinking again on this frame, not on the next one.
@@ -1293,6 +1447,7 @@ export class GameScene extends Phaser.Scene {
         this.temples = this.temples.filter(t => t.alive);
         this.enemies = this.enemies.filter(e => e.alive);
         this.projectiles = this.projectiles.filter(p => p.alive);
+        this.sentinels = this.sentinels.filter(s => s.alive);
         this.manaMotes = this.manaMotes.filter(m => m.alive);
 
         // Selling or fusing the pinned tower leaves the readout hanging over an

@@ -161,7 +161,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > 
 > *Estado:* **Implementado** en `SpellSystem.js`, `UIScene._buildSpellHud()` y `GameScene._handleClick()`.
 
-### US 3.2: Más Variedad de Hechizos
+### US 3.2: Más Variedad de Hechizos [✓]
 **Como** jugador,  
 **Quiero** tener al menos 3 hechizos diferentes (daño en área, control de masas, utilidad/curación) para elegir,  
 **Para** que la decisión de gastar maná sea estratégica y dependa de la situación de la partida.
@@ -171,7 +171,12 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Cada hechizo tiene un coste, cooldown y efecto visual distintivo.
 > - La barra de hechizos en la UI se expande para soportar múltiples ranuras.
 > 
-> *Estado:* **Pendiente**.
+> Hechizos (3 ranuras cuadradas de 30px alineadas con Q/E, con ícono, tecla, costo y barrido de cooldown):
+> - **[R] Luna** (120✦, 25s): daño en área + ralentización.
+> - **[T] Centinelas Arcanos** (90✦, 25s): en el camino o en el pasto. 3 soldados en triángulo, 12s, 90 HP, que se mueven solos: buscan enemigos cercanos (repartiéndose los blancos), persiguen hasta una correa de 170px desde donde se invocaron y vuelven a su puesto si no queda nada. Cada uno retiene a un enemigo con la misma regla de enganche que Vesper, pega 12 de daño mágico y al morir/expirar estalla (25 en área).
+> - **[Y] Égida Arcana** (75✦, 20s): cura 40% a Vesper y centinelas, +30% de cadencia por 5s a torres, Vesper y centinelas, y repara los bloques rompibles del área (las barricadas no tienen vida en este juego).
+>
+> *Estado:* Implementado en `SpellData.js`, `SpellSystem.js`, `js/entities/Sentinel.js` (nuevo), `Enemy.js` (enganche), `Hero.js`/`Tower.js` (curación y prisa), `GameScene.js`, `UIScene.js`, `BootScene.js` (sprite e íconos) y `AudioSystem.js`.
 
 ---
 
@@ -352,7 +357,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 
 ## 🎯 Epic 10: Fusión Avanzada — Torres Tier 3 (Legendarias)
 
-### US 10.1: Fusión de Híbridos en Torres Legendarias
+### US 10.1: Fusión de Híbridos en Torres Legendarias [✓]
 **Como** jugador avanzado,  
 **Quiero** poder fusionar dos torres híbridas adyacentes en una torre legendaria de Nivel 3 con habilidades pasivas únicas,  
 **Para** alcanzar el máximo techo de poder y optimización del tablero.
@@ -362,13 +367,21 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Torres Tier 3 con identidades y proyectiles únicos (ej. Tormenta de Ceniza, Templo Ancestral).
 > - Registro documentado en la pestaña de Fusiones del panel de ayuda.
 > 
-> *Estado:* **Pendiente**.
+> Combinaciones (dos híbridos distintos, solo torres):
+> - Hielo + Tormenta → **Ventisca**: cadena x4, cada salto puede congelar.
+> - Lava + Tormenta → **Tormenta de Ceniza**: cadena x4, cada salto quema.
+> - Hielo + Lava → **Obsidiana**: golpe pesado con esquirlas en área; ignora resistencias.
+> - Hielo + Lodo → **Glaciar**: congela en área (a los jefes solo los ralentiza).
+> - Lava + Lodo → **Geiser**: área + quemadura a todos los alcanzados.
+> - Lodo + Tormenta → **Templo Ancestral**: siempre golpea la debilidad del enemigo; nunca es resistido.
+>
+> *Estado:* Implementado en `TowerData.js` (`LEGENDARY_MAP`, `fusionResult`, `tierOf`), `Elements.js`, `Palette.js`, `TempleData.js`, `TempleSystem.js`, `FusionSystem.js`, `Projectile.js`, `BootScene.js`, `AudioSystem.js` y `UIScene.js` (pestaña Fusiones).
 
 ---
 
 ## 🧱 Epic 11: Barricadas Especializadas
 
-### US 11.1: Barricadas con Efectos Tácticos
+### US 11.1: Barricadas con Efectos Tácticos [✓]
 **Como** jugador,  
 **Quiero** poder encantar o mejorar barricadas para que apliquen efectos a los enemigos que caminen a su lado (púas de daño, escarcha ralentizadora),  
 **Para** que la arquitectura del laberinto sea también una herramienta de daño activo.
@@ -377,13 +390,17 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Opciones de barricada con púas (daño físico de contacto) y barricada de hielo (aura de ralentización adyacente).
 > - Coste de mejora adicional en oro/maná.
 > 
-> *Estado:* **Pendiente**.
+> Diseño: se encanta haciendo click en una barricada (tarjeta de inspección); una por barricada y permanente.
+> - **Púas** (25 oro, va a la cuenta de la barricada y se reembolsa en parte al vender): pincha cada 0.5s a todo enemigo a ≤1 casilla; el daño escala con la vida de la oleada.
+> - **Escarcha** (35 maná, no reembolsable, como un rango de templo): ralentiza 35% a quien pase al lado, con 0.8s de arrastre; no se apila con un slow mayor.
+>
+> *Estado:* Implementado en `js/data/BarricadeData.js`, `js/systems/BarricadeSystem.js`, `GameScene.js` (tarjeta, venta, checkpoint), `SaveSystem.js`, `BootScene.js` (sprites) y `UIScene.js` (aviso).
 
 ---
 
 ## 🗺️ Epic 12: Terreno Elemental
 
-### US 12.1: Casillas de Suelo con Afinidad Elemental
+### US 12.1: Casillas de Suelo con Afinidad Elemental [✓]
 **Como** jugador,  
 **Quiero** que ciertas casillas del mapa posean afinidad con un elemento natural (Fuego, Agua, Tierra, Rayo) otorgando un bonus a las torres colocadas allí,  
 **Para** incentivar la lectura del terreno y variar la colocación de torres entre partidas.
@@ -392,7 +409,13 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Casillas del grid marcadas visualmente con runas elementales.
 > - Colocar una torre del elemento coincidente otorga un +20% de daño o rango.
 > 
-> *Estado:* **Pendiente**.
+> Diseño: el pasto queda limpio; cada sello es un **racimo de 3 cristales facetados** (mismo estilo con outline que los pedestales) con un **marco punteado** en el borde de la casilla. Con una torre compatible encima, el racimo se oculta y aparecen un marco luminoso, 4 cristales en las esquinas y un brillo pulsante bajo la base. Colores: Fuego naranja, Agua cian, Tierra verde/ámbar, Aire blanco/violeta.
+> - Fuego/Tierra: +20% daño · Agua/Aire: +20% alcance.
+> - Híbridos y legendarias cuentan todos sus componentes (Hielo usa sellos de Agua o Aire; Obsidiana y Templo Ancestral, cualquiera).
+> - Con una torre en la mano, los sellos compatibles laten; el cursor muestra el bono y el anillo de alcance ya lo incluye. Ocupado por el elemento correcto, el sello brilla; por otro, se apaga.
+> - Se definen por mapa en `LevelData.seals`.
+>
+> *Estado:* Implementado en `js/data/SealData.js`, `js/systems/SealSystem.js`, `LevelData.js`, `Tower.js`, `GameScene.js` y `BootScene.js` (sprites `seal_*`).
 
 ---
 
@@ -437,7 +460,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - **Persistencia Multimapa (`SaveSystem`)**:
 >   - `SaveSystem` incluye el `levelId` en el guardado para restaurar exactamente el mapa y sus obstáculos guardados.
 > 
-> *Estado:* **Pendiente**.
+> *Estado:* **En progreso** — Paso 1 (desacoplamiento base) hecho: el mapa vive en `js/data/LevelData.js`; se eliminó `WAYPOINTS` y `GridSystem` usa las dimensiones del nivel (`GridSystem.js`, `GameScene.js`, `Hero.js`, `EconomySystem.js`, `SaveSystem.js`). Pendiente: biomas, selector en `TitleScene`, oleadas por mapa.
 
 ### US 14.2: Modo Sin Fin (Endless Mode) [✓]
 **Como** jugador veterano,  

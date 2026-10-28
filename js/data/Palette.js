@@ -15,6 +15,15 @@ export const EL = {
     storm: ramp(0x1a0f42, 0x3a2288, 0x6b45d6, 0xab8cff, 0xffe45c),
     lava:  ramp(0x330a04, 0x7a1a06, 0xd43d0a, 0xff8a2b, 0xffd75c),
     mud:   ramp(0x0b2e24, 0x175947, 0x2c8d74, 0x62c3a8, 0xc6f1e2),
+
+    // Legendaries. Each sits between its two parents' ramps, so a Ventisca
+    // still reads as ice-and-storm before you know its name.
+    blizzard:  ramp(0x101a4a, 0x2a3f98, 0x5f8ce0, 0xa8d8ff, 0xf4fdff),
+    ashstorm:  ramp(0x1c1014, 0x4a2a2a, 0x8c4a32, 0xf0a048, 0xffe45c),
+    obsidian:  ramp(0x08060e, 0x1e1630, 0x5a3e8e, 0xb89cf0, 0xf4eaff),
+    glacier:   ramp(0x0a2e36, 0x15606a, 0x3aa5a8, 0x9fe3dc, 0xf0fffb),
+    geyser:    ramp(0x2e2206, 0x6e5410, 0xb8902a, 0xf0d070, 0xfff8d8),
+    ancestral: ramp(0x1a2a14, 0x3a5a28, 0x6e9a40, 0xb8d870, 0xf8ffd8),
 };
 
 // Arcane granite — every tower pedestal, every barricade band. Deliberately
