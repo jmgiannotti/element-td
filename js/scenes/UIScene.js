@@ -1518,6 +1518,8 @@ export class UIScene extends Phaser.Scene {
         on('boss-hp-changed', (boss) => this._onBossHpChanged(boss));
         on('boss-ability-cast', (data) => this._onBossAbilityCast(data));
         on('boss-defeated', (boss) => this._onBossDefeated(boss));
+        // A map's own events (MapEventSystem): a plug blown, a blizzard, a ward.
+        on('map-event', (text, color) => this._flashNotification(text, color));
         on('enemy-reached-end', (enemy) => {
             if (enemy?.isBoss) this._onBossEscaped(enemy);
         });

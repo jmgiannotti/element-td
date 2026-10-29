@@ -41,6 +41,10 @@ export class Enemy {
         this.burnDps = 0;
         this.burnTimer = 0;
         this.burnTick = 0;
+        // A crypt pillar's ward (MapEventSystem): soaks damage before health.
+        this.shield = 0;
+        this.shieldTimer = 0;
+        this.shieldGfx = null;
 
         // ── Agro ────────────────────────────────
         // See EnemyData: most enemies have no `agro` and never read any of this.
@@ -165,6 +169,11 @@ export class Enemy {
 
     update(_time, delta) {
         if (!this.alive || !this.path) return;
+
+        if (this.shieldTimer > 0) {
+            this.shieldTimer -= delta;
+            if (this.shieldTimer <= 0) this._dropShield();
+        }
 
         // ── Status effects ──────────────────────
         if (this.frozen) {
@@ -562,6 +571,7 @@ export class Enemy {
     }
 
     _updateHpBar() {
+        if (this.shieldGfx) this.shieldGfx.setPosition(this.x, this.y);
         if (!this.hpBg) return;
         const pct = Math.max(0, this.hp / this.maxHp);
         const offY = this.hpOffsetY || 21;
@@ -587,6 +597,23 @@ export class Enemy {
     takeDamage(amount, opts = {}) {
         if (!this.alive) return;
         const { silent = false, effect = EFFECT.NORMAL, showNumber = !silent, source = null } = opts;
+
+        if (this.shield > 0) {
+            const absorbed = Math.min(this.shield, amount);
+            this.shield -= absorbed;
+            amount -= absorbed;
+            if (this.shield <= 0) this._dropShield();
+            if (amount <= 0) {
+                // Fully soaked: said in the ward's violet, so it does not read
+                // as the tower missing.
+                if (showNumber && this.scene.floating && this.sprite) {
+                    this.scene.floating.show(this.x, this.y - 17, `${Math.round(absorbed)}`, {
+                        color: '#B39DDB', size: 7, rise: 10, duration: 500,
+                    });
+                }
+                return;
+            }
+        }
 
         this.hp -= amount;
 
@@ -654,6 +681,27 @@ export class Enemy {
         return true;
     }
 
+    /**
+     * A temporary ward worth `amount` health, for `ms`. Not stacked: a second
+     * pulse tops it up to the larger of the two and restarts the clock.
+     */
+    grantShield(amount, ms) {
+        if (!this.alive || amount <= 0) return;
+        this.shield = Math.max(this.shield, amount);
+        this.shieldTimer = ms;
+        if (!this.shieldGfx) {
+            const r = this.sprite && this.sprite.height > 32 ? 26 : 14;
+            this.shieldGfx = this.scene.add.circle(this.x, this.y, r, 0x7E57C2, 0.14)
+                .setStrokeStyle(1, 0xB388FF, 0.9).setDepth(11);
+        }
+    }
+
+    _dropShield() {
+        this.shield = 0;
+        this.shieldTimer = 0;
+        if (this.shieldGfx) { this.shieldGfx.destroy(); this.shieldGfx = null; }
+    }
+
     applySlow(amount, duration) {
         this.slowAmount = Math.max(this.slowAmount, amount);
         this.slowTimer = Math.max(this.slowTimer, duration);
@@ -688,6 +736,8 @@ export class Enemy {
             this.agroRing.destroy(); 
             this.agroRing = null; 
         }
+
+        this._dropShield();
 
         if (this.isBoss) {
             this.scene.events.emit('boss-defeated', this);
@@ -724,6 +774,7 @@ export class Enemy {
     _reachExit() {
         this.alive = false;
         this.reachedEnd = true;
+        this._dropShield();
         if (this.pathChangeHandler) {
             this.scene.events.off('path-changed', this.pathChangeHandler);
             this.pathChangeHandler = null;
@@ -781,6 +832,7 @@ export class Enemy {
         this.burnTimer = 0;
         this.burnTick = 0;
         this.burnSource = null;
+        this._dropShield();
 
         this.agro = this.data.agro ?? null;
         this.mode = 'road';

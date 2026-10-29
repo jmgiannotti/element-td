@@ -61,7 +61,7 @@ export class SaveSystem {
 
         let heroData = null;
         let towersToSave, templesToSave, barricadesToSave, breakableBlocksToSave, templeLevelsToSave;
-        let overchargeToSave;
+        let overchargeToSave, mapStateToSave;
 
         if (gameScene.waveManager.waveActive && gameScene.waveStartCheckpoint) {
             // Mid-wave save: checkpoint is the EXACT START of the current wave.
@@ -86,6 +86,7 @@ export class SaveSystem {
             breakableBlocksToSave = cp.breakableBlocks || [];
             templeLevelsToSave = cp.templeLevels || {};
             overchargeToSave = cp.templeOvercharge || {};
+            mapStateToSave = cp.mapState ?? null;
         } else {
             // Prep phase (between waves) or post-wave save:
             currentWave = gameScene.waveManager.currentWave;
@@ -126,6 +127,7 @@ export class SaveSystem {
             });
             templeLevelsToSave = SaveSystem.copyLevels(gameScene.templeSystem.levels);
             overchargeToSave = { ...gameScene.templeSystem.overcharge };
+            mapStateToSave = gameScene.mapEvents ? gameScene.mapEvents.serialize() : null;
         }
 
         const data = {
@@ -144,8 +146,10 @@ export class SaveSystem {
             barricades: barricadesToSave,
             breakableBlocks: breakableBlocksToSave,
             templeLevels: templeLevelsToSave,
-            // Sobrecarga purchases. Optional: saves from before it load without.
+            // Sobrecarga purchases and the map's own state (MapEventSystem).
+            // Both optional: saves from before them load with neither.
             templeOvercharge: overchargeToSave,
+            mapState: mapStateToSave,
         };
 
         try {
@@ -178,6 +182,9 @@ export class SaveSystem {
             }
             if (data.templeOvercharge) {
                 gameScene.templeSystem.overcharge = { ...data.templeOvercharge };
+            }
+            if (data.mapState && gameScene.mapEvents) {
+                gameScene.mapEvents.restore(data.mapState);
             }
 
             // 4. Restore Hero

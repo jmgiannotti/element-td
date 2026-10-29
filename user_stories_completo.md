@@ -552,6 +552,19 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > 
 > *Estado:* **Implementado** en `Viewport.js` (`applyBoardViewport`, `boardZoom`: los mapas de 20×15 conservan la cámara de siempre; los más grandes reciben una cámara solo sobre el tablero a zoom 3/4 o 1/2, centrada), `GridSystem.js` (`worldWidth`/`worldHeight`), `GameScene.js` (`_onBoard` en lugar de `x < 640`; tarjetas acotadas al mundo del nivel), `Hero.js`, `Sentinel.js`, `TouchControls.js` (límites del nivel), `TitleScene.js` (mini-mapa con celda según tamaño, lista de 6 mapas) y `LevelData.js` (`map_test` Llanura Extensa, 26×20).
 
+### US 14.7: Mecánica Especial por Mapa [✓]
+**Como** jugador,
+**Quiero** que cada mapa tenga una regla propia además de su camino,
+**Para** que cada nivel pida una estrategia distinta.
+
+> **Criterios de Aceptación:**
+> - **Plaza del Mercado:** cada puesto intacto paga +10 de oro al terminar cada oleada. Un ataque de jefe apuntado a Vesper (línea o círculo dirigido) que cae sobre un puesto lo destruye. Al empezar las oleadas 8 y 14 los enemigos vuelan una línea de cajas cada vez y abren el atajo.
+> - **Caldera de Magma:** en la oleada 10 un temblor (sacudida y aviso) rompe el tapón de obsidiana de arriba y une los dos anillos del ocho.
+> - **Glaciar Quebrado:** cada 35 s de oleada, una ventisca baja 20% la cadencia de las torres durante 8 s, salvo las de Fuego, Lava, Tormenta, Tormenta de Ceniza, Geiser, Obsidiana y Templo Ancestral, y las torres a ≤ 1 celda de ellas.
+> - **Cripta Ancestral:** cada 10 s de oleada, cada pilar en pie da a los enemigos a ≤ 2 celdas un escudo del 15% de su vida máxima durante 5 s.
+> 
+> *Estado:* **Implementado** en `MapEventSystem.js` (nuevo), `LevelData.js` (`mechanics` en los mapas 2 a 5), `GameScene.js` (`stalls`, `breakBlocks`), `Enemy.js` (`grantShield`), `Tower.js` (`chilled`), `TelegraphSystem.js` (evento `hazard-detonated`), `UIScene.js` (evento `map-event`) y `SaveSystem.js` (`mapState`: puestos destruidos).
+
 ### US 14.8: Rebalanceo de Cadencia, Daño y Oleadas [✓]
 **Como** jugador,
 **Quiero** que un grupo chico de torres en una esquina no alcance para ganar,

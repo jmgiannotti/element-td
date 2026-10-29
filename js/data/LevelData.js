@@ -18,6 +18,9 @@
  *    the longer note.
  *  · 'city' maps: houses fill the top row, so it carries no road; `townBlocks`
  *    are short rows of houses set into the board (see Terrain.townProps).
+ *  · `mechanics` are the map's own rules — stall income, plugs that go down
+ *    on a given wave, a blizzard, warding pillars. MapEventSystem documents
+ *    and runs them; a map without the field plays by the base rules.
  */
 
 // Map 1 — the original board.
@@ -119,6 +122,15 @@ export const MAP_2 = {
         { col: 15, row: 8, w: 3 },
         { col: 1, row: 12, w: 3 },
     ],
+    // The stalls pay out after every wave they survive; on waves 8 and 14 the
+    // enemies blow one line of crates each, opening the short way for good.
+    mechanics: {
+        stallGold: 10,
+        breaches: [
+            { wave: 8, block: 0, cause: 'blast' },
+            { wave: 14, block: 1, cause: 'blast' },
+        ],
+    },
     initialGold: 110,
     initialLives: 20,
 };
@@ -183,6 +195,11 @@ export const MAP_3 = {
         { col: 9, row: 5, element: 'fire' },
         { col: 10, row: 10, element: 'earth' },
     ],
+    // On wave 10 the volcano shakes the top plug loose: the two rings join
+    // along the top and the whole centre has to be held, not just the way in.
+    mechanics: {
+        breaches: [{ wave: 10, block: 0, cause: 'quake' }],
+    },
     // Barricades are the point of this map, so the purse leaves room for them.
     initialGold: 130,
     initialLives: 20,
@@ -231,6 +248,15 @@ export const MAP_4 = {
         { col: 17, row: 5, element: 'fire' },
         { col: 2, row: 9, element: 'earth' },
     ],
+    // Every 35s of a wave the blizzard chills the towers for 8s (−20%
+    // cadence) — all but the fire-bearing ones and whatever stands next to
+    // one, which is what the fire seal on the flank is for.
+    mechanics: {
+        blizzard: {
+            every: 35000, duration: 8000, slow: 0.2, warmRadius: 1,
+            warm: ['fire', 'lava', 'storm', 'ashstorm', 'geyser', 'obsidian', 'ancestral'],
+        },
+    },
     initialGold: 110,
     initialLives: 20,
 };
@@ -284,6 +310,12 @@ export const MAP_5 = {
         { col: 7, row: 10, element: 'air' },
         { col: 12, row: 4, element: 'air' },
     ],
+    // While a pillar stands it wards whatever walks past it: every 10s,
+    // enemies within two cells get a shield of 15% of their max health.
+    // Breaking the pillars is how the crypt gets easier.
+    mechanics: {
+        darkPulse: { every: 10000, radius: 2, shield: 0.15, shieldMs: 5000 },
+    },
     initialGold: 150,
     initialLives: 15,
 };

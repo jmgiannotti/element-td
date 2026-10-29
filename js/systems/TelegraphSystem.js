@@ -228,7 +228,17 @@ export class TelegraphSystem {
             }
         }
 
-        // ── 3. Visual explosion VFX ───────────────
+        // ── 3. Anything else on the board it lands on ──
+        // Map features (the market's stalls) ask with the same shape test, and
+        // are told whether it was aimed at the hero or centred on the boss.
+        this.scene.events.emit('hazard-detonated', (x, y) => {
+            if (tg.type === 'line') return this._pointInOrientedBox(x, y, cx, cy, tg.angle, tg.length, tg.width + 16);
+            const ox = tg.type === 'target_circle' ? tg.x : cx;
+            const oy = tg.type === 'target_circle' ? tg.y : cy;
+            return Phaser.Math.Distance.Between(ox, oy, x, y) <= tg.radius + 16;
+        }, tg.type !== 'circle');
+
+        // ── 4. Visual explosion VFX ───────────────
         this._spawnDetonationVfx(tg, cx, cy);
     }
 

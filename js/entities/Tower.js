@@ -119,7 +119,11 @@ export class Tower {
         return this.data.range * lvlBonus * this._mult('range') * this._seal('range');
     }
 
-    get fireRate() { return this.data.fireRate * this._mult('fireRate'); }
+    get fireRate() {
+        // A map's cold (Glaciar Quebrado) slows the cadence while it lasts.
+        const chill = this.chilled ? 1 / (1 - (this.scene.mapEvents?.chillSlow ?? 0)) : 1;
+        return this.data.fireRate * this._mult('fireRate') * chill;
+    }
 
     /** Called by TempleSystem when this element's upgrade levels change. */
     refreshStats() {
@@ -465,7 +469,12 @@ export class Tower {
     /** Single owner of the sprite tint, so the highlights can't clobber each other. */
     _applyTint() {
         if (!this.alive) return;
-        if (this.empowered) {
+        if (this.stunTimer > 0) return; // the stun's grey owns the sprite until it ends
+        if (this.chilled) {
+            // Glaciar Quebrado's blizzard: frost over everything else, since it
+            // is the state that is costing the player shots right now.
+            this.sprite.setTint(0xA8DFFF);
+        } else if (this.empowered) {
             if (this.element === 'storm') {
                 // Storm towers don't use the brownish-gold tint — clean original colors
                 this.sprite.clearTint();
