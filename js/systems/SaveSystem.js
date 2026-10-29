@@ -226,6 +226,9 @@ export class SaveSystem {
                     const key = `${b.col},${b.row}`;
                     if (gameScene.breakableBlocks.has(key)) {
                         gameScene.breakableBlocks.set(key, b.hp);
+                    } else if (gameScene.gridSystem.grid[b.row]?.[b.col] === TILE.PATH) {
+                        // One the level did not start with: a meteor's rock.
+                        gameScene.addBlock(b.col, b.row, b.hp);
                     }
                 }
             }

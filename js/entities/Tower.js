@@ -473,7 +473,7 @@ export class Tower {
         if (this.chilled) {
             // Glaciar Quebrado's blizzard: frost over everything else, since it
             // is the state that is costing the player shots right now.
-            this.sprite.setTint(0xA8DFFF);
+            this.sprite.setTint(0x8FD3FF);
         } else if (this.empowered) {
             if (this.element === 'storm') {
                 // Storm towers don't use the brownish-gold tint — clean original colors
@@ -584,6 +584,7 @@ export class Tower {
         if (this.sprite) this.sprite.destroy();
         if (this.empowerGfx) this.empowerGfx.destroy();
         if (this.stunGfx) { this.stunGfx.destroy(); this.stunGfx = null; }
+        if (this.frostGfx) { this.frostGfx.destroy(); this.frostGfx = null; }
         if (this._sparkTimer) { this._sparkTimer.remove(); this._sparkTimer = null; }
         
         if (this.selected) {

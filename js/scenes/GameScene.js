@@ -1490,6 +1490,19 @@ export class GameScene extends Phaser.Scene {
         if (any) this.events.emit('path-changed');
     }
 
+    /**
+     * A new breakable block where there was road — a meteor's rock on the
+     * Caldera. The caller re-routes (path-changed) once it is done.
+     */
+    addBlock(col, row, hp) {
+        const key = `${col},${row}`;
+        this.breakableBlocks.set(key, hp);
+        this.gridSystem.grid[row][col] = TILE.BREAKABLE;
+        this._repaintArea(col, row);
+        this._setDecor(col, row, breakableKey(this.biome, col, row));
+        this.events.emit('path-changed');
+    }
+
     _clearBlock(col, row) {
         this.breakableBlocks.delete(`${col},${row}`);
         this.gridSystem.grid[row][col] = TILE.PATH;

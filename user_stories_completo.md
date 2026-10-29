@@ -558,12 +558,12 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 **Para** que cada nivel pida una estrategia distinta.
 
 > **Criterios de Aceptación:**
-> - **Plaza del Mercado:** cada puesto intacto paga +10 de oro al terminar cada oleada. Un ataque de jefe apuntado a Vesper (línea o círculo dirigido) que cae sobre un puesto lo destruye. Al empezar las oleadas 8 y 14 los enemigos vuelan una línea de cajas cada vez y abren el atajo.
-> - **Caldera de Magma:** en la oleada 10 un temblor (sacudida y aviso) rompe el tapón de obsidiana de arriba y une los dos anillos del ocho.
-> - **Glaciar Quebrado:** cada 35 s de oleada, una ventisca baja 20% la cadencia de las torres durante 8 s, salvo las de Fuego, Lava, Tormenta, Tormenta de Ceniza, Geiser, Obsidiana y Templo Ancestral, y las torres a ≤ 1 celda de ellas.
-> - **Cripta Ancestral:** cada 10 s de oleada, cada pilar en pie da a los enemigos a ≤ 2 celdas un escudo del 15% de su vida máxima durante 5 s.
+> - **Plaza del Mercado:** cada puesto intacto paga +10 de oro al terminar cada oleada, con una moneda sobre cada puesto y el total en los avisos (se explica al empezar la primera oleada). Un ataque de jefe apuntado a Vesper (línea o círculo dirigido) que cae sobre un puesto lo destruye. En las oleadas 8 y 14 los enemigos encienden una línea de cajas: parpadean y chispean 2,2 s y después explotan (fuego, escombros, humo, "¡BOOM!") y abren el atajo.
+> - **Caldera de Magma:** desde la oleada 6 el volcán tira 3 meteoritos cada 18 s de oleada, marcados en el suelo antes de caer. En el camino dejan una roca rompible (máximo 10), sobre una torre la aturden 3 s y dañan a enemigos y a Vesper. En la oleada 10 hay una erupción: 7 meteoritos, los dos primeros abren el tapón de obsidiana de arriba.
+> - **Glaciar Quebrado:** aviso 3 s antes. Cada 35 s de oleada, una ventisca baja 20% la cadencia de las torres durante 8 s, salvo las de Fuego, Lava, Tormenta, Tormenta de Ceniza, Geiser, Obsidiana y Templo Ancestral, y las torres a ≤ 1 celda de ellas. Mientras dura, las torres enfriadas llevan costra de hielo y "-20% CADENCIA", la zona de calor de las ígneas se marca en naranja y el tablero queda pálido y con nieve.
+> - **Cripta Ancestral:** cada 10 s de oleada, cada pilar en pie brilla y da a los enemigos a ≤ 2 celdas un escudo del 15% de su vida máxima durante 5 s, con un rayo desde el pilar. El escudo se ve como una burbuja violeta con su propia barra y estalla al romperse.
 > 
-> *Estado:* **Implementado** en `MapEventSystem.js` (nuevo), `LevelData.js` (`mechanics` en los mapas 2 a 5), `GameScene.js` (`stalls`, `breakBlocks`), `Enemy.js` (`grantShield`), `Tower.js` (`chilled`), `TelegraphSystem.js` (evento `hazard-detonated`), `UIScene.js` (evento `map-event`) y `SaveSystem.js` (`mapState`: puestos destruidos).
+> *Estado:* **Implementado** en `MapEventSystem.js` (nuevo), `LevelData.js` (`mechanics` en los mapas 2 a 5), `GameScene.js` (`stalls`, `breakBlocks`, `addBlock`), `Enemy.js` (`grantShield`: burbuja y barra), `Tower.js` (`chilled`, `frostGfx`), `TelegraphSystem.js` (evento `hazard-detonated`), `UIScene.js` (evento `map-event`) y `SaveSystem.js` (`mapState`: puestos destruidos y rocas de meteorito; los bloques que el nivel no traía se recrean al cargar).
 
 ### US 14.8: Rebalanceo de Cadencia, Daño y Oleadas [✓]
 **Como** jugador,

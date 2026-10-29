@@ -195,10 +195,15 @@ export const MAP_3 = {
         { col: 9, row: 5, element: 'fire' },
         { col: 10, row: 10, element: 'earth' },
     ],
-    // On wave 10 the volcano shakes the top plug loose: the two rings join
-    // along the top and the whole centre has to be held, not just the way in.
+    // From wave 6 the volcano throws meteors: rocks on the road reshape the
+    // rings wave by wave, and towers caught under one are stunned. On wave 10
+    // it erupts, and the first two meteors blow the top plug open.
     mechanics: {
-        breaches: [{ wave: 10, block: 0, cause: 'quake' }],
+        meteors: {
+            from: 6, every: 18000, count: 3,
+            eruption: { wave: 10, count: 7, plug: 0 },
+            rockHp: 80, rockCap: 10, enemyDamage: 60, heroDamage: 25, stunMs: 3000,
+        },
     },
     // Barricades are the point of this map, so the purse leaves room for them.
     initialGold: 130,

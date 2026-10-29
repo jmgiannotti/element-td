@@ -45,6 +45,8 @@ export class Enemy {
         this.shield = 0;
         this.shieldTimer = 0;
         this.shieldGfx = null;
+        this.shieldBar = null;
+        this.shieldMax = 0;
 
         // ── Agro ────────────────────────────────
         // See EnemyData: most enemies have no `agro` and never read any of this.
@@ -571,7 +573,15 @@ export class Enemy {
     }
 
     _updateHpBar() {
-        if (this.shieldGfx) this.shieldGfx.setPosition(this.x, this.y);
+        if (this.shieldGfx) {
+            this.shieldGfx.setPosition(this.x, this.y);
+            // The ward's own bar, violet, just over the health bar: how much
+            // of it is left is the thing worth reading at a glance.
+            const offY = (this.hpOffsetY || 21) + 4;
+            const pct = this.shieldMax > 0 ? Math.max(0, this.shield / this.shieldMax) : 0;
+            this.shieldBar.width = 24 * pct;
+            this.shieldBar.setPosition(this.x - (24 * (1 - pct)) / 2, this.y - offY);
+        }
         if (!this.hpBg) return;
         const pct = Math.max(0, this.hp / this.maxHp);
         const offY = this.hpOffsetY || 21;
@@ -602,13 +612,13 @@ export class Enemy {
             const absorbed = Math.min(this.shield, amount);
             this.shield -= absorbed;
             amount -= absorbed;
-            if (this.shield <= 0) this._dropShield();
+            if (this.shield <= 0) this._dropShield(true);
             if (amount <= 0) {
                 // Fully soaked: said in the ward's violet, so it does not read
                 // as the tower missing.
                 if (showNumber && this.scene.floating && this.sprite) {
                     this.scene.floating.show(this.x, this.y - 17, `${Math.round(absorbed)}`, {
-                        color: '#B39DDB', size: 7, rise: 10, duration: 500,
+                        color: '#D1C4E9', size: 8, rise: 10, duration: 550,
                     });
                 }
                 return;
@@ -688,18 +698,42 @@ export class Enemy {
     grantShield(amount, ms) {
         if (!this.alive || amount <= 0) return;
         this.shield = Math.max(this.shield, amount);
+        this.shieldMax = Math.max(this.shieldMax, this.shield);
         this.shieldTimer = ms;
         if (!this.shieldGfx) {
-            const r = this.sprite && this.sprite.height > 32 ? 26 : 14;
-            this.shieldGfx = this.scene.add.circle(this.x, this.y, r, 0x7E57C2, 0.14)
-                .setStrokeStyle(1, 0xB388FF, 0.9).setDepth(11);
+            // A bubble, not an outline: filled, thick-rimmed and breathing,
+            // so a warded enemy stands out in a crowd.
+            const r = this.sprite && this.sprite.height > 32 ? 28 : 16;
+            this.shieldGfx = this.scene.add.circle(this.x, this.y, r, 0x7E57C2, 0.28)
+                .setStrokeStyle(2, 0xD1C4E9, 1).setDepth(11);
+            this.scene.tweens.add({
+                targets: this.shieldGfx, scale: 1.12, fillAlpha: 0.16,
+                duration: 420, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+            });
+            this.shieldBar = this.scene.add.rectangle(this.x, this.y, 24, 2, 0xB388FF).setDepth(12);
         }
+        this._updateHpBar();
     }
 
-    _dropShield() {
+    /** `broken`: knocked off by damage rather than run out — it shatters. */
+    _dropShield(broken = false) {
+        if (broken && this.shieldGfx && this.scene.particleSystem) {
+            this.scene.particleSystem.emitBurst(this.x, this.y, 0xB388FF);
+            const ring = this.scene.add.circle(this.x, this.y, this.shieldGfx.radius, 0xB388FF, 0)
+                .setStrokeStyle(2, 0xE1D5FF, 1).setDepth(11);
+            this.scene.tweens.add({
+                targets: ring, scale: 1.8, alpha: 0, duration: 260, onComplete: () => ring.destroy(),
+            });
+        }
         this.shield = 0;
+        this.shieldMax = 0;
         this.shieldTimer = 0;
-        if (this.shieldGfx) { this.shieldGfx.destroy(); this.shieldGfx = null; }
+        if (this.shieldGfx) {
+            this.scene.tweens.killTweensOf(this.shieldGfx);
+            this.shieldGfx.destroy();
+            this.shieldGfx = null;
+        }
+        if (this.shieldBar) { this.shieldBar.destroy(); this.shieldBar = null; }
     }
 
     applySlow(amount, duration) {
