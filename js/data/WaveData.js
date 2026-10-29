@@ -357,6 +357,13 @@ export const WAVE_PROFILES = {
 
 export const DEFAULT_WAVE_PROFILE = 'ceniza';
 
+/**
+ * The back half of every map hits harder: from wave 10 on, every enemy has
+ * this much more health, on top of the map's own hpMult (and, past wave 20,
+ * on top of endless scaling — so the curve does not dip when endless starts).
+ */
+export const LATE_WAVE_HP = { from: 10, mult: 1.25 };
+
 export function getWaveProfile(name) {
     return WAVE_PROFILES[name] || WAVE_PROFILES[DEFAULT_WAVE_PROFILE];
 }

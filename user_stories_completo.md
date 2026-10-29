@@ -336,7 +336,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Al hacer clic en una torre construida, se habilita una opción de "Mejorar nivel" pagando oro.
 > - El costo escala exponencialmente por nivel.
 > 
-> *Estado:* **Implementado** en `Tower.js`, `TowerData.js`, `GameScene.js`, `SaveSystem.js` y `UIScene.js`.
+> *Estado:* **Implementado** en `Tower.js`, `TowerData.js`, `GameScene.js`, `SaveSystem.js` y `UIScene.js`. Rebalanceado en US 14.8: +15% de daño y +5% de alcance por nivel, y desde el Nv.4 cada paso cuesta además ×1.6 (llevar un Fuego a Nv.8 pasa de 1449 a 5799 de oro).
 
 ---
 
@@ -527,6 +527,19 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Mapa de prueba de 26×20 celdas.
 > 
 > *Estado:* **Implementado** en `Viewport.js` (`applyBoardViewport`, `boardZoom`: los mapas de 20×15 conservan la cámara de siempre; los más grandes reciben una cámara solo sobre el tablero a zoom 3/4 o 1/2, centrada), `GridSystem.js` (`worldWidth`/`worldHeight`), `GameScene.js` (`_onBoard` en lugar de `x < 640`; tarjetas acotadas al mundo del nivel), `Hero.js`, `Sentinel.js`, `TouchControls.js` (límites del nivel), `TitleScene.js` (mini-mapa con celda según tamaño, lista de 6 mapas) y `LevelData.js` (`map_test` Llanura Extensa, 26×20).
+
+### US 14.8: Rebalanceo de Cadencia, Daño y Oleadas [✓]
+**Como** jugador,
+**Quiero** que un grupo chico de torres en una esquina no alcance para ganar,
+**Para** que haya que construir, fusionar y defender todo el recorrido.
+
+> **Criterios de Aceptación:**
+> - Cadencia global −29% (intervalo ×1.4); +15% de daño por impacto en Tierra, Fuego, Lava y Obsidiana.
+> - Cada Legendaria rinde ~1.7–2.3× el DPS de la mejor Híbrida de la que sale.
+> - La cadena pega 100/50/30/18% por blanco sucesivo y la quemadura o el congelamiento que lleva bajan en la misma proporción.
+> - Enemigos estándar ~13% más rápidos; +25% de vida desde la oleada 10, también en modo sin fin.
+> 
+> *Estado:* **Implementado** en `TowerData.js` (stats, `CHAIN_FALLOFF`, curva de `TOWER_UPGRADE`), `Projectile.js`, `EnemyData.js`, `WaveData.js` (`LATE_WAVE_HP`) y `WaveManager.js`.
 
 ---
 
