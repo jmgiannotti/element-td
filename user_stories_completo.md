@@ -338,6 +338,18 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > 
 > *Estado:* **Implementado** en `Tower.js`, `TowerData.js`, `GameScene.js`, `SaveSystem.js` y `UIScene.js`. Rebalanceado en US 14.8: +15% de daño y +5% de alcance por nivel, y desde el Nv.4 cada paso cuesta además ×1.6 (llevar un Fuego a Nv.8 pasa de 1449 a 5799 de oro).
 
+### US 8.2: Reembolso de Mejoras al Fusionar [✓]
+**Como** jugador que mejoró torres con oro,
+**Quiero** recuperar la mayor parte de ese oro cuando fusiono esas torres,
+**Para** que mejorar una torre no sea plata tirada si después decido fusionarla.
+
+> **Criterios de Aceptación:**
+> - Al fusionar (Tier 1 → Híbrida y Híbrida → Legendaria) se suma el oro gastado en niveles individuales de ambas torres y se reembolsa el 85%.
+> - El preview de fusión al arrastrar muestra el reembolso; al completarse suena una moneda y aparece `+XX ORO` dorado sobre la torre nueva.
+> - El oro reembolsado sale de la cuenta de la torre nueva, así venderla después no lo devuelve dos veces.
+> 
+> *Estado:* **Implementado** en `Tower.js` (`upgradeSpent`), `FusionSystem.js` (`UPGRADE_REFUND`, `fusionRefund`), `UIScene.js` (línea en el preview), `AudioSystem.js` (cue `coin`), `GameScene.js` y `SaveSystem.js` (campo `upg` por torre).
+
 ---
 
 ## 👑 Epic 9: Jefes y Eventos de Oleada

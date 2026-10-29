@@ -51,6 +51,16 @@ const TILT_MAX = 0.22;
 
 const GHOST_SCALE = 1.18;
 
+// Share of the gold spent on individual levels (US 8.1) that comes back when
+// two towers fuse. The levels do not carry over, so without this, levelling a
+// tower you mean to fuse was simply money thrown away.
+export const UPGRADE_REFUND = 0.85;
+
+/** Gold the fusion of `a` and `b` gives back for their individual levels. */
+export function fusionRefund(a, b) {
+    return Math.round(((a?.upgradeSpent ?? 0) + (b?.upgradeSpent ?? 0)) * UPGRADE_REFUND);
+}
+
 export class FusionSystem {
     constructor(scene) {
         this.scene = scene;
@@ -373,6 +383,7 @@ export class FusionSystem {
         this.scene.events.emit('fusion-hover', {
             b1: d.b, b2: match.other, result: match.result,
             kind: this._kindOf(d.b), x: match.other.x, y: match.other.y,
+            refund: fusionRefund(d.b, match.other),
         });
     }
 
@@ -521,7 +532,11 @@ export class FusionSystem {
         const row = target.row;
         // The hybrid inherits both bills, so selling it later returns a cut of
         // everything that went into it rather than of a list price it never had.
-        const paid = (dragged.paidCost ?? 0) + (target.paidCost ?? 0);
+        // Gold spent on levels is the exception: most of it is paid back right
+        // now, so it leaves the bill instead of being refunded twice.
+        const levelGold = (dragged.upgradeSpent ?? 0) + (target.upgradeSpent ?? 0);
+        const refund = kind === 'tower' ? fusionRefund(dragged, target) : 0;
+        const paid = (dragged.paidCost ?? 0) + (target.paidCost ?? 0) - levelGold;
 
         let combinedDamage = 0;
         let combinedKills = 0;
@@ -553,6 +568,16 @@ export class FusionSystem {
 
         // VFX – expanding flash
         const pos = scene.gridSystem.gridToWorld(col, row);
+        if (refund > 0) {
+            scene.economySystem.addGold(refund);
+            audio.play('coin');
+            if (scene.floating) {
+                // Starts low: a legendary's own banner rises from just above.
+                scene.floating.show(pos.x, pos.y - 2, `+${refund} ORO`, {
+                    color: '#FFD700', size: 8, rise: 26, duration: 1300,
+                });
+            }
+        }
         if (kind === 'tower' && tierOf(resultElement) === 3) this._legendaryBirth(pos, resultElement);
         const flash = scene.add.circle(pos.x, pos.y, 10, 0xFFD700, 0.9);
         flash.setDepth(30);
@@ -570,7 +595,7 @@ export class FusionSystem {
         // Taking one pair can create or invalidate others — the hybrid that just
         // appeared cannot fuse again, and the tile it came from is now free.
         this.refresh();
-        scene.events.emit('fusion-complete', resultElement, kind);
+        scene.events.emit('fusion-complete', resultElement, kind, refund);
     }
 
     /**

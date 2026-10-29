@@ -418,6 +418,7 @@ export class GameScene extends Phaser.Scene {
                     element: t.element,
                     paid: t.paidCost,
                     level: t.level || 1,
+                    upg: t.upgradeSpent || 0,
                     damageDealt: t.totalDamageDealt || 0,
                     kills: t.enemiesKilled || 0,
                 })),

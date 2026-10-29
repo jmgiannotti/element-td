@@ -911,6 +911,9 @@ export class UIScene extends Phaser.Scene {
                 d.specialDesc,
                 'Libera 1 casilla',
             ];
+            // The levels bought with gold do not survive the merge; most of
+            // that gold does, and saying so before the drop is the point.
+            if (info.refund > 0) lines.push(`Reembolso mejoras: +${info.refund} ORO`);
             if (d.tier === 3) lines.splice(1, 0, 'TORRE LEGENDARIA');
         }
 

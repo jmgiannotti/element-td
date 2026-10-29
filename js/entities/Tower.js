@@ -5,7 +5,7 @@ import { safeTexture } from '../systems/TextureGuard.js';
 import { audio } from '../systems/AudioSystem.js';
 
 export class Tower {
-    constructor(scene, col, row, element, paidCost = 0, level = 1) {
+    constructor(scene, col, row, element, paidCost = 0, level = 1, upgradeSpent = 0) {
         this.scene = scene;
         this.col = col;
         this.row = row;
@@ -15,6 +15,10 @@ export class Tower {
         // basis for a refund: hybrids have no list price at all.
         this.paidCost = paidCost;
         this.level = level;
+        // The share of paidCost that went into individual levels. Fusing
+        // hands most of it back (FusionSystem), since the levels themselves
+        // do not survive the merge.
+        this.upgradeSpent = upgradeSpent;
         this.empowered = false;
         this.fusionHint = false;
         this.stunTimer = 0;
@@ -484,6 +488,7 @@ export class Tower {
         if (!this.alive) return;
         this.level += 1;
         this.paidCost += cost;
+        this.upgradeSpent += cost;
         this.refreshStats();
         this._buildLevelPips();
         this.celebrate();
