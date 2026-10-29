@@ -29,6 +29,7 @@ import {
     cellHash, cellLayers, breakableKey, biomeKey, resolveBiome, townProps, BIOMES,
 } from '../systems/Terrain.js';
 import { safeTexture } from '../systems/TextureGuard.js';
+import { IconText } from '../systems/IconText.js';
 import { applyBoardViewport, pointerWorld } from '../systems/Viewport.js';
 
 // Depth budget above the terrain layers (see Terrain.js), below entities (≥ 1).
@@ -160,7 +161,7 @@ export class GameScene extends Phaser.Scene {
         // What the cell under the cursor is about to cost or pay you, or why it
         // is refused. Said before the click, because an outcome you cannot see
         // in advance is one you cannot plan around.
-        this.cursorLabel = this.add.text(0, 0, '', {
+        this.cursorLabel = new IconText(this, 0, 0, '', {
             fontFamily: '"Press Start 2P"', fontSize: '8px',
             color: '#FFD700', stroke: '#000000', strokeThickness: 3,
         }).setOrigin(0.5, 1).setVisible(false).setDepth(31);

@@ -1,4 +1,5 @@
 import { EFFECT, EFFECT_MARK, EFFECT_COLOR } from '../data/Elements.js';
+import { IconText, hasManaGlyph } from './IconText.js';
 
 const FONT = '"Press Start 2P"';
 
@@ -61,6 +62,8 @@ export class FloatingText {
             jitter = 0,
         } = opts;
 
+        if (hasManaGlyph(text)) return this._showWithIcon(x, y, text, { color, size, rise, duration });
+
         const t = this._obtain();
         this.live++;
 
@@ -81,6 +84,27 @@ export class FloatingText {
             onComplete: () => this._release(t),
         });
 
+        return t;
+    }
+
+    /** Like show(), for text with the maná sprite in it. Not pooled — it is rare. */
+    _showWithIcon(x, y, text, { color, size, rise, duration }) {
+        this.live++;
+        const t = new IconText(this.scene, x, y, text, {
+            fontFamily: '"Press Start 2P"', fontSize: `${size}px`, color,
+            stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0.5).setDepth(40);
+        this.scene.tweens.add({
+            targets: t,
+            y: y - rise,
+            alpha: 0,
+            duration,
+            ease: 'Quad.easeOut',
+            onComplete: () => {
+                this.live--;
+                t.destroy();
+            },
+        });
         return t;
     }
 

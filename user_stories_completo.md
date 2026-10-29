@@ -714,7 +714,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Script de compilación `update_mana.cjs` que convierte `mana.ase` en Data URI en `ManaSprite.js`.
 > - Carga de textura `'mana_mote'` en `BootScene.js` e integración en tarjeta de recursos y HUD de `UIScene.js`.
 > 
-> *Estado:* **Implementado** en `mana.ase`, `update_mana.cjs`, `ManaSprite.js`, `BootScene.js` y `UIScene.js`.
+> *Estado:* **Implementado** en `mana.ase`, `update_mana.cjs`, `ManaSprite.js`, `BootScene.js` y `UIScene.js`. El glifo ✦ en textos (costos de hechizos y mejoras, avisos, tooltips, tutorial, etiqueta del cursor, texto flotante) se dibuja con el mismo sprite vía `js/systems/IconText.js` (`UIScene.js`, `GameScene.js`, `FloatingText.js`).
 
 ---
 

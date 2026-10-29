@@ -14,12 +14,14 @@ import {
 } from '../data/Elements.js';
 import { HERO_ABILITIES, ABILITY_ORDER, COMBO, abilityHeading } from '../data/HeroData.js';
 import { SPELLS, SPELL_ORDER, spellHeading } from '../data/SpellData.js';
+import { IconText, hasManaGlyph } from '../systems/IconText.js';
 import { HERO_LORE, DEFAULT_LOOK, heroTextureKey } from '../data/HeroLook.js';
 import { applyViewport, worldToView } from '../systems/Viewport.js';
 import { OptionsModal } from '../systems/OptionsModal.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 
 const FONT = '"Press Start 2P"';
+// Stands for the maná sprite in any string drawn through IconText.
 const MANA = '✦';
 
 // Sidebar geometry. The map owns x < 640; everything here lives to the right
@@ -1218,11 +1220,9 @@ export class UIScene extends Phaser.Scene {
             .setVisible(false);
 
         // Wrapped with comfortable margins leaving the skip button its own column
-        this.tutorialText = this.add.text(285, 452, '', {
-            fontFamily: FONT, fontSize: '7.5px', color: '#ECEFF1',
-            align: 'center', lineSpacing: 4,
-            wordWrap: { width: 410 },
-        }).setOrigin(0.5).setDepth(71).setVisible(false);
+        this.tutorialText = new IconText(this, 285, 452, '', {
+            fontFamily: FONT, fontSize: '7.5px', color: '#ECEFF1', lineSpacing: 4,
+        }, { wrap: 54, align: 'center' }).setOrigin(0.5).setDepth(71).setVisible(false);
 
         this.tutorialSkipBg = this.add.rectangle(530, 452, 54, 22, 0x2a2a4a)
             .setStrokeStyle(1, 0x555577)
@@ -1364,7 +1364,7 @@ export class UIScene extends Phaser.Scene {
         });
         on('spell-cast', (key) => {
             const s = SPELLS[key];
-            if (s) this._flashNotification(`${s.label}  −${s.cost}✦`, s.colorHex);
+            if (s) this._flashNotification(`${s.label}  −${s.cost}${MANA}`, s.colorHex);
             this._refreshCancelButton();
         });
 
@@ -1445,7 +1445,7 @@ export class UIScene extends Phaser.Scene {
             if (this.heroHintShown) return;
             if (this.gs.tutorial && this.gs.tutorial.active) return;
             this.heroHintShown = true;
-            this._flashNotification('El heroe recoge ✦ sin refinar', '#B388FF');
+            this._flashNotification(`El heroe recoge ${MANA} sin refinar`, '#B388FF');
         });
 
         // ── Elemental match-ups ─────────────────
@@ -1927,7 +1927,7 @@ export class UIScene extends Phaser.Scene {
      * is competing for the same number.
      */
     _buildSpellsTab(container) {
-        container.add(this.add.text(0, -124, `Gastan ${MANA}, el mismo que las mejoras de templo.`, {
+        container.add(new IconText(this, 0, -124, `Gastan ${MANA}, el mismo que las mejoras de templo.`, {
             fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
         }).setOrigin(0.5));
         container.add(this.add.text(0, -110, 'Se apuntan con un click en el mapa.', {
@@ -1945,7 +1945,7 @@ export class UIScene extends Phaser.Scene {
                 .setStrokeStyle(2, s.color));
             container.add(this.add.image(-180, y, safeTexture(this, s.icon, 'mana_mote')));
 
-            container.add(this.add.text(-152, y - 22, spellHeading(key), {
+            container.add(new IconText(this, -152, y - 22, spellHeading(key), {
                 fontFamily: FONT, fontSize: '8px', color: s.colorHex,
             }).setOrigin(0, 0.5));
 
@@ -2004,7 +2004,7 @@ export class UIScene extends Phaser.Scene {
 
         container.add(this.add.rectangle(0, 44, 420, 58, 0x0d0d1c, 0.55)
             .setStrokeStyle(1, 0x22223a));
-        container.add(this.add.text(-196, 26, `COMBO DE ${MANA}`, {
+        container.add(new IconText(this, -196, 26, `COMBO DE ${MANA}`, {
             fontFamily: FONT, fontSize: '8px', color: '#FFD54F',
         }).setOrigin(0, 0.5));
         container.add(this.add.text(-196, 50, [
@@ -2044,7 +2044,7 @@ export class UIScene extends Phaser.Scene {
         }).setOrigin(0, 0.5);
         container.add(this.panelTitle);
 
-        this.panelSubtitle = this.add.text(-132, -120, '', {
+        this.panelSubtitle = new IconText(this, -132, -120, '', {
             fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
         }).setOrigin(0, 0.5);
         container.add(this.panelSubtitle);
@@ -2099,7 +2099,7 @@ export class UIScene extends Phaser.Scene {
         const btnTop = this.add.text(120, y - 11, 'MEJORAR', {
             fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
         }).setOrigin(0.5);
-        const btnCost = this.add.text(120, y + 10, '', {
+        const btnCost = new IconText(this, 120, y + 10, '', {
             fontFamily: FONT, fontSize: '8px', color: '#B388FF',
         }).setOrigin(0.5);
 
@@ -2225,7 +2225,20 @@ export class UIScene extends Phaser.Scene {
      */
     _showTooltip(lines, x, y, originX = 1) {
         this._hideTooltip();
-        this.tooltip = this.add.text(x, y, lines.join('\n'), {
+        const text = lines.join('\n');
+        if (hasManaGlyph(text)) {
+            // Same box as the plain tooltip, drawn by hand so the maná sprite
+            // can sit inside the line it belongs to.
+            const body = new IconText(this, 0, 0, text, {
+                fontFamily: FONT, fontSize: '8px', color: '#ECEFF1', lineSpacing: 7,
+            });
+            const pad = 10, w = body.width + pad * 2, h = body.height + pad * 2;
+            body.setOrigin(0, 0).setPosition(-w * originX + pad, -h / 2 + pad);
+            const bg = this.add.rectangle(0, 0, w, h, 0x0a0a1a, 0.94).setOrigin(originX, 0.5);
+            this.tooltip = this.add.container(x, y, [bg, body]).setDepth(100);
+            return;
+        }
+        this.tooltip = this.add.text(x, y, text, {
             fontFamily: FONT,
             fontSize: '8px',
             color: '#ECEFF1',
@@ -2369,10 +2382,14 @@ export class UIScene extends Phaser.Scene {
         while (this.notifSlots[slot]) slot++;
         this.notifSlots[slot] = true;
 
-        const n = this.add.text(MAP_CX, 34 + slot * 18, text, {
+        const style = {
             fontFamily: FONT, fontSize: '8px', color,
             stroke: '#000000', strokeThickness: 4,
-        }).setOrigin(0.5).setDepth(100);
+        };
+        const n = (hasManaGlyph(text)
+            ? new IconText(this, MAP_CX, 34 + slot * 18, text, style)
+            : this.add.text(MAP_CX, 34 + slot * 18, text, style)
+        ).setOrigin(0.5).setDepth(100);
 
         this.tweens.add({
             targets: n, y: 12 + slot * 18, alpha: 0,
