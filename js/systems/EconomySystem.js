@@ -27,7 +27,7 @@ export class EconomySystem {
             this.addGold(enemy.data.gold ?? 4);
             this._spawnMotes(enemy);
         });
-        scene.events.on('enemy-reached-end', () => this._loseLife());
+        scene.events.on('enemy-reached-end', (enemy) => this._loseLife(enemy?.data?.leak ?? 1));
         scene.events.on('mana-collected', (value) => this.addMana(value));
     }
 
@@ -62,8 +62,8 @@ export class EconomySystem {
     }
 
     // ── Lives ────────────────────────────────────
-    _loseLife() {
-        this.lives = Math.max(0, this.lives - 1);
+    _loseLife(amount = 1) {
+        this.lives = Math.max(0, this.lives - amount);
         this.scene.events.emit('lives-changed', this.lives);
         if (this.lives <= 0) {
             this.scene.events.emit('game-over');

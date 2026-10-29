@@ -28,6 +28,10 @@ export const ENEMY_TYPES = {
  *
  * `title` is the epithet the codex shows; `codex` is the one line under it.
  *
+ * `leak` is how many lives the enemy takes if it walks out of the exit — 1
+ * unless it says otherwise. Bosses take five: one that gets through has to
+ * hurt, or letting it go is cheaper than fighting it.
+ *
  * `gold` is the kill bounty. Since motes became life force that only temples
  * may absorb, this is where the entire building budget comes from — retuning
  * it is retuning the pace of the whole game.
@@ -189,6 +193,7 @@ export const ENEMY_DATA = {
         color: 0xC49A45,
         colorDark: 0x6E4F1B,
         isBoss: true,
+        leak: 5,
         bossSkills: [
             {
                 id: 'earth_slam',
@@ -220,6 +225,7 @@ export const ENEMY_DATA = {
         color: 0xFF4500,
         colorDark: 0x8B0000,
         isBoss: true,
+        leak: 5,
         bossSkills: [
             {
                 id: 'fire_breath',
@@ -251,6 +257,7 @@ export const ENEMY_DATA = {
         color: 0xBA68C8,
         colorDark: 0x4A148C,
         isBoss: true,
+        leak: 5,
         bossSkills: [
             {
                 id: 'shadow_nova',

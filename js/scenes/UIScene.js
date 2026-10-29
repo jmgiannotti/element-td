@@ -1514,6 +1514,9 @@ export class UIScene extends Phaser.Scene {
         on('boss-hp-changed', (boss) => this._onBossHpChanged(boss));
         on('boss-ability-cast', (data) => this._onBossAbilityCast(data));
         on('boss-defeated', (boss) => this._onBossDefeated(boss));
+        on('enemy-reached-end', (enemy) => {
+            if (enemy?.isBoss) this._onBossEscaped(enemy);
+        });
 
         on('game-over', () => {
             this._closeUpgradePanel();
@@ -1663,26 +1666,45 @@ export class UIScene extends Phaser.Scene {
             });
 
             this._flashNotification(`¡${boss.data.name.toUpperCase()} HA SIDO DERROTADO!`, '#4CAF50');
-
-            this.time.delayedCall(1800, () => {
-                // Check if another boss is still alive
-                const remainingBoss = this.gs.enemies.find(e => e.alive && e.isBoss && e !== boss);
-                if (remainingBoss) {
-                    this._onBossSpawned(remainingBoss);
-                } else {
-                    this.tweens.add({
-                        targets: this.bossBarContainer,
-                        y: -50,
-                        duration: 350,
-                        ease: 'Quad.easeIn',
-                        onComplete: () => {
-                            this.bossBarContainer.setVisible(false);
-                            this.activeBoss = null;
-                        },
-                    });
-                }
-            });
+            this._retireBossBar(boss);
         }
+    }
+
+    /**
+     * A boss that walked out of the exit. Its bar used to stay up forever,
+     * reading the health of something no longer on the board; now it says what
+     * happened and what it cost, then comes down like a defeated boss's.
+     */
+    _onBossEscaped(boss) {
+        const cost = boss.data.leak ?? 1;
+        this._flashNotification(
+            `¡${boss.data.name.toUpperCase()} ESCAPO! -${cost} ${cost === 1 ? 'VIDA' : 'VIDAS'}`, '#EF5350'
+        );
+        if (this.activeBoss !== boss) return;
+        this.bossStatusText.setText('¡ESCAPO!').setColor('#EF5350').setVisible(true);
+        this._retireBossBar(boss);
+    }
+
+    /** After a beat, hands the bar to another living boss or slides it away. */
+    _retireBossBar(boss) {
+        this.time.delayedCall(1800, () => {
+            if (this.activeBoss !== boss) return;
+            const remainingBoss = this.gs.enemies.find(e => e.alive && e.isBoss && e !== boss);
+            if (remainingBoss) {
+                this._onBossSpawned(remainingBoss);
+            } else {
+                this.tweens.add({
+                    targets: this.bossBarContainer,
+                    y: -50,
+                    duration: 350,
+                    ease: 'Quad.easeIn',
+                    onComplete: () => {
+                        this.bossBarContainer.setVisible(false);
+                        this.activeBoss = null;
+                    },
+                });
+            }
+        });
     }
 
     // ─── Modal plumbing ─────────────────────────────────
