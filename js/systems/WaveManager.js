@@ -1,4 +1,4 @@
-import { getWaveProfile } from '../data/WaveData.js';
+import { getWaveProfile, LATE_WAVE_HP } from '../data/WaveData.js';
 import { ENEMY_DATA } from '../data/EnemyData.js';
 import { Enemy } from '../entities/Enemy.js';
 
@@ -51,9 +51,9 @@ export class WaveManager {
         this._checkingComplete = false;
         
         // Calculate the exponential difficulty multiplier for Endless Mode
-        this.currentHpMultiplier = this.currentWave > this.totalWaves 
-            ? Math.pow(1.20, this.currentWave - this.totalWaves) 
-            : 1;
+        this.currentHpMultiplier = (this.currentWave > this.totalWaves
+            ? Math.pow(1.20, this.currentWave - this.totalWaves)
+            : 1) * (this.currentWave >= LATE_WAVE_HP.from ? LATE_WAVE_HP.mult : 1);
 
         this.scene.events.emit('wave-started', this.currentWave);
     }

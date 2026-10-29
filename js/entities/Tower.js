@@ -5,7 +5,7 @@ import { safeTexture } from '../systems/TextureGuard.js';
 import { audio } from '../systems/AudioSystem.js';
 
 export class Tower {
-    constructor(scene, col, row, element, paidCost = 0, level = 1) {
+    constructor(scene, col, row, element, paidCost = 0, level = 1, upgradeSpent = 0) {
         this.scene = scene;
         this.col = col;
         this.row = row;
@@ -15,6 +15,10 @@ export class Tower {
         // basis for a refund: hybrids have no list price at all.
         this.paidCost = paidCost;
         this.level = level;
+        // The share of paidCost that went into individual levels. Fusing
+        // hands most of it back (FusionSystem), since the levels themselves
+        // do not survive the merge.
+        this.upgradeSpent = upgradeSpent;
         this.empowered = false;
         this.fusionHint = false;
         this.stunTimer = 0;
@@ -23,6 +27,8 @@ export class Tower {
         this.hasteTimer = 0;
         this._hasteFx = 0;
         this.fireTimer = 0;
+        this.frozenTimer = 0;
+        this.frozenTotal = 0;
         this.alive = true;
         this.totalDamageDealt = 0;
         this.enemiesKilled = 0;
@@ -154,6 +160,15 @@ export class Tower {
     update(delta, enemies) {
         if (!this.alive) return;
 
+        // Frozen solid by a blizzard (Glaciar Quebrado): no shots at all
+        // until the ice gives, and a bar under it says when that will be.
+        if (this.frozenTimer > 0) {
+            this.frozenTimer -= delta;
+            this._layoutIce();
+            if (this.frozenTimer <= 0) this.thaw(false);
+            return;
+        }
+
         if (this.stunTimer > 0) {
             this.stunTimer -= delta;
             if (this.stunGfx) {
@@ -181,6 +196,50 @@ export class Tower {
                 this.fireTimer = rate;
             }
         }
+    }
+
+    get frozen() { return this.frozenTimer > 0; }
+
+    /** Locks the tower in a block of ice for `ms`: it does not fire. */
+    freeze(ms) {
+        if (!this.alive) return;
+        this.frozenTimer = ms;
+        this.frozenTotal = ms;
+        if (!this.iceGfx) {
+            const key = this.scene.textures.exists('fx_iceblock') ? 'fx_iceblock' : 'tile_barricade';
+            this.iceGfx = this.scene.add.image(this.x, this.y, key).setDepth(6).setScale(0.4).setAlpha(0);
+            this.scene.tweens.add({ targets: this.iceGfx, scale: 1, alpha: 1, duration: 220, ease: 'Back.easeOut' });
+            this.iceBarBg = this.scene.add.rectangle(this.x, this.y + 18, 26, 4, 0x0b1a2a, 0.9)
+                .setStrokeStyle(1, 0x7FD0F0).setDepth(27);
+            this.iceBar = this.scene.add.rectangle(this.x - 12, this.y + 18, 24, 2, 0x9FE7FF)
+                .setOrigin(0, 0.5).setDepth(28);
+        }
+        this._layoutIce();
+        this._applyTint();
+    }
+
+    /** `melted`: freed early by a fire tower beside it, rather than run out. */
+    thaw(melted) {
+        this.frozenTimer = 0;
+        if (this.iceGfx && this.scene.particleSystem) {
+            this.scene.particleSystem.emitBurst(this.x, this.y, melted ? 0xFFB74D : 0xE1F5FE);
+        }
+        if (melted && this.scene.floating) {
+            this.scene.floating.show(this.x, this.y - 22, '¡DERRETIDA!', { color: '#FFB74D', size: 7, rise: 12, duration: 800 });
+        }
+        this._clearIce();
+        this._applyTint();
+    }
+
+    _layoutIce() {
+        if (!this.iceBar) return;
+        this.iceBar.width = 24 * Math.max(0, this.frozenTimer / (this.frozenTotal || 1));
+    }
+
+    _clearIce() {
+        if (this.iceGfx) { this.scene.tweens.killTweensOf(this.iceGfx); this.iceGfx.destroy(); this.iceGfx = null; }
+        if (this.iceBarBg) { this.iceBarBg.destroy(); this.iceBarBg = null; }
+        if (this.iceBar) { this.iceBar.destroy(); this.iceBar = null; }
     }
 
     /** EGIDA: +30% attack speed for `ms`. */
@@ -461,7 +520,12 @@ export class Tower {
     /** Single owner of the sprite tint, so the highlights can't clobber each other. */
     _applyTint() {
         if (!this.alive) return;
-        if (this.empowered) {
+        if (this.stunTimer > 0) return; // the stun's grey owns the sprite until it ends
+        if (this.frozen) {
+            // Glaciar Quebrado's blizzard: ice over everything else, since it
+            // is the state that is costing the player shots right now.
+            this.sprite.setTint(0x9FD8FF);
+        } else if (this.empowered) {
             if (this.element === 'storm') {
                 // Storm towers don't use the brownish-gold tint — clean original colors
                 this.sprite.clearTint();
@@ -484,6 +548,7 @@ export class Tower {
         if (!this.alive) return;
         this.level += 1;
         this.paidCost += cost;
+        this.upgradeSpent += cost;
         this.refreshStats();
         this._buildLevelPips();
         this.celebrate();
@@ -570,6 +635,7 @@ export class Tower {
         if (this.sprite) this.sprite.destroy();
         if (this.empowerGfx) this.empowerGfx.destroy();
         if (this.stunGfx) { this.stunGfx.destroy(); this.stunGfx = null; }
+        this._clearIce();
         if (this._sparkTimer) { this._sparkTimer.remove(); this._sparkTimer = null; }
         
         if (this.selected) {

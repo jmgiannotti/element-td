@@ -171,6 +171,12 @@ class AudioSystem {
         this._tone({ type: 'sine', freq: 1046, dur: 0.09, gain: 0.07, delay: 0.07 });
     }
 
+    _coin() {
+        // Two bright pings a fifth apart: money coming back, not money spent.
+        this._tone({ type: 'square', freq: 988, dur: 0.06, gain: 0.07 });
+        this._tone({ type: 'square', freq: 1319, dur: 0.14, gain: 0.07, delay: 0.06 });
+    }
+
     _temple() {
         // Heavier than a tower: a temple is the expensive build.
         this._tone({ type: 'triangle', freq: 160, to: 80, dur: 0.3, gain: 0.18 });

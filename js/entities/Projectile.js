@@ -1,5 +1,6 @@
 import * as Phaser from 'phaser';
 import { effectOf, effectMultiplier } from '../data/Elements.js';
+import { CHAIN_FALLOFF } from '../data/TowerData.js';
 
 export class Projectile {
     static pool = [];
@@ -126,11 +127,11 @@ export class Projectile {
                 // ── Legendary ──
                 case 'chainFreeze':
                     this._chill(this.target);
-                    this._doChain((e) => this._chill(e));
+                    this._doChain((e, share) => this._chill(e, share));
                     break;
                 case 'chainBurn':
                     this._scorch(this.target);
-                    this._doChain((e) => this._scorch(e));
+                    this._doChain((e, share) => this._scorch(e, share));
                     break;
                 case 'shatter':
                     this._doSplash(0.5);
@@ -148,16 +149,19 @@ export class Projectile {
         this.destroy();
     }
 
-    /** Ventisca: a chance to lock each enemy the bolt passes through. */
-    _chill(enemy) {
-        if (enemy.alive && Math.random() < this.towerData.freezeChance) {
+    /**
+     * Ventisca: a chance to lock each enemy the bolt passes through — smaller
+     * down the chain, by the same falloff as the damage.
+     */
+    _chill(enemy, share = 1) {
+        if (enemy.alive && Math.random() < this.towerData.freezeChance * share) {
             enemy.applyFreeze(this.towerData.freezeMs);
         }
     }
 
     /** Tormenta de Ceniza / Geiser: every enemy touched keeps burning. */
-    _scorch(enemy) {
-        if (enemy.alive) enemy.applyBurn(this.towerData.burnDps, 3000, this.sourceTower);
+    _scorch(enemy, share = 1) {
+        if (enemy.alive) enemy.applyBurn(this.towerData.burnDps * share, 3000, this.sourceTower);
     }
 
     _doSplash(share = 0.4, onHit = null) {
@@ -177,11 +181,16 @@ export class Projectile {
         }
     }
 
+    /**
+     * Bounces from the struck enemy to the next within reach, up to the
+     * tower's chain length. Bounce `n` deals CHAIN_FALLOFF[n] of the shot, so
+     * a chain thins out instead of sweeping a whole wave at full strength.
+     */
     _doChain(onHit = null) {
         let remaining = this.towerData.specialValue - 1;
         let lastX = this.target.x;
         let lastY = this.target.y;
-        let chainDmg = this.damage * 0.5;
+        let bounce = 1;
         const hit = new Set([this.target]);
 
         for (const enemy of this.scene.enemies) {
@@ -189,9 +198,10 @@ export class Projectile {
             if (!enemy.alive || hit.has(enemy)) continue;
             const d = Phaser.Math.Distance.Between(lastX, lastY, enemy.x, enemy.y);
             if (d <= 90) {
+                const share = CHAIN_FALLOFF[Math.min(bounce, CHAIN_FALLOFF.length - 1)];
                 const effect = effectOf(this.towerData.element, enemy.data);
-                enemy.takeDamage(chainDmg * effectMultiplier(effect), { effect, source: this.sourceTower });
-                if (onHit) onHit(enemy);
+                enemy.takeDamage(this.damage * share * effectMultiplier(effect), { effect, source: this.sourceTower });
+                if (onHit) onHit(enemy, share);
                 // Visual chain line, in the tower's own colour
                 const line = this.scene.add.line(
                     0, 0, lastX, lastY, enemy.x, enemy.y, this.towerData.color ?? 0xFFD54F, 0.7
@@ -201,7 +211,7 @@ export class Projectile {
                 hit.add(enemy);
                 lastX = enemy.x;
                 lastY = enemy.y;
-                chainDmg *= 0.6;
+                bounce++;
                 remaining--;
             }
         }

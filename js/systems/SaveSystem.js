@@ -61,6 +61,7 @@ export class SaveSystem {
 
         let heroData = null;
         let towersToSave, templesToSave, barricadesToSave, breakableBlocksToSave, templeLevelsToSave;
+        let overchargeToSave, mapStateToSave;
 
         if (gameScene.waveManager.waveActive && gameScene.waveStartCheckpoint) {
             // Mid-wave save: checkpoint is the EXACT START of the current wave.
@@ -84,6 +85,8 @@ export class SaveSystem {
             barricadesToSave = cp.barricades || [];
             breakableBlocksToSave = cp.breakableBlocks || [];
             templeLevelsToSave = cp.templeLevels || {};
+            overchargeToSave = cp.templeOvercharge || {};
+            mapStateToSave = cp.mapState ?? null;
         } else {
             // Prep phase (between waves) or post-wave save:
             currentWave = gameScene.waveManager.currentWave;
@@ -107,6 +110,7 @@ export class SaveSystem {
                     element: t.element,
                     paid: t.paidCost,
                     level: t.level || 1,
+                    upg: t.upgradeSpent || 0,
                     damageDealt: t.totalDamageDealt || 0,
                     kills: t.enemiesKilled || 0,
                 }));
@@ -121,7 +125,9 @@ export class SaveSystem {
                 const [c, r] = key.split(',').map(Number);
                 return { col: c, row: r, hp };
             });
-            templeLevelsToSave = { ...gameScene.templeSystem.levels };
+            templeLevelsToSave = SaveSystem.copyLevels(gameScene.templeSystem.levels);
+            overchargeToSave = { ...gameScene.templeSystem.overcharge };
+            mapStateToSave = gameScene.mapEvents ? gameScene.mapEvents.serialize() : null;
         }
 
         const data = {
@@ -140,6 +146,10 @@ export class SaveSystem {
             barricades: barricadesToSave,
             breakableBlocks: breakableBlocksToSave,
             templeLevels: templeLevelsToSave,
+            // Sobrecarga purchases and the map's own state (MapEventSystem).
+            // Both optional: saves from before them load with neither.
+            templeOvercharge: overchargeToSave,
+            mapState: mapStateToSave,
         };
 
         try {
@@ -168,7 +178,13 @@ export class SaveSystem {
 
             // 3. Restore TempleSystem upgrade levels
             if (data.templeLevels) {
-                gameScene.templeSystem.levels = { ...data.templeLevels };
+                gameScene.templeSystem.levels = SaveSystem.copyLevels(data.templeLevels);
+            }
+            if (data.templeOvercharge) {
+                gameScene.templeSystem.overcharge = { ...data.templeOvercharge };
+            }
+            if (data.mapState && gameScene.mapEvents) {
+                gameScene.mapEvents.restore(data.mapState);
             }
 
             // 4. Restore Hero
@@ -210,6 +226,9 @@ export class SaveSystem {
                     const key = `${b.col},${b.row}`;
                     if (gameScene.breakableBlocks.has(key)) {
                         gameScene.breakableBlocks.set(key, b.hp);
+                    } else if (gameScene.gridSystem.grid[b.row]?.[b.col] === TILE.PATH) {
+                        // One the level did not start with: a meteor's rock.
+                        gameScene.addBlock(b.col, b.row, b.hp);
                     }
                 }
             }
@@ -230,7 +249,7 @@ export class SaveSystem {
             }
             if (data.towers) {
                 for (const t of data.towers) {
-                    const tower = new Tower(gameScene, t.col, t.row, t.element, t.paid ?? 20, t.level ?? 1);
+                    const tower = new Tower(gameScene, t.col, t.row, t.element, t.paid ?? 20, t.level ?? 1, t.upg ?? 0);
                     tower.totalDamageDealt = t.damageDealt || 0;
                     tower.enemiesKilled = t.kills || 0;
                     tower.sprite.setScale(1);
@@ -260,6 +279,11 @@ export class SaveSystem {
             console.error('[SaveSystem] Error al cargar partida:', e);
             return false;
         }
+    }
+
+    /** Temple levels copied one level deep — each element's counters too. */
+    static copyLevels(levels) {
+        return Object.fromEntries(Object.entries(levels || {}).map(([el, l]) => [el, { ...l }]));
     }
 
     static clearSave() {

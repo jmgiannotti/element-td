@@ -41,6 +41,12 @@ export class Enemy {
         this.burnDps = 0;
         this.burnTimer = 0;
         this.burnTick = 0;
+        // A crypt pillar's ward (MapEventSystem): soaks damage before health.
+        this.shield = 0;
+        this.shieldTimer = 0;
+        this.shieldGfx = null;
+        this.shieldBar = null;
+        this.shieldMax = 0;
 
         // ── Agro ────────────────────────────────
         // See EnemyData: most enemies have no `agro` and never read any of this.
@@ -107,7 +113,11 @@ export class Enemy {
             this.hpOffsetY = (this.sprite.height > 32) ? Math.round(this.sprite.height / 2 + 6) : 21;
             this.hpBg = scene.add.rectangle(this.sprite.x, this.sprite.y - this.hpOffsetY, 26, 4, 0x1a1a1a, 0.8);
             this.hpBg.setStrokeStyle(1, 0x333333).setDepth(11);
-            this.hpFill = scene.add.rectangle(this.sprite.x, this.sprite.y - this.hpOffsetY, 24, 2, 0x4CAF50).setDepth(12);
+            // Anchored at its left end: Phaser fixes a shape's pivot from the
+            // width it was made with, so a centred bar that shrinks drifts out
+            // past the left of its frame instead of emptying toward it.
+            this.hpFill = scene.add.rectangle(this.sprite.x - 12, this.sprite.y - this.hpOffsetY, 24, 2, 0x4CAF50)
+                .setOrigin(0, 0.5).setDepth(12);
 
             // Listen for path changes
             this.pathChangeHandler = () => this.recalculatePath();
@@ -165,6 +175,11 @@ export class Enemy {
 
     update(_time, delta) {
         if (!this.alive || !this.path) return;
+
+        if (this.shieldTimer > 0) {
+            this.shieldTimer -= delta;
+            if (this.shieldTimer <= 0) this._dropShield();
+        }
 
         // ── Status effects ──────────────────────
         if (this.frozen) {
@@ -562,18 +577,36 @@ export class Enemy {
     }
 
     _updateHpBar() {
+        if (this.shieldGfx) this.shieldGfx.setPosition(this.x, this.y);
         if (!this.hpBg) return;
         const pct = Math.max(0, this.hp / this.maxHp);
         const offY = this.hpOffsetY || 21;
         this.hpBg.x = this.x;
         this.hpBg.y = this.y - offY;
         this.hpFill.width = 24 * pct;
-        this.hpFill.x = this.x - (24 * (1 - pct)) / 2;
+        this.hpFill.x = this.x - 12;
         this.hpFill.y = this.y - offY;
 
         if (pct > 0.6) this.hpFill.fillColor = 0x4CAF50;
-        else if (pct > 0.3) this.hpFill.fillColor = 0xFFC107;
+        // Orange, not amber: yellow on this bar means a crypt ward (below).
+        else if (pct > 0.3) this.hpFill.fillColor = 0xFF8F1F;
         else this.hpFill.fillColor = 0xEF5350;
+
+        // The ward, in yellow, inside the same 24px frame: it starts where the
+        // green ends and runs right; whatever does not fit there sits over the
+        // end of the green instead. As it is spent it shrinks from both ends
+        // toward the end of the green, which is where it ran out from.
+        if (this.shieldBar) {
+            const left = this.x - 12;
+            const greenEnd = 24 * pct;
+            const full = 24 * Math.min(1, this.shieldMax / this.maxHp);
+            const after = Math.min(full, 24 - greenEnd);
+            const over = full - after;
+            const k = this.shieldMax > 0 ? Math.max(0, this.shield / this.shieldMax) : 0;
+            const x0 = greenEnd - over * k;
+            this.shieldBar.width = Math.max(0, (after + over) * k);
+            this.shieldBar.setPosition(left + x0, this.y - offY);
+        }
     }
 
     /**
@@ -587,6 +620,23 @@ export class Enemy {
     takeDamage(amount, opts = {}) {
         if (!this.alive) return;
         const { silent = false, effect = EFFECT.NORMAL, showNumber = !silent, source = null } = opts;
+
+        if (this.shield > 0) {
+            const absorbed = Math.min(this.shield, amount);
+            this.shield -= absorbed;
+            amount -= absorbed;
+            if (this.shield <= 0) this._dropShield(true);
+            if (amount <= 0) {
+                // Fully soaked: said in the ward's violet, so it does not read
+                // as the tower missing.
+                if (showNumber && this.scene.floating && this.sprite) {
+                    this.scene.floating.show(this.x, this.y - 17, `${Math.round(absorbed)}`, {
+                        color: '#FFE082', size: 8, rise: 10, duration: 550,
+                    });
+                }
+                return;
+            }
+        }
 
         this.hp -= amount;
 
@@ -654,6 +704,52 @@ export class Enemy {
         return true;
     }
 
+    /**
+     * A temporary ward worth `amount` health, for `ms`. Not stacked: a second
+     * pulse tops it up to the larger of the two and restarts the clock.
+     */
+    grantShield(amount, ms) {
+        if (!this.alive || amount <= 0) return;
+        this.shield = Math.max(this.shield, amount);
+        this.shieldMax = Math.max(this.shieldMax, this.shield);
+        this.shieldTimer = ms;
+        if (!this.shieldGfx) {
+            // A bubble, not an outline: filled, thick-rimmed and breathing,
+            // so a warded enemy stands out in a crowd.
+            const r = this.sprite && this.sprite.height > 32 ? 28 : 16;
+            this.shieldGfx = this.scene.add.circle(this.x, this.y, r, 0xFFD54F, 0.2)
+                .setStrokeStyle(2, 0xFFE082, 1).setDepth(11);
+            this.scene.tweens.add({
+                targets: this.shieldGfx, scale: 1.12, fillAlpha: 0.1,
+                duration: 420, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+            });
+            this.shieldBar = this.scene.add.rectangle(this.x, this.y, 0, 2, 0xFFE04A)
+                .setOrigin(0, 0.5).setDepth(12.5);
+        }
+        this._updateHpBar();
+    }
+
+    /** `broken`: knocked off by damage rather than run out — it shatters. */
+    _dropShield(broken = false) {
+        if (broken && this.shieldGfx && this.scene.particleSystem) {
+            this.scene.particleSystem.emitBurst(this.x, this.y, 0xFFD54F);
+            const ring = this.scene.add.circle(this.x, this.y, this.shieldGfx.radius, 0xFFD54F, 0)
+                .setStrokeStyle(2, 0xFFF3C4, 1).setDepth(11);
+            this.scene.tweens.add({
+                targets: ring, scale: 1.8, alpha: 0, duration: 260, onComplete: () => ring.destroy(),
+            });
+        }
+        this.shield = 0;
+        this.shieldMax = 0;
+        this.shieldTimer = 0;
+        if (this.shieldGfx) {
+            this.scene.tweens.killTweensOf(this.shieldGfx);
+            this.shieldGfx.destroy();
+            this.shieldGfx = null;
+        }
+        if (this.shieldBar) { this.shieldBar.destroy(); this.shieldBar = null; }
+    }
+
     applySlow(amount, duration) {
         this.slowAmount = Math.max(this.slowAmount, amount);
         this.slowTimer = Math.max(this.slowTimer, duration);
@@ -688,6 +784,8 @@ export class Enemy {
             this.agroRing.destroy(); 
             this.agroRing = null; 
         }
+
+        this._dropShield();
 
         if (this.isBoss) {
             this.scene.events.emit('boss-defeated', this);
@@ -724,6 +822,7 @@ export class Enemy {
     _reachExit() {
         this.alive = false;
         this.reachedEnd = true;
+        this._dropShield();
         if (this.pathChangeHandler) {
             this.scene.events.off('path-changed', this.pathChangeHandler);
             this.pathChangeHandler = null;
@@ -781,6 +880,7 @@ export class Enemy {
         this.burnTimer = 0;
         this.burnTick = 0;
         this.burnSource = null;
+        this._dropShield();
 
         this.agro = this.data.agro ?? null;
         this.mode = 'road';
@@ -845,7 +945,7 @@ export class Enemy {
             .setActive(true)
             .setVisible(true);
             
-        this.hpFill.setPosition(this.sprite.x, this.sprite.y - this.hpOffsetY)
+        this.hpFill.setPosition(this.sprite.x - 12, this.sprite.y - this.hpOffsetY)
             .setAlpha(1)
             .setScale(1)
             .setActive(true)

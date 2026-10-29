@@ -32,6 +32,11 @@ export const ENEMY_TYPES = {
  * unless it says otherwise. Bosses take five: one that gets through has to
  * hurt, or letting it go is cheaper than fighting it.
  *
+ * `speed` is world pixels a second. The four standard enemies were sped up by
+ * ~13% alongside the slower tower cadence (TowerData): less time in range per
+ * tile is what stops a small corner of towers from holding the whole road.
+ * Bosses kept their pace — their fight is the telegraphs, not the walk.
+ *
  * `gold` is the kill bounty. Since motes became life force that only temples
  * may absorb, this is where the entire building budget comes from — retuning
  * it is retuning the pace of the whole game.
@@ -95,7 +100,7 @@ export const ENEMY_DATA = {
         title: 'Cuajo',
         codex: 'Fuego fatuo que nadie bebio, cuajado.',
         hp: 30,
-        speed: 55,
+        speed: 63,
         element: 'water',
         weakness: ['fire', 'lava'],
         resistance: [],
@@ -109,7 +114,7 @@ export const ENEMY_DATA = {
         title: 'Sillar',
         codex: 'Un bloque del templo caido, en pie.',
         hp: 80,
-        speed: 32,
+        speed: 36,
         element: 'earth',
         weakness: ['water', 'mud'],
         resistance: ['earth'],
@@ -140,7 +145,7 @@ export const ENEMY_DATA = {
         title: 'Velador',
         codex: 'Un vigia que murio sin soltar el farol.',
         hp: 40,
-        speed: 85,
+        speed: 97,
         element: 'air',
         weakness: ['earth', 'storm'],
         resistance: ['air'],
@@ -169,7 +174,7 @@ export const ENEMY_DATA = {
         title: 'Ascua',
         codex: 'Lo que dormia bajo el templo de fuego.',
         hp: 200,
-        speed: 40,
+        speed: 45,
         element: 'fire',
         weakness: ['water', 'ice'],
         resistance: ['fire', 'lava'],

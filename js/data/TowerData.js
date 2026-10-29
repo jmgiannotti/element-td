@@ -74,6 +74,14 @@ export function fusionResult(a, b) {
  * Keeping them literally equal is what stops the sidebar swatch, the range
  * ring, the temple field and the sprite from being four slightly different
  * blues.
+ *
+ * ── Balance (Paso 4) ─────────────────────────────────────
+ * Every `fireRate` is 1.4× what it was (−29% shots a second), so a wave walks
+ * on between volleys and a corner of eight towers cannot hold it alone. The
+ * heavy hitters — Tierra, Fuego, Lava, Obsidiana — got +15% a hit back, so
+ * each shot lands with weight. Legendaries were raised until each sits at
+ * roughly 1.7–2.3× the DPS of the better hybrid it came from: a Tier 3 has to
+ * be worth the two towers it eats.
  */
 export const TOWER_DATA = {
     // ── Pure Elements ──────────────────────────
@@ -82,7 +90,7 @@ export const TOWER_DATA = {
         element: ELEMENTS.WATER,
         damage: 8,
         range: 120,
-        fireRate: 800,
+        fireRate: 1120,
         cost: 25,
         special: 'slow',
         specialValue: 0.2,
@@ -98,7 +106,7 @@ export const TOWER_DATA = {
         element: ELEMENTS.AIR,
         damage: 5,
         range: 150,
-        fireRate: 500,
+        fireRate: 700,
         cost: 25,
         special: 'none',
         specialValue: 0,
@@ -112,9 +120,9 @@ export const TOWER_DATA = {
     [ELEMENTS.FIRE]: {
         name: 'Fuego',
         element: ELEMENTS.FIRE,
-        damage: 15,
+        damage: 17,
         range: 100,
-        fireRate: 1200,
+        fireRate: 1680,
         cost: 30,
         special: 'splash',
         specialValue: 50,
@@ -128,9 +136,9 @@ export const TOWER_DATA = {
     [ELEMENTS.EARTH]: {
         name: 'Tierra',
         element: ELEMENTS.EARTH,
-        damage: 12,
+        damage: 14,
         range: 90,
-        fireRate: 1000,
+        fireRate: 1400,
         cost: 20,
         special: 'pierce',
         specialValue: 0,
@@ -148,7 +156,7 @@ export const TOWER_DATA = {
         element: HYBRIDS.ICE,
         damage: 18,
         range: 140,
-        fireRate: 900,
+        fireRate: 1260,
         cost: 0,
         special: 'freeze',
         specialValue: 1500,
@@ -164,7 +172,7 @@ export const TOWER_DATA = {
         element: HYBRIDS.STORM,
         damage: 25,
         range: 160,
-        fireRate: 600,
+        fireRate: 840,
         cost: 0,
         special: 'chain',
         specialValue: 3,
@@ -178,9 +186,9 @@ export const TOWER_DATA = {
     [HYBRIDS.LAVA]: {
         name: 'Lava',
         element: HYBRIDS.LAVA,
-        damage: 35,
+        damage: 40,
         range: 110,
-        fireRate: 1400,
+        fireRate: 1960,
         cost: 0,
         special: 'burn',
         specialValue: 5,
@@ -196,7 +204,7 @@ export const TOWER_DATA = {
         element: HYBRIDS.MUD,
         damage: 10,
         range: 130,
-        fireRate: 700,
+        fireRate: 980,
         cost: 0,
         special: 'aoeSlow',
         specialValue: 0.4,
@@ -215,9 +223,9 @@ export const TOWER_DATA = {
     [LEGENDARIES.BLIZZARD]: {
         name: 'Ventisca',
         element: LEGENDARIES.BLIZZARD,
-        damage: 30,
+        damage: 48,
         range: 165,
-        fireRate: 650,
+        fireRate: 910,
         cost: 0,
         special: 'chainFreeze',
         specialValue: 4,
@@ -234,9 +242,9 @@ export const TOWER_DATA = {
     [LEGENDARIES.ASHSTORM]: {
         name: 'Tormenta de Ceniza',
         element: LEGENDARIES.ASHSTORM,
-        damage: 38,
+        damage: 54,
         range: 160,
-        fireRate: 700,
+        fireRate: 980,
         cost: 0,
         special: 'chainBurn',
         specialValue: 4,
@@ -252,9 +260,9 @@ export const TOWER_DATA = {
     [LEGENDARIES.OBSIDIAN]: {
         name: 'Obsidiana',
         element: LEGENDARIES.OBSIDIAN,
-        damage: 90,
+        damage: 150,
         range: 135,
-        fireRate: 1500,
+        fireRate: 2100,
         cost: 0,
         special: 'shatter',
         specialValue: 56,
@@ -270,9 +278,9 @@ export const TOWER_DATA = {
     [LEGENDARIES.GLACIER]: {
         name: 'Glaciar',
         element: LEGENDARIES.GLACIER,
-        damage: 26,
+        damage: 46,
         range: 140,
-        fireRate: 1300,
+        fireRate: 1820,
         cost: 0,
         special: 'aoeFreeze',
         specialValue: 900,
@@ -288,9 +296,9 @@ export const TOWER_DATA = {
     [LEGENDARIES.GEYSER]: {
         name: 'Geiser',
         element: LEGENDARIES.GEYSER,
-        damage: 50,
+        damage: 72,
         range: 125,
-        fireRate: 1400,
+        fireRate: 1960,
         cost: 0,
         special: 'aoeBurn',
         specialValue: 64,
@@ -306,9 +314,9 @@ export const TOWER_DATA = {
     [LEGENDARIES.ANCESTRAL]: {
         name: 'Templo Ancestral',
         element: LEGENDARIES.ANCESTRAL,
-        damage: 42,
+        damage: 58,
         range: 150,
-        fireRate: 800,
+        fireRate: 1120,
         cost: 0,
         special: 'none',
         specialValue: 0,
@@ -324,23 +332,37 @@ export const TOWER_DATA = {
 };
 
 /**
+ * What each successive target of a chain (Tormenta, Ventisca, Tormenta de
+ * Ceniza) takes of the shot: the first is the shot itself, every bounce after
+ * keeps less. The burn and freeze a chain carries fall off the same way.
+ */
+export const CHAIN_FALLOFF = [1, 0.5, 0.3, 0.18];
+
+/**
  * Configuration and exponential scaling formula for individual tower upgrades with gold.
  * US 8.1 (Sumidero de Oro en Oleadas Tardías).
+ *
+ * The bonus per level is modest and the price climbs hard from level 4 on, so
+ * a level 8 tower is a luxury and never the cheap way round building more
+ * towers or fusing up to Tier 3.
  */
 export const TOWER_UPGRADE = {
     MAX_LEVEL: 10,
-    DAMAGE_STEP: 0.25, // +25% base damage per level above 1
-    RANGE_STEP: 0.08,   // +8% base range per level above 1
+    DAMAGE_STEP: 0.15, // +15% base damage per level above 1
+    RANGE_STEP: 0.05,   // +5% base range per level above 1
     EXP_BASE: 1.5,      // Exponential scaling factor
+    STEEP_FROM: 4,      // From this level on, every step also costs ×STEEP_BASE more
+    STEEP_BASE: 1.6,
 
     /**
      * Calculates the gold cost to upgrade a tower from currentLevel to currentLevel + 1.
-     * @param {string} element 
-     * @param {number} currentLevel 
+     * @param {string} element
+     * @param {number} currentLevel
      * @returns {number}
      */
     costFor(element, currentLevel) {
         const base = TOWER_DATA[element]?.cost > 0 ? TOWER_DATA[element].cost : 50;
-        return Math.round(base * Math.pow(this.EXP_BASE, currentLevel));
+        const steep = Math.pow(this.STEEP_BASE, Math.max(0, currentLevel - this.STEEP_FROM + 1));
+        return Math.round(base * Math.pow(this.EXP_BASE, currentLevel) * steep);
     },
 };

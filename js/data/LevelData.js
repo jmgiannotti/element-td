@@ -18,6 +18,9 @@
  *    the longer note.
  *  · 'city' maps: houses fill the top row, so it carries no road; `townBlocks`
  *    are short rows of houses set into the board (see Terrain.townProps).
+ *  · `mechanics` are the map's own rules — stall income, plugs that go down
+ *    on a given wave, a blizzard, warding pillars. MapEventSystem documents
+ *    and runs them; a map without the field plays by the base rules.
  */
 
 // Map 1 — the original board.
@@ -119,6 +122,16 @@ export const MAP_2 = {
         { col: 15, row: 8, w: 3 },
         { col: 1, row: 12, w: 3 },
     ],
+    // The stalls fill with gold after every wave they survive, and Vesper has
+    // to walk over to collect it; on waves 8 and 14 the enemies blow one line
+    // of crates each, opening the short way for good.
+    mechanics: {
+        stallGold: 10, stallCap: 50, collectRadius: 40,
+        breaches: [
+            { wave: 8, block: 0, cause: 'blast' },
+            { wave: 14, block: 1, cause: 'blast' },
+        ],
+    },
     initialGold: 110,
     initialLives: 20,
 };
@@ -183,6 +196,17 @@ export const MAP_3 = {
         { col: 9, row: 5, element: 'fire' },
         { col: 10, row: 10, element: 'earth' },
     ],
+    // From wave 4 the volcano throws meteors, a volley every few seconds:
+    // rocks on the road reshape the rings wave by wave, and towers caught
+    // under one are stunned. On wave 10 it erupts — the first two meteors
+    // blow the top plug open — and from then on it never really stops.
+    mechanics: {
+        meteors: {
+            from: 4, every: 8000, everyLate: 6000, count: 3,
+            eruption: { wave: 10, count: 8, plug: 0 },
+            rockHp: 80, rockCap: 14, enemyDamage: 60, heroDamage: 25, stunMs: 3000,
+        },
+    },
     // Barricades are the point of this map, so the purse leaves room for them.
     initialGold: 130,
     initialLives: 20,
@@ -231,6 +255,16 @@ export const MAP_4 = {
         { col: 17, row: 5, element: 'fire' },
         { col: 2, row: 9, element: 'earth' },
     ],
+    // Every 35s of a wave the blizzard freezes half the exposed towers solid
+    // for 5s — they do not fire. Fire-bearing towers and whatever stands next
+    // to one never freeze, and a fire tower melts a frozen neighbour out:
+    // that is what the fire seal on the flank is for.
+    mechanics: {
+        blizzard: {
+            every: 35000, duration: 5000, share: 0.5, warmRadius: 1,
+            warm: ['fire', 'lava', 'storm', 'ashstorm', 'geyser', 'obsidian', 'ancestral'],
+        },
+    },
     initialGold: 110,
     initialLives: 20,
 };
@@ -284,6 +318,12 @@ export const MAP_5 = {
         { col: 7, row: 10, element: 'air' },
         { col: 12, row: 4, element: 'air' },
     ],
+    // While a pillar stands it wards whatever walks past it: every 10s,
+    // enemies within two cells get a shield of 15% of their max health.
+    // Breaking the pillars is how the crypt gets easier.
+    mechanics: {
+        darkPulse: { every: 10000, radius: 2, shield: 0.15, shieldMs: 5000 },
+    },
     initialGold: 150,
     initialLives: 15,
 };

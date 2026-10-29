@@ -7,6 +7,7 @@ import { FusionSystem } from '../systems/FusionSystem.js';
 import { TempleSystem } from '../systems/TempleSystem.js';
 import { BarricadeSystem } from '../systems/BarricadeSystem.js';
 import { SealSystem } from '../systems/SealSystem.js';
+import { MapEventSystem } from '../systems/MapEventSystem.js';
 import { BARRICADE_ENCHANTS, ENCHANT_ORDER, enchantCostLabel } from '../data/BarricadeData.js';
 import { RouteView } from '../systems/RouteView.js';
 import { FloatingText } from '../systems/FloatingText.js';
@@ -92,6 +93,9 @@ export class GameScene extends Phaser.Scene {
         this.manaMotes = [];
         this.occupiedCells = new Set();
         this.breakableBlocks = new Map();
+        // The market's stalls on a 'city' board: { sprite, x, y, intact }.
+        // MapEventSystem pays for the intact ones and wrecks them.
+        this.stalls = [];
         // 'c,r' → gold paid. Barricades are decor plus a grid flag rather than
         // entities, so their price has to be remembered somewhere.
         this.barricades = new Map();
@@ -374,6 +378,7 @@ export class GameScene extends Phaser.Scene {
             this.input.keyboard.removeAllListeners();
             if (this.barricadeSystem) this.barricadeSystem.destroy();
             if (this.sealSystem) this.sealSystem.destroy();
+            if (this.mapEvents) this.mapEvents.destroy();
             for (const s of this.sentinels || []) s.destroy();
             this.sentinels = [];
             if (this.particleSystem) {
@@ -418,6 +423,7 @@ export class GameScene extends Phaser.Scene {
                     element: t.element,
                     paid: t.paidCost,
                     level: t.level || 1,
+                    upg: t.upgradeSpent || 0,
                     damageDealt: t.totalDamageDealt || 0,
                     kills: t.enemiesKilled || 0,
                 })),
@@ -430,7 +436,11 @@ export class GameScene extends Phaser.Scene {
                     const [c, r] = key.split(',').map(Number);
                     return { col: c, row: r, hp };
                 }),
-                templeLevels: { ...this.templeSystem.levels },
+                // Copied a level deep: an upgrade bought mid-wave mutates the
+                // inner objects, and a checkpoint must not move with it.
+                templeLevels: SaveSystem.copyLevels(this.templeSystem.levels),
+                templeOvercharge: { ...this.templeSystem.overcharge },
+                mapState: this.mapEvents ? this.mapEvents.serialize() : null,
             };
         });
         onCustom('gold-changed', () => {
@@ -460,6 +470,12 @@ export class GameScene extends Phaser.Scene {
             this.waveStartCheckpoint = null;
             SaveSystem.clearSave();
         });
+
+        // ── Map mechanics ───────────────────────
+        // After the checkpoint handler above, so a wave that knocks a plug
+        // down at its start is checkpointed with the plug still standing; and
+        // before the save is loaded, which restores its state.
+        this.mapEvents = new MapEventSystem(this);
 
         // ── Load Saved Game (if continuing) ─────
         let loaded = false;
@@ -559,9 +575,12 @@ export class GameScene extends Phaser.Scene {
     _renderProps() {
         if (!BIOMES[this.biome].town) return;
         for (const p of townProps(this.gridSystem)) {
-            this.add.image(p.x, p.y, safeTexture(this, p.key, 'tile_barricade'))
+            const img = this.add.image(p.x, p.y, safeTexture(this, p.key, 'tile_barricade'))
                 .setOrigin(0, 0).setDepth(D_DECOR);
             for (const cell of p.cells) this.occupiedCells.add(cell);
+            if (p.key.startsWith('town_stall_')) {
+                this.stalls.push({ sprite: img, x: p.x + TILE_SIZE / 2, y: p.y + TILE_SIZE / 2, intact: true });
+            }
         }
     }
 
@@ -844,12 +863,15 @@ export class GameScene extends Phaser.Scene {
             lines.push(`DMG ${Math.round(t.damage)}   RNG ${Math.round(t.range)}`);
             lines.push(`${t.shotsPerSecond.toFixed(2)}/s   ${t.data.specialDesc}`);
             lines.push(`Daño: ${Math.round(t.totalDamageDealt || 0)}  ·  Bajas: ${t.enemiesKilled || 0}`);
+            const over = ts ? ts.overchargeOf(t.element) : 0;
             lines.push(
                 templeLvl > 0
                     ? TRACK_ORDER.map(tr => `${TRACK_SHORT[tr]} ${ts.levelOf(t.element, tr)}`).join('  ')
+                        + (over > 0 ? `  SOB ${over}` : '')
                     : 'sin mejoras de templo'
             );
             if (t.empowered) lines.push('potenciada por el heroe');
+            if (t.frozen) lines.push('congelada: no dispara');
             const seal = this.sealSystem.bonusLabel(t.col, t.row, t.element);
             if (seal) lines.push(seal);
 
@@ -1382,6 +1404,7 @@ export class GameScene extends Phaser.Scene {
         // Enchanted barricades, after the enemies have moved this frame
         this.barricadeSystem.update(delta);
         this.sealSystem.update(delta);
+        this.mapEvents.update(delta);
 
         // Temples, then the motes: a temple whose shutdown expires this frame
         // should be drinking again on this frame, not on the next one.
@@ -1438,10 +1461,7 @@ export class GameScene extends Phaser.Scene {
         if (!this.breakableBlocks.has(key)) return;
         const hp = this.breakableBlocks.get(key) - amount;
         if (hp <= 0) {
-            this.breakableBlocks.delete(key);
-            this.gridSystem.grid[row][col] = TILE.PATH;
-            this._setDecor(col, row, null);
-            this._repaintArea(col, row);
+            this._clearBlock(col, row);
             this.cameras.main.shake(100, 0.005);
             this.events.emit('path-changed');
         } else {
@@ -1454,6 +1474,40 @@ export class GameScene extends Phaser.Scene {
                 });
             }
         }
+    }
+
+    /**
+     * Knocks down several blocks at once — a map event opening a plug — and
+     * re-routes once for all of them rather than once a block.
+     */
+    breakBlocks(cells) {
+        let any = false;
+        for (const { col, row } of cells) {
+            if (!this.breakableBlocks.has(`${col},${row}`)) continue;
+            this._clearBlock(col, row);
+            any = true;
+        }
+        if (any) this.events.emit('path-changed');
+    }
+
+    /**
+     * A new breakable block where there was road — a meteor's rock on the
+     * Caldera. The caller re-routes (path-changed) once it is done.
+     */
+    addBlock(col, row, hp) {
+        const key = `${col},${row}`;
+        this.breakableBlocks.set(key, hp);
+        this.gridSystem.grid[row][col] = TILE.BREAKABLE;
+        this._repaintArea(col, row);
+        this._setDecor(col, row, breakableKey(this.biome, col, row));
+        this.events.emit('path-changed');
+    }
+
+    _clearBlock(col, row) {
+        this.breakableBlocks.delete(`${col},${row}`);
+        this.gridSystem.grid[row][col] = TILE.PATH;
+        this._setDecor(col, row, null);
+        this._repaintArea(col, row);
     }
 
     // ─── Spend tracking for Checkpoint Saves ───────────

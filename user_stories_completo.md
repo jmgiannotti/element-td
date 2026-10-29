@@ -336,7 +336,31 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Al hacer clic en una torre construida, se habilita una opción de "Mejorar nivel" pagando oro.
 > - El costo escala exponencialmente por nivel.
 > 
-> *Estado:* **Implementado** en `Tower.js`, `TowerData.js`, `GameScene.js`, `SaveSystem.js` y `UIScene.js`.
+> *Estado:* **Implementado** en `Tower.js`, `TowerData.js`, `GameScene.js`, `SaveSystem.js` y `UIScene.js`. Rebalanceado en US 14.8: +15% de daño y +5% de alcance por nivel, y desde el Nv.4 cada paso cuesta además ×1.6 (llevar un Fuego a Nv.8 pasa de 1449 a 5799 de oro).
+
+### US 8.2: Reembolso de Mejoras al Fusionar [✓]
+**Como** jugador que mejoró torres con oro,
+**Quiero** recuperar la mayor parte de ese oro cuando fusiono esas torres,
+**Para** que mejorar una torre no sea plata tirada si después decido fusionarla.
+
+> **Criterios de Aceptación:**
+> - Al fusionar (Tier 1 → Híbrida y Híbrida → Legendaria) se suma el oro gastado en niveles individuales de ambas torres y se reembolsa el 85%.
+> - El preview de fusión al arrastrar muestra el reembolso; al completarse suena una moneda y aparece `+XX ORO` dorado sobre la torre nueva.
+> - El oro reembolsado sale de la cuenta de la torre nueva, así venderla después no lo devuelve dos veces.
+> 
+> *Estado:* **Implementado** en `Tower.js` (`upgradeSpent`), `FusionSystem.js` (`UPGRADE_REFUND`, `fusionRefund`), `UIScene.js` (línea en el preview), `AudioSystem.js` (cue `coin`), `GameScene.js` y `SaveSystem.js` (campo `upg` por torre).
+
+### US 8.3: Sobrecarga Elemental (Sumidero de Maná) [✓]
+**Como** jugador con los templos al máximo,
+**Quiero** una mejora repetible donde seguir invirtiendo maná,
+**Para** que el maná acumulado en el late game siga sirviendo de algo.
+
+> **Criterios de Aceptación:**
+> - Con las 3 mejoras de un elemento al máximo se desbloquea `SOBRECARGA`: +5% de daño a las torres de ese elemento por compra, sin límite.
+> - El costo escala exponencialmente (350 × 1.4ⁿ de maná).
+> - El panel del templo la muestra siempre (bloqueada hasta maxear) y la barra de objetivo de maná apunta a ella en lugar de decir "todo al maximo".
+> 
+> *Estado:* **Implementado** en `TempleData.js` (`OVERCHARGE`, `overchargeCost`), `TempleSystem.js` (`overcharge`, `allMaxed`, `buyOvercharge`, multiplicador de daño), `UIScene.js` (fila en el panel, barra y aviso), `GameScene.js` (`SOB n` en la tarjeta) y `SaveSystem.js` (`templeOvercharge`; los niveles de templo se copian en profundidad).
 
 ---
 
@@ -527,6 +551,32 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Mapa de prueba de 26×20 celdas.
 > 
 > *Estado:* **Implementado** en `Viewport.js` (`applyBoardViewport`, `boardZoom`: los mapas de 20×15 conservan la cámara de siempre; los más grandes reciben una cámara solo sobre el tablero a zoom 3/4 o 1/2, centrada), `GridSystem.js` (`worldWidth`/`worldHeight`), `GameScene.js` (`_onBoard` en lugar de `x < 640`; tarjetas acotadas al mundo del nivel), `Hero.js`, `Sentinel.js`, `TouchControls.js` (límites del nivel), `TitleScene.js` (mini-mapa con celda según tamaño, lista de 6 mapas) y `LevelData.js` (`map_test` Llanura Extensa, 26×20).
+
+### US 14.7: Mecánica Especial por Mapa [✓]
+**Como** jugador,
+**Quiero** que cada mapa tenga una regla propia además de su camino,
+**Para** que cada nivel pida una estrategia distinta.
+
+> **Criterios de Aceptación:**
+> - **Plaza del Mercado:** cada puesto intacto junta +10 de oro al terminar cada oleada (máximo 50), con una pila de monedas y el monto encima. Vesper tiene que acercarse para cobrarlo. Un ataque de jefe apuntado a Vesper (línea o círculo dirigido) que cae sobre un puesto lo destruye, con el oro que tenía. En las oleadas 8 y 14 los enemigos encienden una línea de cajas: parpadean y chispean 2,2 s y después explotan (fuego, escombros, humo, "¡BOOM!") y abren el atajo.
+> - **Caldera de Magma:** desde la oleada 4 el volcán tira 3 meteoritos cada 8 s de oleada (cada 6 s desde la erupción), marcados en el suelo antes de caer. En el camino dejan una roca rompible (máximo 14), sobre una torre la aturden 3 s y dañan a enemigos y a Vesper. En la oleada 10 hay una erupción: 8 meteoritos, los dos primeros abren el tapón de obsidiana de arriba.
+> - **Glaciar Quebrado:** aviso 3 s antes. Cada 35 s de oleada, una ventisca congela la mitad de las torres expuestas durante 5 s: quedan dentro de un bloque de hielo con barra de descongelamiento y no disparan. No se congelan las de Fuego, Lava, Tormenta, Tormenta de Ceniza, Geiser, Obsidiana y Templo Ancestral, ni las torres a ≤ 1 celda de ellas, y una de esas torres al lado de una congelada la derrite. Mientras dura, la zona de calor se marca en naranja y el tablero queda pálido y con nieve.
+> - **Cripta Ancestral:** cada 10 s de oleada, cada pilar en pie brilla y da a los enemigos a ≤ 2 celdas un escudo del 15% de su vida máxima durante 5 s, con un rayo desde el pilar. El escudo es una burbuja amarilla y un tramo amarillo dentro de la barra de vida: va pegado al final de lo verde (o encima del final, si no entra) y al gastarse se achica hacia ese punto. La vida media pasa a naranja para no confundirse con el escudo.
+> 
+> *Estado:* **Implementado** en `MapEventSystem.js` (nuevo), `LevelData.js` (`mechanics` en los mapas 2 a 5), `GameScene.js` (`stalls`, `breakBlocks`, `addBlock`), `Enemy.js` (`grantShield`: burbuja y tramo amarillo en la barra de vida), `Tower.js` (`freeze`/`thaw`: bloque de hielo y barra), `TelegraphSystem.js` (evento `hazard-detonated`), `UIScene.js` (evento `map-event`) y `SaveSystem.js` (`mapState`: puestos destruidos, oro sin cobrar y rocas de meteorito; los bloques que el nivel no traía se recrean al cargar).
+
+### US 14.8: Rebalanceo de Cadencia, Daño y Oleadas [✓]
+**Como** jugador,
+**Quiero** que un grupo chico de torres en una esquina no alcance para ganar,
+**Para** que haya que construir, fusionar y defender todo el recorrido.
+
+> **Criterios de Aceptación:**
+> - Cadencia global −29% (intervalo ×1.4); +15% de daño por impacto en Tierra, Fuego, Lava y Obsidiana.
+> - Cada Legendaria rinde ~1.7–2.3× el DPS de la mejor Híbrida de la que sale.
+> - La cadena pega 100/50/30/18% por blanco sucesivo y la quemadura o el congelamiento que lleva bajan en la misma proporción.
+> - Enemigos estándar ~13% más rápidos; +25% de vida desde la oleada 10, también en modo sin fin.
+> 
+> *Estado:* **Implementado** en `TowerData.js` (stats, `CHAIN_FALLOFF`, curva de `TOWER_UPGRADE`), `Projectile.js`, `EnemyData.js`, `WaveData.js` (`LATE_WAVE_HP`) y `WaveManager.js`.
 
 ---
 

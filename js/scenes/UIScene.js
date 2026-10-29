@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser';
 import { ELEMENTS, TOWER_DATA, FUSION_MAP, LEGENDARY_MAP } from '../data/TowerData.js';
 import {
-    TEMPLE_DATA, TEMPLE_ELEMENTS, UPGRADE_TRACKS, TRACK_ORDER,
+    TEMPLE_DATA, TEMPLE_ELEMENTS, UPGRADE_TRACKS, TRACK_ORDER, OVERCHARGE,
 } from '../data/TempleData.js';
 import { safeTexture } from '../systems/TextureGuard.js';
 import { audio } from '../systems/AudioSystem.js';
@@ -298,7 +298,7 @@ export class UIScene extends Phaser.Scene {
         this.manaBarFill.fillColor = ready ? 0x4CAF50 : 0xB388FF;
 
         const d = TEMPLE_DATA[goal.element];
-        const t = UPGRADE_TRACKS[goal.track];
+        const t = UPGRADE_TRACKS[goal.track] ?? OVERCHARGE;
         // Named in the temple's own colour, so it points at a button below
         this.manaGoalTitle.setText(ready ? '¡LISTA!' : 'MEJORA').setColor(ready ? '#4CAF50' : '#6a6a8a');
         this.manaGoalText
@@ -911,6 +911,9 @@ export class UIScene extends Phaser.Scene {
                 d.specialDesc,
                 'Libera 1 casilla',
             ];
+            // The levels bought with gold do not survive the merge; most of
+            // that gold does, and saying so before the drop is the point.
+            if (info.refund > 0) lines.push(`Reembolso mejoras: +${info.refund} ORO`);
             if (d.tier === 3) lines.splice(1, 0, 'TORRE LEGENDARIA');
         }
 
@@ -1483,9 +1486,10 @@ export class UIScene extends Phaser.Scene {
         });
 
         on('temple-upgraded', (el, track, lvl) => {
+            const t = UPGRADE_TRACKS[track] ?? OVERCHARGE;
             this._flashNotification(
-                `${TEMPLE_DATA[el].shortName}: ${UPGRADE_TRACKS[track].label} Nv.${lvl}`,
-                '#FFD54F'
+                `${TEMPLE_DATA[el].shortName}: ${t.label} Nv.${lvl}`,
+                track === OVERCHARGE.key ? OVERCHARGE.color : '#FFD54F'
             );
             this._updateManaBar();
         });
@@ -1514,6 +1518,8 @@ export class UIScene extends Phaser.Scene {
         on('boss-hp-changed', (boss) => this._onBossHpChanged(boss));
         on('boss-ability-cast', (data) => this._onBossAbilityCast(data));
         on('boss-defeated', (boss) => this._onBossDefeated(boss));
+        // A map's own events (MapEventSystem): a plug blown, a blizzard, a ward.
+        on('map-event', (text, color) => this._flashNotification(text, color));
         on('enemy-reached-end', (enemy) => {
             if (enemy?.isBoss) this._onBossEscaped(enemy);
         });
@@ -2053,36 +2059,39 @@ export class UIScene extends Phaser.Scene {
         this._closeHelpPanel();
 
         const d = TEMPLE_DATA[element];
-        const { shade, container } = this._openModal(390, 340, d.color);
+        const { shade, container } = this._openModal(390, 420, d.color);
         this.panelShade = shade;
         this.panelElement = element;
 
-        container.add(this.add.rectangle(0, -132, 390, 50, d.color, 0.14));
+        container.add(this.add.rectangle(0, -172, 390, 50, d.color, 0.14));
         container.add(this.add.sprite(
-            -162, -132, safeTexture(this, `temple_${element}`, 'temple_earth')
+            -162, -172, safeTexture(this, `temple_${element}`, 'temple_earth')
         ).setScale(1.2));
-        this.panelTitle = this.add.text(-132, -140, d.name.toUpperCase(), {
+        this.panelTitle = this.add.text(-132, -180, d.name.toUpperCase(), {
             fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
         }).setOrigin(0, 0.5);
         container.add(this.panelTitle);
 
-        this.panelSubtitle = new IconText(this, -132, -120, '', {
+        this.panelSubtitle = new IconText(this, -132, -160, '', {
             fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
         }).setOrigin(0, 0.5);
         container.add(this.panelSubtitle);
 
         this.panelRows = {};
         TRACK_ORDER.forEach((track, i) => {
-            this.panelRows[track] = this._buildUpgradeRow(container, element, track, -66 + i * 68);
+            this.panelRows[track] = this._buildUpgradeRow(container, element, track, -106 + i * 68);
         });
+        // Always on the panel, locked or not: the player should know there is
+        // somewhere for maná to go before they get there.
+        this.panelOvercharge = this._buildOverchargeRow(container, element, 98);
 
-        this.panelFooter = this.add.text(0, 118, '', {
+        this.panelFooter = this.add.text(0, 150, '', {
             fontFamily: FONT, fontSize: '8px', color: '#78909C',
             align: 'center', lineSpacing: 5,
         }).setOrigin(0.5);
         container.add(this.panelFooter);
 
-        this._closeButton(container, 150, () => this._closeUpgradePanel());
+        this._closeButton(container, 188, () => this._closeUpgradePanel());
 
         this.upgradePanel = container;
         this._refreshUpgradePanel();
@@ -2137,6 +2146,83 @@ export class UIScene extends Phaser.Scene {
 
         container.add([bandBg, name, ...pips, preview, pct, btnBg, btnTop, btnCost]);
         return { bandBg, name, pips, preview, pct, btnBg, btnTop, btnCost };
+    }
+
+    /**
+     * Sobrecarga Elemental: the row under the three tracks. Locked until all
+     * three are maxed; after that a repeatable +5% damage, priced to climb.
+     */
+    _buildOverchargeRow(container, element, y) {
+        const o = OVERCHARGE;
+        const bandBg = this.add.rectangle(0, y, 356, 60, 0x0d0d1c, 0.6);
+        bandBg.setStrokeStyle(1, 0x22223a);
+
+        const name = this.add.text(-168, y - 16, o.label, {
+            fontFamily: FONT, fontSize: '8px', color: o.color,
+        }).setOrigin(0, 0.5);
+        const level = this.add.text(-168, y + 10, '', {
+            fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
+        }).setOrigin(0, 0.5);
+        const preview = this.add.text(-6, y - 14, '', {
+            fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
+        }).setOrigin(0.5);
+        const pct = this.add.text(-6, y + 10, '', {
+            fontFamily: FONT, fontSize: '8px', color: o.color,
+        }).setOrigin(0.5);
+
+        const btnBg = this.add.rectangle(120, y, 112, 46, 0x1e1e3a)
+            .setStrokeStyle(1, 0x3a3a5a)
+            .setInteractive({ useHandCursor: true });
+        const btnTop = this.add.text(120, y - 11, 'SOBRECARGAR', {
+            fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
+        }).setOrigin(0.5);
+        const btnCost = new IconText(this, 120, y + 10, '', {
+            fontFamily: FONT, fontSize: '8px', color: '#B388FF',
+        }).setOrigin(0.5);
+
+        btnBg.on('pointerdown', () => {
+            if (this.gs.templeSystem.buyOvercharge(element)) {
+                this._pulse(btnBg);
+                this._refreshUpgradePanel();
+            } else {
+                audio.play('deny');
+                this.cameras.main.shake(90, 0.003);
+            }
+        });
+
+        container.add([bandBg, name, level, preview, pct, btnBg, btnTop, btnCost]);
+        return { bandBg, name, level, preview, pct, btnBg, btnTop, btnCost };
+    }
+
+    _refreshOverchargeRow(el, mana) {
+        const ts = this.gs.templeSystem;
+        const row = this.panelOvercharge;
+        const o = OVERCHARGE;
+        const lvl = ts.overchargeOf(el);
+        const pctNow = Math.round(o.step * lvl * 100);
+        row.level.setText(`Nv.${lvl}`);
+
+        if (!ts.allMaxed(el)) {
+            row.name.setColor('#555566');
+            row.preview.setText('Bloqueada');
+            row.pct.setText('maxea las 3 mejoras').setColor('#555566');
+            row.btnTop.setColor('#555566');
+            row.btnCost.setText('');
+            row.btnBg.fillColor = 0x16162a;
+            row.btnBg.setStrokeStyle(1, 0x2a2a3a);
+            return;
+        }
+
+        const cost = ts.overchargeCostOf(el);
+        const affordable = mana >= cost;
+        row.name.setColor(o.color);
+        row.preview.setText(`DMG +${pctNow}% → +${pctNow + Math.round(o.step * 100)}%`);
+        row.pct.setText(`+${Math.round(o.step * 100)}% por compra`).setColor(o.color);
+        row.btnTop.setColor(affordable ? '#FFFFFF' : '#555566');
+        row.btnCost.setText(`${cost} ${MANA}`);
+        row.btnCost.setColor(affordable ? '#B388FF' : '#555566');
+        row.btnBg.fillColor = affordable ? 0x2a1638 : 0x16162a;
+        row.btnBg.setStrokeStyle(1, affordable ? o.colorNum : 0x2a2a3a);
     }
 
     /** Effective stat value for `element` at a given level of one track. */
@@ -2199,6 +2285,8 @@ export class UIScene extends Phaser.Scene {
             }
         }
 
+        this._refreshOverchargeRow(el, mana);
+
         this.panelFooter.setText(
             n === 0
                 ? 'Aun no tenes torres de este elemento.\nLas mejoras las esperan igual.'
@@ -2213,6 +2301,7 @@ export class UIScene extends Phaser.Scene {
         this.upgradePanel = null;
         this.panelElement = null;
         this.panelRows = null;
+        this.panelOvercharge = null;
         this.panelTitle = null;
         if (!this.helpPanel) this.gs.uiModalOpen = false;
     }
