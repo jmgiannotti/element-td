@@ -10,7 +10,7 @@ import { SealSystem } from '../systems/SealSystem.js';
 import { BARRICADE_ENCHANTS, ENCHANT_ORDER, enchantCostLabel } from '../data/BarricadeData.js';
 import { RouteView } from '../systems/RouteView.js';
 import { FloatingText } from '../systems/FloatingText.js';
-import { TutorialSystem } from '../systems/TutorialSystem.js';
+import { TutorialSystem, tutorialWanted } from '../systems/TutorialSystem.js';
 import { SpellSystem } from '../systems/SpellSystem.js';
 import { TelegraphSystem } from '../systems/TelegraphSystem.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
@@ -485,8 +485,10 @@ export class GameScene extends Phaser.Scene {
         this.scene.launch('UIScene', { gameScene: this });
 
         // ── Tutorial ────────────────────────────
+        // Only on the first map, and only until it has been seen once.
         this.tutorial = new TutorialSystem(this);
-        if (loaded || this.waveManager.currentWave > 0 || this.temples.length > 0) {
+        if (loaded || this.waveManager.currentWave > 0 || this.temples.length > 0
+            || !tutorialWanted(this.levelData)) {
             this.tutorial.active = false;
         }
     }

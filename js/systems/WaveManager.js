@@ -1,4 +1,5 @@
-import { WAVE_DATA } from '../data/WaveData.js';
+import { getWaveProfile } from '../data/WaveData.js';
+import { ENEMY_DATA } from '../data/EnemyData.js';
 import { Enemy } from '../entities/Enemy.js';
 
 export class WaveManager {
@@ -8,7 +9,11 @@ export class WaveManager {
         this.waveActive = false;
         this.spawnQueue = [];
         this.spawnTimer = 0;
-        this.totalWaves = WAVE_DATA.length;
+        // The map's wave plan (WaveData.WAVE_PROFILES): its base list, its
+        // health modifiers and its recipe for endless mode.
+        this.profile = getWaveProfile(scene.levelData?.waveProfile);
+        this.waves = this.profile.waves;
+        this.totalWaves = this.waves.length;
         this._checkingComplete = false;
     }
 
@@ -19,7 +24,7 @@ export class WaveManager {
         this.spawnQueue = [];
 
         if (this.currentWave < this.totalWaves) {
-            const waveData = WAVE_DATA[this.currentWave];
+            const waveData = this.waves[this.currentWave];
             for (const group of waveData.enemies) {
                 for (let i = 0; i < group.count; i++) {
                     this.spawnQueue.push({
@@ -61,7 +66,9 @@ export class WaveManager {
             this.spawnTimer -= delta;
             if (this.spawnTimer <= 0) {
                 const spawn = this.spawnQueue.shift();
-                const enemy = Enemy.obtain(this.scene, spawn.type, null, null, this.currentHpMultiplier || 1);
+                const hpMult = (this.currentHpMultiplier || 1) * this.profile.hpMult
+                    * (ENEMY_DATA[spawn.type]?.isBoss ? this.profile.bossHpMult : 1);
+                const enemy = Enemy.obtain(this.scene, spawn.type, null, null, hpMult);
                 this.scene.enemies.push(enemy);
                 if (enemy.isBoss) {
                     this.scene.events.emit('boss-spawned', enemy);
@@ -96,7 +103,7 @@ export class WaveManager {
 
     get isNextWaveBoss() {
         if (this.currentWave < this.totalWaves) {
-            return !!WAVE_DATA[this.currentWave]?.isBossWave;
+            return !!this.waves[this.currentWave]?.isBossWave;
         }
         return (this.currentWave + 1) % 5 === 0;
     }
@@ -108,7 +115,7 @@ export class WaveManager {
      */
     get nextComposition() {
         if (this.currentWave < this.totalWaves) {
-            const wave = WAVE_DATA[this.currentWave];
+            const wave = this.waves[this.currentWave];
             return wave.enemies.map(g => ({ type: g.type, count: g.count, delay: g.delay }));
         }
 
@@ -117,15 +124,30 @@ export class WaveManager {
             const extraWaves = this.currentWave - this.totalWaves + 1;
             const isBoss = (this.currentWave + 1) % 5 === 0;
             
-            // Randomize between 2 to 4 types
-            const types = ['slime', 'golem', 'specter', 'dragon'];
-            const numTypes = 2 + Math.floor(Math.random() * 3);
-            const selectedTypes = [...types].sort(() => 0.5 - Math.random()).slice(0, numTypes);
-            
+            // Between the map's minimum and 4 enemy kinds, drawn by the map's
+            // weights, so a market wave is still hunters and saboteurs and a
+            // caldera wave is still a swarm.
+            const { weights, size, minTypes, bosses } = this.profile.endless;
+            const numTypes = minTypes + Math.floor(Math.random() * (5 - minTypes));
+            const pool = Object.entries(weights).filter(([, w]) => w > 0);
+            const selectedTypes = [];
+            while (selectedTypes.length < numTypes && pool.length > 0) {
+                const total = pool.reduce((sum, [, w]) => sum + w, 0);
+                let r = Math.random() * total;
+                const i = pool.findIndex(([, w]) => (r -= w) < 0);
+                selectedTypes.push(pool.splice(i < 0 ? pool.length - 1 : i, 1)[0][0]);
+            }
+
+            // With three or four kinds out of four, nearly every kind makes the
+            // cut, so the weights also set how many of each come: a caldera
+            // wave is mostly slimes even when a golem or two tag along.
+            const meanWeight = Object.values(weights).reduce((a, b) => a + b, 0) / Object.keys(weights).length;
+
             const comp = selectedTypes.map(type => {
+                const share = Math.min(2, Math.max(0.5, weights[type] / meanWeight));
                 // Exponential amount scaling (+10% per wave)
                 let baseCount = type === 'slime' ? 8 : (type === 'dragon' ? 1 : 4);
-                let count = Math.round(baseCount * Math.pow(1.10, extraWaves));
+                let count = Math.max(1, Math.round(baseCount * size * share * Math.pow(1.10, extraWaves)));
                 // Base delay decreases slightly to keep intensity high
                 let baseDelay = type === 'slime' ? 400 : (type === 'dragon' ? 2000 : 800);
                 let delay = Math.max(100, Math.round(baseDelay * Math.pow(0.95, extraWaves)));
@@ -134,8 +156,7 @@ export class WaveManager {
             });
 
             if (isBoss) {
-                const bossPool = ['boss_titan', 'boss_dragon', 'boss_specter'];
-                const bossType = bossPool[Math.floor(Math.random() * bossPool.length)];
+                const bossType = bosses[Math.floor(Math.random() * bosses.length)];
                 comp.push({ type: bossType, count: 1, delay: 2500 });
             }
             

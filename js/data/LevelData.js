@@ -22,6 +22,7 @@ export const MAP_1 = {
     id: 'map_1',
     name: 'Paso de Ceniza',
     biome: 'grass',
+    waveProfile: 'ceniza',
     description: 'Trazado clásico con bloques de piedra y espacio abierto para laberintos.',
     cols: 20,
     rows: 15,
@@ -75,6 +76,7 @@ export const MAP_2 = {
     id: 'map_2',
     name: 'Plaza del Mercado',
     biome: 'city',
+    waveProfile: 'mercado',
     description: 'Avenidas en ángulo recto frente al mercado y dos manzanas cortadas por cajas: barricá la vuelta larga y los enemigos romperán el atajo.',
     cols: 20,
     rows: 15,
@@ -116,45 +118,65 @@ export const MAP_2 = {
     initialLives: 20,
 };
 
-// Map 3 — a caldera: the road opens into a plaza you maze with barricades,
-// obsidian in the middle, and fire and earth seals on the corners where the
-// enemies enter and leave it — where splash damage meets them bunched up.
+// Map 3 — a figure of eight: two rings of two-lane road round two islands of
+// basalt, a four-cell gap between them crossed by the waist, and two more
+// islands in that gap above and below it. Each ring can be walked either way
+// round; the default is the short side, and a pair of barricades across a
+// two-wide lane sends the wave round the long one (+9 a ring). Obsidian plugs
+// the passes between the rings at top and bottom: four rocks (cost 21), worth
+// smashing only once the long way has been made very long. The islands carry
+// the fire and earth seals, and a tower there covers the lanes all round it.
 export const MAP_3 = {
     id: 'map_3',
     name: 'Caldera de Magma',
     biome: 'volcano',
-    description: 'Una plaza abierta de lava enfriada para hacer laberintos con barricadas, con obsidiana en el centro y sellos de fuego y tierra en las bocas.',
+    waveProfile: 'caldera',
+    description: 'Un ocho de carriles dobles alrededor de islas de basalto: barricá un lado del anillo y la oleada da la vuelta larga. La obsidiana tapa los pasos entre anillos.',
+    brief: 'Un ocho de carriles dobles: barricá un lado y la oleada da la vuelta larga. Enjambres densos.',
     cols: 20,
     rows: 15,
-    heroSpawn: { col: 4, row: 6 },
-    spawnPoint: { col: -1, row: 1 },
+    heroSpawn: { col: 4, row: 5 },
+    spawnPoint: { col: -1, row: 2 },
     exitPoint: { col: 20, row: 12 },
     waypoints: [
-        { col: -1, row: 1 },
-        { col: 3, row: 1 },
-        { col: 3, row: 11 },
-        { col: 6, row: 11 },     // into the caldera, bottom-left
-        { col: 6, row: 3 },
-        { col: 13, row: 3 },     // out of it, top-right
-        { col: 16, row: 3 },
-        { col: 16, row: 12 },
-        { col: 20, row: 12 },
+        { col: -1, row: 2 },
+        { col: 7, row: 2 },      // along the top of the west ring
+        { col: 7, row: 7 },
+        { col: 12, row: 7 },     // through the waist
+        { col: 12, row: 12 },
+        { col: 20, row: 12 },    // out along the bottom of the east ring
     ],
     roadAreas: [
-        { c1: 6, r1: 3, c2: 13, r2: 11 },
+        // West ring, two lanes wide, round the island at cols 3–5, rows 3–11
+        { c1: 1, r1: 1, c2: 7, r2: 2 },
+        { c1: 1, r1: 12, c2: 7, r2: 13 },
+        { c1: 1, r1: 1, c2: 2, r2: 13 },
+        { c1: 6, r1: 1, c2: 7, r2: 13 },
+        // East ring, round the island at cols 14–16, rows 3–11
+        { c1: 12, r1: 1, c2: 18, r2: 2 },
+        { c1: 12, r1: 12, c2: 18, r2: 13 },
+        { c1: 12, r1: 1, c2: 13, r2: 13 },
+        { c1: 17, r1: 1, c2: 18, r2: 13 },
+        // The waist
+        { c1: 8, r1: 7, c2: 11, r2: 8 },
     ],
     breakableBlocks: [
-        { c1: 9, r1: 6, c2: 10, r2: 8, hp: 100 },
+        // The passes between the rings, plugged with obsidian
+        { c1: 8, r1: 1, c2: 11, r2: 1, hp: 100 },
+        { c1: 8, r1: 13, c2: 11, r2: 13, hp: 100 },
     ],
     seals: [
-        { col: 5, row: 10, element: 'fire' },
-        { col: 4, row: 12, element: 'earth' },
-        { col: 9, row: 2, element: 'fire' },
-        { col: 10, row: 12, element: 'earth' },
-        { col: 14, row: 2, element: 'fire' },
+        // West island
+        { col: 4, row: 4, element: 'fire' },
+        { col: 4, row: 7, element: 'earth' },
+        { col: 4, row: 10, element: 'fire' },
+        // East island
         { col: 15, row: 4, element: 'earth' },
-        { col: 17, row: 11, element: 'fire' },
-        { col: 17, row: 13, element: 'earth' },
+        { col: 15, row: 7, element: 'fire' },
+        { col: 15, row: 10, element: 'earth' },
+        // The islands in the gap, above and below the waist
+        { col: 9, row: 5, element: 'fire' },
+        { col: 10, row: 10, element: 'earth' },
     ],
     // Barricades are the point of this map, so the purse leaves room for them.
     initialGold: 130,
@@ -168,6 +190,7 @@ export const MAP_4 = {
     id: 'map_4',
     name: 'Glaciar Quebrado',
     biome: 'snow',
+    waveProfile: 'glaciar',
     description: 'Un camino largo en zigzag con explanadas a los lados para templos —al alcance de los Sillares— y sellos de agua y aire que cubren dos tramos a la vez.',
     cols: 20,
     rows: 15,
@@ -213,6 +236,7 @@ export const MAP_5 = {
     id: 'map_5',
     name: 'Cripta Ancestral',
     biome: 'dungeon',
+    waveProfile: 'cripta',
     description: 'El desafío avanzado: un laberinto simétrico con pilares rompibles y dos sellos de cada elemento junto al centro, para armar Torres Legendarias.',
     cols: 20,
     rows: 15,

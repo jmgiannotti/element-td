@@ -659,10 +659,12 @@ export class UIScene extends Phaser.Scene {
             },
             onRestart: () => {
                 this.optionsModal = null;
+                // Restart the map being played, not the default one
+                const levelData = this.gs.levelData;
                 SaveSystem.clearSave();
                 this.scene.stop('UIScene');
                 this.scene.stop('GameScene');
-                this.scene.start('GameScene', { continueGame: false });
+                this.scene.start('GameScene', { continueGame: false, levelData });
             },
         });
     }

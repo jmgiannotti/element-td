@@ -25,6 +25,33 @@ const TEMPLE_TEXT = `El heroe lo consume en crudo. Un Templo abre mejoras:\ncomp
 const DONE_TEXT = 'El templo cosecha dentro de su circulo. Toca el templo para gastar ✦ en mejoras.';
 const SKIP_TEXT = 'Ya tenes un templo cosechando. El heroe sirve para los orbes fuera de su alcance.';
 
+// Remembered across games: once the lesson has been seen through (or
+// skipped), nobody needs it again.
+const DONE_KEY = 'elemental-td:tutorial-done';
+const TUTORIAL_LEVEL = 'map_1';
+
+/**
+ * Whether a fresh game on this map should open with the lesson: only on the
+ * first map, and only for a player who has never finished or skipped it. The
+ * other maps assume you already know what a temple is for.
+ */
+export function tutorialWanted(levelData) {
+    if (levelData?.id !== TUTORIAL_LEVEL) return false;
+    try {
+        return localStorage.getItem(DONE_KEY) !== '1';
+    } catch {
+        return true;
+    }
+}
+
+function markTutorialDone() {
+    try {
+        localStorage.setItem(DONE_KEY, '1');
+    } catch {
+        // Private window or blocked storage: the lesson just shows again.
+    }
+}
+
 export class TutorialSystem {
     constructor(scene) {
         this.scene = scene;
@@ -38,7 +65,10 @@ export class TutorialSystem {
 
         this._onCollected = () => this._advanceToTemple();
         this._onTempleBuilt = () => this._advanceToDone();
-        this._onSkip = () => this.finish(true);
+        this._onSkip = () => {
+            markTutorialDone();
+            this.finish(true);
+        };
 
         scene.events.on('hero-collected', this._onCollected);
         scene.events.on('temple-built', this._onTempleBuilt);
@@ -197,7 +227,12 @@ export class TutorialSystem {
 
         if (this.step === TUTORIAL_STEP.DONE && this.closeTimer > 0) {
             this.closeTimer -= delta;
-            if (this.closeTimer <= 0) this.finish();
+            if (this.closeTimer <= 0) {
+                // Only a lesson seen through to its last line counts; quitting
+                // halfway (destroy) leaves it for next time.
+                markTutorialDone();
+                this.finish();
+            }
         }
     }
 

@@ -138,7 +138,8 @@ export class TitleScene extends Phaser.Scene {
                     return;
                 }
                 audio.play('click');
-                this.scene.start('GameScene', { continueGame: true });
+                // The saved map, not the default one: waves and layout are per map.
+                this.scene.start('GameScene', { continueGame: true, levelId: SaveSystem.getSummary()?.levelId });
             },
             !hasSave
         );
@@ -215,7 +216,7 @@ export class TitleScene extends Phaser.Scene {
                         return;
                     }
                     audio.play('click');
-                    this.scene.start('GameScene', { continueGame: true });
+                    this.scene.start('GameScene', { continueGame: true, levelId: SaveSystem.getSummary()?.levelId });
                 },
                 !hasSave
             );
