@@ -122,7 +122,9 @@ export class Hero {
         // HP bar
         this.hpBg = scene.add.rectangle(pos.x, pos.y - 21, 26, 4, 0x1a1a1a, 0.8).setDepth(21);
         this.hpBg.setStrokeStyle(1, 0x333333);
-        this.hpFill = scene.add.rectangle(pos.x, pos.y - 21, 24, 2, 0x4CAF50).setDepth(22);
+        // Anchored at its left end, like the enemies' (see Enemy): a centred
+        // shape keeps the pivot of its first width and drifts as it shrinks.
+        this.hpFill = scene.add.rectangle(pos.x - 12, pos.y - 21, 24, 2, 0x4CAF50).setOrigin(0, 0.5).setDepth(22);
 
         // Move indicator
         this.moveIndicator = scene.add.circle(0, 0, 6, 0xB388FF, 0);
@@ -781,7 +783,7 @@ export class Hero {
         this.hpBg.x = this.posX;
         this.hpBg.y = this.posY - 21;
         this.hpFill.width = 24 * pct;
-        this.hpFill.x = this.posX - (24 * (1 - pct)) / 2;
+        this.hpFill.x = this.posX - 12;
         this.hpFill.y = this.posY - 21;
 
         if (pct > 0.6) this.hpFill.fillColor = 0x4CAF50;

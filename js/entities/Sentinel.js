@@ -72,7 +72,7 @@ export class Sentinel {
         // Health bar, the same shape as Vesper's, smaller
         this.hpBg = scene.add.rectangle(x, y - 15, 16, 3, 0x1a1a1a, 0.8)
             .setStrokeStyle(1, 0x333333).setDepth(21);
-        this.hpFill = scene.add.rectangle(x, y - 15, 14, 1, 0x7FE7FF).setDepth(22);
+        this.hpFill = scene.add.rectangle(x - 7, y - 15, 14, 1, 0x7FE7FF).setOrigin(0, 0.5).setDepth(22);
 
         // Materialise: from a sliver of light to full size
         this.sprite.setScale(0.2, 1.6).setAlpha(0);
@@ -237,7 +237,7 @@ export class Sentinel {
         const barY = this.posY + floatY - 13;
         this.hpBg.setPosition(this.posX, barY);
         this.hpFill.width = 14 * pct;
-        this.hpFill.setPosition(this.posX - (14 * (1 - pct)) / 2, barY);
+        this.hpFill.setPosition(this.posX - 7, barY);
     }
 
     takeDamage(amount) {
