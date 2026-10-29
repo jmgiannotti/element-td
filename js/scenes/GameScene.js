@@ -871,7 +871,7 @@ export class GameScene extends Phaser.Scene {
                     : 'sin mejoras de templo'
             );
             if (t.empowered) lines.push('potenciada por el heroe');
-            if (t.chilled) lines.push('enfriada por la ventisca');
+            if (t.frozen) lines.push('congelada: no dispara');
             const seal = this.sealSystem.bonusLabel(t.col, t.row, t.element);
             if (seal) lines.push(seal);
 

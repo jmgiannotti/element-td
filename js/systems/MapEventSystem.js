@@ -6,28 +6,32 @@ import { audio } from './AudioSystem.js';
  * What makes each map more than a different road: the rules a level adds on
  * top of the game's own, declared in its `mechanics` (LevelData) and run here.
  *
- *   stallGold   Plaza del Mercado — every market stall still standing pays
- *               this much gold when a wave is cleared. A boss attack aimed at
- *               Vesper (line, target circle) that lands on a stall wrecks it
- *               for the rest of the run — so the hero fights bosses away from
- *               the market. The Titan's slam, centred on itself, spares them:
- *               it walks the avenue, and a loss nobody can prevent is a tax.
+ *   stallGold   Plaza del Mercado — every market stall still standing fills
+ *               with this much gold when a wave is cleared (up to `stallCap`),
+ *               and Vesper has to walk up to it (`collectRadius`) to take it.
+ *               A boss attack aimed at Vesper (line, target circle) that lands
+ *               on a stall wrecks it, gold and all — so the hero fights bosses
+ *               away from the market. The Titan's slam, centred on itself,
+ *               spares them: it walks the avenue, and a loss nobody can
+ *               prevent is a tax.
  *   breaches    Plaza del Mercado — when wave `wave` starts, the enemies light
  *               the crates of breakable plug `block` (an index into the
  *               level's breakableBlocks); `fuseMs` later they blow, and the
  *               short way is open for good.
  *   meteors     Caldera de Magma — from wave `from`, every `every` ms of a wave
- *               the volcano throws `count` meteors, each marked on the ground
- *               before it lands. One that lands on the road leaves a basalt rock
- *               there (up to `rockCap` at once) that the enemies have to walk
- *               round or smash; on an obsidian plug it blasts the plug open; on
- *               a tower it stuns it for `stunMs`. Enemies and Vesper under it
- *               get hurt. On wave `eruption.wave` the volcano erupts: a
- *               bigger volley, the first meteors aimed at plug `eruption.plug`.
- *   blizzard    Glaciar Quebrado — every `every` ms of a wave, a gust chills
- *               the towers: `slow` less cadence for `duration` ms. Towers of
- *               a `warm` element are spared, and so is anything within
- *               `warmRadius` cells of one — fire keeps its neighbours going.
+ *               (`everyLate` from the eruption on) the volcano throws `count`
+ *               meteors, each marked on the ground before it lands. One that
+ *               lands on the road leaves a basalt rock there (up to `rockCap`
+ *               at once) that the enemies have to walk round or smash; on an
+ *               obsidian plug it blasts the plug open; on a tower it stuns it
+ *               for `stunMs`. Enemies and Vesper under it get hurt. On wave
+ *               `eruption.wave` the volcano erupts: a bigger volley, the first
+ *               meteors aimed at plug `eruption.plug`.
+ *   blizzard    Glaciar Quebrado — every `every` ms of a wave, a gust freezes
+ *               `share` of the exposed towers solid for `duration` ms: they do
+ *               not fire at all. Towers of a `warm` element are never frozen,
+ *               nor is anything within `warmRadius` cells of one — and a warm
+ *               tower beside a frozen one melts it out early.
  *   darkPulse   Cripta Ancestral — every `every` ms of a wave, each pillar
  *               still standing shields the enemies within `radius` cells of
  *               it for `shield` of their max health, for `shieldMs`.
@@ -51,16 +55,15 @@ export class MapEventSystem {
         this.scene = scene;
         this.mech = scene.levelData.mechanics || {};
 
-        // Read by Tower.fireRate while a tower is chilled.
-        this.chillSlow = this.mech.blizzard?.slow ?? 0;
         this._blizzardClock = 0;
         this._blizzardWarned = false;
-        this._chillLeft = 0;
+        this._blizzardLeft = 0;
         this._pulseClock = 0;
         this._meteorClock = 0;
         // Cells where a meteor left a rock, so the cap counts only those.
         this.rocks = new Set();
         this._told = new Set();
+        for (const st of this.stalls) { st.pending = 0; st.pile = null; }
 
         this._makeTextures();
 
@@ -70,8 +73,9 @@ export class MapEventSystem {
         if (this.mech.meteors) on('wave-started', (wave) => this._eruption(wave));
         if (this.mech.stallGold) {
             on('wave-started', () => this._once('stalls',
-                `Mercado: cada puesto en pie paga +${this.mech.stallGold} oro por oleada`, '#FFD700'));
-            on('wave-complete', () => this._payStalls());
+                `Mercado: los puestos juntan +${this.mech.stallGold} oro por oleada. Lleva a Vesper a cobrarlos`,
+                '#FFD700'));
+            on('wave-complete', () => this._fillStalls());
             on('hazard-detonated', (covers, aimed) => { if (aimed) this._hazardOnStalls(covers); });
         }
     }
@@ -85,15 +89,20 @@ export class MapEventSystem {
 
     // ─── Per frame ──────────────────────────────────────
     update(delta) {
-        // The chill wears off on its own clock, wave or no wave, so a gust in
-        // the last seconds of a wave does not freeze the planning phase.
-        if (this._chillLeft > 0) {
-            this._chillLeft -= delta;
-            if (this._chillLeft <= 0) this._endChill();
+        // These run between waves too: Vesper collects whenever he gets
+        // there, a fire tower melts its neighbour whenever it stands beside
+        // it, and a blizzard that started late still ends on time.
+        if (this.mech.stallGold) this._collectStalls();
+        const b = this.mech.blizzard;
+        if (b) {
+            this._meltFrozen(b);
+            if (this._blizzardLeft > 0) {
+                this._blizzardLeft -= delta;
+                if (this._blizzardLeft <= 0) this._endBlizzard();
+            }
         }
         if (!this.scene.waveManager.waveActive) return;
 
-        const b = this.mech.blizzard;
         if (b) {
             this._blizzardClock += delta;
             if (!this._blizzardWarned && this._blizzardClock >= b.every - BLIZZARD_WARN_MS) {
@@ -118,9 +127,11 @@ export class MapEventSystem {
         }
 
         const m = this.mech.meteors;
-        if (m && this.scene.waveManager.currentWave >= m.from) {
+        const wave = this.scene.waveManager.currentWave;
+        if (m && wave >= m.from) {
+            const every = m.eruption && wave >= m.eruption.wave ? (m.everyLate ?? m.every) : m.every;
             this._meteorClock += delta;
-            if (this._meteorClock >= m.every) {
+            if (this._meteorClock >= every) {
                 this._meteorClock = 0;
                 this._volley(m.count, []);
             }
@@ -128,20 +139,21 @@ export class MapEventSystem {
     }
 
     // ─── Shared effects ─────────────────────────────────
-    /** Textures drawn once: the frost over a chilled tower, a meteor. */
+    /** Textures drawn once: the ice a frozen tower sits in, a meteor. */
     _makeTextures() {
         const tex = this.scene.textures;
-        if (!tex.exists('fx_frost')) {
+        if (!tex.exists('fx_iceblock')) {
             const g = this.scene.make.graphics({ x: 0, y: 0 }, false);
-            // A crust of ice over the tower's lower half, icicles off its rim.
-            g.fillStyle(0xBFEFFF, 0.42).fillRect(5, 14, 22, 15);
-            g.fillStyle(0xFFFFFF, 0.85).fillRect(5, 14, 22, 1);
-            g.fillStyle(0xE6F9FF, 0.9);
-            for (const [x, h] of [[7, 5], [11, 3], [15, 6], [20, 4], [24, 5]]) g.fillRect(x, 15, 2, h);
-            g.fillStyle(0xFFFFFF, 1);
-            for (const [x, y] of [[9, 22], [18, 25], [23, 19], [13, 27]]) g.fillRect(x, y, 1, 1);
-            g.lineStyle(1, 0x7FD0F0, 0.9).strokeRect(4.5, 13.5, 23, 16);
-            g.generateTexture('fx_frost', 32, 32);
+            // A block of ice the whole tower is inside: a translucent body, a
+            // paler top face, bright edges and a crack or two.
+            g.fillStyle(0xA8E6FF, 0.42).fillRect(3, 6, 26, 24);
+            g.fillStyle(0xE1F7FF, 0.55).fillRect(3, 2, 26, 5);
+            g.lineStyle(1, 0xFFFFFF, 0.95).strokeRect(3.5, 2.5, 25, 27);
+            g.lineStyle(1, 0x6CC8EE, 0.9).lineBetween(4, 7.5, 28, 7.5);
+            g.lineStyle(1, 0xFFFFFF, 0.7).lineBetween(7, 11, 11, 17).lineBetween(11, 17, 9, 22);
+            g.lineBetween(22, 12, 25, 16);
+            g.fillStyle(0xFFFFFF, 1).fillRect(5, 4, 3, 1).fillRect(5, 9, 1, 4).fillRect(24, 25, 2, 1);
+            g.generateTexture('fx_iceblock', 32, 32);
             g.destroy();
         }
         if (!tex.exists('fx_meteor')) {
@@ -281,39 +293,74 @@ export class MapEventSystem {
     get stalls() { return this.scene.stalls || []; }
 
     /**
-     * Each stall still standing pays out where it stands: a coin pops off its
-     * awning with the amount, and the total is said in the notices a moment
-     * after the wave's own reward, so the two do not land on top of each other.
+     * Each stall still standing fills up after a wave: a pile of coins with
+     * the amount on it, bobbing, until Vesper comes for it. Said in the
+     * notices a moment after the wave's own reward, so the two do not land
+     * on top of each other.
      */
-    _payStalls() {
+    _fillStalls() {
         const intact = this.stalls.filter(s => s.intact);
         if (intact.length === 0) return;
-        const scene = this.scene;
         const gold = this.mech.stallGold;
-        scene.economySystem.addGold(gold * intact.length);
+        const cap = this.mech.stallCap ?? Infinity;
+        for (const s of intact) {
+            s.pending = Math.min(cap, s.pending + gold);
+            this._drawPile(s, true);
+        }
         audio.play('coin');
-        intact.forEach((s, i) => {
-            scene.time.delayedCall(i * 160, () => {
-                scene.tweens.add({ targets: s.sprite, scaleY: 1.12, duration: 90, yoyo: true });
-                const coin = scene.add.image(s.x, s.y - 2, 'icon_coin').setDepth(D_FX).setScale(0.9);
-                scene.tweens.add({
-                    targets: coin, y: s.y - 20, duration: 700, ease: 'Back.easeOut',
-                    onComplete: () => scene.tweens.add({
-                        targets: coin, alpha: 0, duration: 300, onComplete: () => coin.destroy(),
-                    }),
+        const total = intact.reduce((sum, s) => sum + s.pending, 0);
+        this.scene.time.delayedCall(900, () => {
+            this.scene.events.emit('map-event', `Mercado: ${total} oro esperando a Vesper`, '#FFD700');
+        });
+    }
+
+    /** The pile over a stall: a coin, the amount, a ring calling Vesper over. */
+    _drawPile(s, pop = false) {
+        const scene = this.scene;
+        if (s.pile) { scene.tweens.killTweensOf(s.pile.list); s.pile.destroy(); s.pile = null; }
+        if (!s.intact || s.pending <= 0) return;
+
+        const ring = scene.add.circle(0, 6, 15, 0xFFD54F, 0.12).setStrokeStyle(1, 0xFFE082, 0.9);
+        const coin = scene.add.image(0, -2, 'icon_coin').setScale(0.9);
+        const label = scene.add.text(0, 17, `${s.pending}`, {
+            fontFamily: '"Press Start 2P"', fontSize: '8px', color: '#FFD700',
+            stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0.5);
+        s.pile = scene.add.container(s.x, s.y + 8, [ring, coin, label]).setDepth(D_FX - 2);
+        scene.tweens.add({ targets: coin, y: -6, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        scene.tweens.add({ targets: ring, scale: 1.25, alpha: 0.4, duration: 700, yoyo: true, repeat: -1 });
+        if (pop) {
+            s.pile.setScale(0.3);
+            scene.tweens.add({ targets: s.pile, scale: 1, duration: 260, ease: 'Back.easeOut' });
+            scene.tweens.add({ targets: s.sprite, scaleY: 1.12, duration: 90, yoyo: true });
+        }
+    }
+
+    /** Vesper close enough to a stall with gold in it takes the gold. */
+    _collectStalls() {
+        const hero = this.scene.hero;
+        if (!hero || hero.isDead) return;
+        const reach = this.mech.collectRadius ?? 40;
+        for (const s of this.stalls) {
+            if (!s.intact || s.pending <= 0) continue;
+            if (Phaser.Math.Distance.Between(hero.x, hero.y, s.x, s.y) > reach) continue;
+            const gold = s.pending;
+            s.pending = 0;
+            this._drawPile(s);
+            this.scene.economySystem.addGold(gold);
+            audio.play('coin');
+            for (let i = 0; i < Math.min(5, Math.ceil(gold / 10)); i++) {
+                const c = this.scene.add.image(s.x, s.y + 6, 'icon_coin').setDepth(D_FX).setScale(0.7);
+                this.scene.tweens.add({
+                    targets: c, x: hero.x, y: hero.y - 10, delay: i * 70, duration: 320, ease: 'Quad.easeIn',
+                    onComplete: () => c.destroy(),
                 });
-                // Under the stall, over the avenue: the stalls stand on the
-                // top rows, and above them the number would run off the board.
-                scene.floating?.show(s.x, s.y + 22, `+${gold} ORO`, {
-                    color: '#FFD700', size: 9, rise: 10, duration: 1400,
-                });
+            }
+            this.scene.floating?.show(hero.x, hero.y - 26, `+${gold} ORO`, {
+                color: '#FFD700', size: 9, rise: 16, duration: 1200,
             });
-        });
-        scene.time.delayedCall(900, () => {
-            const n = intact.length;
-            scene.events.emit('map-event',
-                `Mercado: +${gold * n} oro (${n} ${n === 1 ? 'puesto' : 'puestos'})`, '#FFD700');
-        });
+            this._once('collected', 'Vesper cobro el puesto: el oro vuelve a juntarse cada oleada', '#FFD700');
+        }
     }
 
     _hazardOnStalls(covers) {
@@ -324,6 +371,8 @@ export class MapEventSystem {
 
     _wreckStall(s, loud) {
         s.intact = false;
+        s.pending = 0;
+        this._drawPile(s);
         s.sprite.setTint(0x5a4a40).setAlpha(0.55);
         if (!loud) return;
         this._explosion(s.x, s.y, { debris: 0xC98B4A, scale: 0.8 });
@@ -489,29 +538,38 @@ export class MapEventSystem {
     }
 
     // ─── Glacier: blizzard ──────────────────────────────
+    /** The towers a warm one keeps from freezing: itself and its neighbours. */
+    _warmCover(b) {
+        const warm = this.scene.towers.filter(t => t.alive && b.warm.includes(t.element));
+        return {
+            warm,
+            covered: (t) => warm.some(w => Math.max(Math.abs(w.col - t.col), Math.abs(w.row - t.row)) <= b.warmRadius),
+        };
+    }
+
     _blizzard(b) {
         const scene = this.scene;
-        const towers = scene.towers.filter(t => t.alive);
-        const warm = towers.filter(t => b.warm.includes(t.element));
-        const near = (t) => warm.some(w =>
-            Math.max(Math.abs(w.col - t.col), Math.abs(w.row - t.row)) <= b.warmRadius);
-        const chilled = towers.filter(t => !near(t));
+        const { warm, covered } = this._warmCover(b);
+        const exposed = scene.towers.filter(t => t.alive && !covered(t));
+        // Half of the exposed ones, at random: enough to hurt, never the lot.
+        const frozen = Phaser.Utils.Array.Shuffle([...exposed])
+            .slice(0, exposed.length ? Math.max(1, Math.ceil(exposed.length * b.share)) : 0);
+        for (const t of frozen) {
+            t.freeze(b.duration);
+            scene.floating?.show(t.x, t.y - 24, '¡CONGELADA!', { color: '#B3E5FC', size: 7, rise: 12, duration: 1200 });
+        }
 
-        this._chillLeft = b.duration;
-        this._setChill(chilled);
+        this._blizzardLeft = b.duration;
         this._snow(b.duration, 3);
-
-        // The whole board goes pale for as long as it lasts.
         const { worldWidth: w, worldHeight: h } = scene.gridSystem;
         if (this._veil) this._veil.destroy();
         this._veil = scene.add.rectangle(w / 2, h / 2, w, h, 0xDDF3FF, 0).setDepth(25);
         scene.tweens.add({ targets: this._veil, fillAlpha: 0.16, duration: 500 });
         scene.cameras.main.flash(260, 200, 230, 255, false);
+        audio.play('boss_warn');
 
-        for (const t of chilled) {
-            scene.floating?.show(t.x, t.y - 22, '-20% CADENCIA', { color: '#B3E5FC', size: 7, rise: 12, duration: 1400 });
-        }
-        // The warm ones glow for the length of it, over the area they keep warm.
+        // What the fire keeps warm, for as long as it lasts.
+        for (const g of this._heat || []) { scene.tweens.killTweensOf(g); g.destroy(); }
         this._heat = warm.map(t => {
             const r = (b.warmRadius + 0.5) * TILE_SIZE;
             const glow = scene.add.rectangle(t.x, t.y, r * 2, r * 2, 0xFF8A3D, 0.1)
@@ -520,17 +578,27 @@ export class MapEventSystem {
             return glow;
         });
 
+        const secs = Math.round(b.duration / 1000);
         scene.events.emit('map-event',
-            `¡VENTISCA! ${chilled.length} ${chilled.length === 1 ? 'torre enfriada' : 'torres enfriadas'}: -20% cadencia`,
+            frozen.length === 0
+                ? '¡VENTISCA! El fuego mantuvo calientes a todas tus torres'
+                : `¡VENTISCA! ${frozen.length} ${frozen.length === 1 ? 'torre congelada' : 'torres congeladas'}: no disparan por ${secs}s`,
             '#B3E5FC');
+        this._once('warmth', 'El fuego protege: las torres a 1 casilla de una de fuego no se congelan', '#FFB74D');
     }
 
-    _endChill() {
-        const scene = this.scene;
-        for (const t of scene.towers) {
-            if (t.chilled && t.alive) scene.particleSystem?.emitBurst(t.x, t.y, 0xE1F5FE);
+    /** A warm tower standing next to a frozen one melts it out right away. */
+    _meltFrozen(b) {
+        const towers = this.scene.towers;
+        if (!towers.some(t => t.alive && t.frozen)) return;
+        const { covered } = this._warmCover(b);
+        for (const t of towers) {
+            if (t.alive && t.frozen && covered(t)) t.thaw(true);
         }
-        this._setChill([]);
+    }
+
+    _endBlizzard() {
+        const scene = this.scene;
         if (this._veil) {
             const v = this._veil;
             this._veil = null;
@@ -538,25 +606,6 @@ export class MapEventSystem {
         }
         for (const g of this._heat || []) { scene.tweens.killTweensOf(g); g.destroy(); }
         this._heat = [];
-    }
-
-    /** Exactly these towers chilled, every other one warm again. */
-    _setChill(chilled) {
-        const set = new Set(chilled);
-        for (const t of this.scene.towers) {
-            const want = set.has(t);
-            if (!!t.chilled === want) continue;
-            t.chilled = want;
-            if (want) {
-                t.frostGfx = this.scene.add.image(t.x, t.y, 'fx_frost').setDepth(6).setAlpha(0);
-                this.scene.tweens.add({ targets: t.frostGfx, alpha: 1, duration: 300 });
-            } else if (t.frostGfx) {
-                t.frostGfx.destroy();
-                t.frostGfx = null;
-            }
-            t._applyTint();
-        }
-        this.scene._refreshStatLabel?.();
     }
 
     /** Snow streaking across the board for `ms`, `density` flakes a tick. */
@@ -626,7 +675,7 @@ export class MapEventSystem {
                     .setOrigin(0, 0).setLineWidth(2).setDepth(14);
                 scene.tweens.add({ targets: beam, alpha: 0, duration: 450, onComplete: () => beam.destroy() });
                 if (fresh) {
-                    scene.floating?.show(e.x, e.y - 30, '+ESCUDO', { color: '#D1C4E9', size: 7, rise: 12, duration: 900 });
+                    scene.floating?.show(e.x, e.y - 30, '+ESCUDO', { color: '#FFE082', size: 7, rise: 12, duration: 900 });
                 }
             }
         });
@@ -639,6 +688,7 @@ export class MapEventSystem {
     serialize() {
         return {
             stallsLost: this.stalls.map((s, i) => (s.intact ? -1 : i)).filter(i => i >= 0),
+            stallsPending: this.stalls.map(s => s.pending || 0),
             rocks: [...this.rocks].filter(k => this.scene.breakableBlocks.has(k)),
         };
     }
@@ -648,6 +698,10 @@ export class MapEventSystem {
             const s = this.stalls[i];
             if (s && s.intact) this._wreckStall(s, false);
         }
+        (state?.stallsPending || []).forEach((n, i) => {
+            const s = this.stalls[i];
+            if (s && s.intact) { s.pending = n; this._drawPile(s); }
+        });
         this.rocks = new Set(state?.rocks || []);
     }
 

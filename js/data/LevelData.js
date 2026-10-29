@@ -122,10 +122,11 @@ export const MAP_2 = {
         { col: 15, row: 8, w: 3 },
         { col: 1, row: 12, w: 3 },
     ],
-    // The stalls pay out after every wave they survive; on waves 8 and 14 the
-    // enemies blow one line of crates each, opening the short way for good.
+    // The stalls fill with gold after every wave they survive, and Vesper has
+    // to walk over to collect it; on waves 8 and 14 the enemies blow one line
+    // of crates each, opening the short way for good.
     mechanics: {
-        stallGold: 10,
+        stallGold: 10, stallCap: 50, collectRadius: 40,
         breaches: [
             { wave: 8, block: 0, cause: 'blast' },
             { wave: 14, block: 1, cause: 'blast' },
@@ -195,14 +196,15 @@ export const MAP_3 = {
         { col: 9, row: 5, element: 'fire' },
         { col: 10, row: 10, element: 'earth' },
     ],
-    // From wave 6 the volcano throws meteors: rocks on the road reshape the
-    // rings wave by wave, and towers caught under one are stunned. On wave 10
-    // it erupts, and the first two meteors blow the top plug open.
+    // From wave 4 the volcano throws meteors, a volley every few seconds:
+    // rocks on the road reshape the rings wave by wave, and towers caught
+    // under one are stunned. On wave 10 it erupts — the first two meteors
+    // blow the top plug open — and from then on it never really stops.
     mechanics: {
         meteors: {
-            from: 6, every: 18000, count: 3,
-            eruption: { wave: 10, count: 7, plug: 0 },
-            rockHp: 80, rockCap: 10, enemyDamage: 60, heroDamage: 25, stunMs: 3000,
+            from: 4, every: 8000, everyLate: 6000, count: 3,
+            eruption: { wave: 10, count: 8, plug: 0 },
+            rockHp: 80, rockCap: 14, enemyDamage: 60, heroDamage: 25, stunMs: 3000,
         },
     },
     // Barricades are the point of this map, so the purse leaves room for them.
@@ -253,12 +255,13 @@ export const MAP_4 = {
         { col: 17, row: 5, element: 'fire' },
         { col: 2, row: 9, element: 'earth' },
     ],
-    // Every 35s of a wave the blizzard chills the towers for 8s (−20%
-    // cadence) — all but the fire-bearing ones and whatever stands next to
-    // one, which is what the fire seal on the flank is for.
+    // Every 35s of a wave the blizzard freezes half the exposed towers solid
+    // for 5s — they do not fire. Fire-bearing towers and whatever stands next
+    // to one never freeze, and a fire tower melts a frozen neighbour out:
+    // that is what the fire seal on the flank is for.
     mechanics: {
         blizzard: {
-            every: 35000, duration: 8000, slow: 0.2, warmRadius: 1,
+            every: 35000, duration: 5000, share: 0.5, warmRadius: 1,
             warm: ['fire', 'lava', 'storm', 'ashstorm', 'geyser', 'obsidian', 'ancestral'],
         },
     },

@@ -573,15 +573,7 @@ export class Enemy {
     }
 
     _updateHpBar() {
-        if (this.shieldGfx) {
-            this.shieldGfx.setPosition(this.x, this.y);
-            // The ward's own bar, violet, just over the health bar: how much
-            // of it is left is the thing worth reading at a glance.
-            const offY = (this.hpOffsetY || 21) + 4;
-            const pct = this.shieldMax > 0 ? Math.max(0, this.shield / this.shieldMax) : 0;
-            this.shieldBar.width = 24 * pct;
-            this.shieldBar.setPosition(this.x - (24 * (1 - pct)) / 2, this.y - offY);
-        }
+        if (this.shieldGfx) this.shieldGfx.setPosition(this.x, this.y);
         if (!this.hpBg) return;
         const pct = Math.max(0, this.hp / this.maxHp);
         const offY = this.hpOffsetY || 21;
@@ -592,8 +584,25 @@ export class Enemy {
         this.hpFill.y = this.y - offY;
 
         if (pct > 0.6) this.hpFill.fillColor = 0x4CAF50;
-        else if (pct > 0.3) this.hpFill.fillColor = 0xFFC107;
+        // Orange, not amber: yellow on this bar means a crypt ward (below).
+        else if (pct > 0.3) this.hpFill.fillColor = 0xFF8F1F;
         else this.hpFill.fillColor = 0xEF5350;
+
+        // The ward, in yellow, inside the same 24px frame: it starts where the
+        // green ends and runs right; whatever does not fit there sits over the
+        // end of the green instead. As it is spent it shrinks from both ends
+        // toward the end of the green, which is where it ran out from.
+        if (this.shieldBar) {
+            const left = this.x - 12;
+            const greenEnd = 24 * pct;
+            const full = 24 * Math.min(1, this.shieldMax / this.maxHp);
+            const after = Math.min(full, 24 - greenEnd);
+            const over = full - after;
+            const k = this.shieldMax > 0 ? Math.max(0, this.shield / this.shieldMax) : 0;
+            const x0 = greenEnd - over * k;
+            this.shieldBar.width = Math.max(0, (after + over) * k);
+            this.shieldBar.setPosition(left + x0, this.y - offY);
+        }
     }
 
     /**
@@ -618,7 +627,7 @@ export class Enemy {
                 // as the tower missing.
                 if (showNumber && this.scene.floating && this.sprite) {
                     this.scene.floating.show(this.x, this.y - 17, `${Math.round(absorbed)}`, {
-                        color: '#D1C4E9', size: 8, rise: 10, duration: 550,
+                        color: '#FFE082', size: 8, rise: 10, duration: 550,
                     });
                 }
                 return;
@@ -704,13 +713,14 @@ export class Enemy {
             // A bubble, not an outline: filled, thick-rimmed and breathing,
             // so a warded enemy stands out in a crowd.
             const r = this.sprite && this.sprite.height > 32 ? 28 : 16;
-            this.shieldGfx = this.scene.add.circle(this.x, this.y, r, 0x7E57C2, 0.28)
-                .setStrokeStyle(2, 0xD1C4E9, 1).setDepth(11);
+            this.shieldGfx = this.scene.add.circle(this.x, this.y, r, 0xFFD54F, 0.2)
+                .setStrokeStyle(2, 0xFFE082, 1).setDepth(11);
             this.scene.tweens.add({
-                targets: this.shieldGfx, scale: 1.12, fillAlpha: 0.16,
+                targets: this.shieldGfx, scale: 1.12, fillAlpha: 0.1,
                 duration: 420, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
             });
-            this.shieldBar = this.scene.add.rectangle(this.x, this.y, 24, 2, 0xB388FF).setDepth(12);
+            this.shieldBar = this.scene.add.rectangle(this.x, this.y, 0, 2, 0xFFE04A)
+                .setOrigin(0, 0.5).setDepth(12.5);
         }
         this._updateHpBar();
     }
@@ -718,9 +728,9 @@ export class Enemy {
     /** `broken`: knocked off by damage rather than run out — it shatters. */
     _dropShield(broken = false) {
         if (broken && this.shieldGfx && this.scene.particleSystem) {
-            this.scene.particleSystem.emitBurst(this.x, this.y, 0xB388FF);
-            const ring = this.scene.add.circle(this.x, this.y, this.shieldGfx.radius, 0xB388FF, 0)
-                .setStrokeStyle(2, 0xE1D5FF, 1).setDepth(11);
+            this.scene.particleSystem.emitBurst(this.x, this.y, 0xFFD54F);
+            const ring = this.scene.add.circle(this.x, this.y, this.shieldGfx.radius, 0xFFD54F, 0)
+                .setStrokeStyle(2, 0xFFF3C4, 1).setDepth(11);
             this.scene.tweens.add({
                 targets: ring, scale: 1.8, alpha: 0, duration: 260, onComplete: () => ring.destroy(),
             });

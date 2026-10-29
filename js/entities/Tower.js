@@ -27,6 +27,8 @@ export class Tower {
         this.hasteTimer = 0;
         this._hasteFx = 0;
         this.fireTimer = 0;
+        this.frozenTimer = 0;
+        this.frozenTotal = 0;
         this.alive = true;
         this.totalDamageDealt = 0;
         this.enemiesKilled = 0;
@@ -119,11 +121,7 @@ export class Tower {
         return this.data.range * lvlBonus * this._mult('range') * this._seal('range');
     }
 
-    get fireRate() {
-        // A map's cold (Glaciar Quebrado) slows the cadence while it lasts.
-        const chill = this.chilled ? 1 / (1 - (this.scene.mapEvents?.chillSlow ?? 0)) : 1;
-        return this.data.fireRate * this._mult('fireRate') * chill;
-    }
+    get fireRate() { return this.data.fireRate * this._mult('fireRate'); }
 
     /** Called by TempleSystem when this element's upgrade levels change. */
     refreshStats() {
@@ -162,6 +160,15 @@ export class Tower {
     update(delta, enemies) {
         if (!this.alive) return;
 
+        // Frozen solid by a blizzard (Glaciar Quebrado): no shots at all
+        // until the ice gives, and a bar under it says when that will be.
+        if (this.frozenTimer > 0) {
+            this.frozenTimer -= delta;
+            this._layoutIce();
+            if (this.frozenTimer <= 0) this.thaw(false);
+            return;
+        }
+
         if (this.stunTimer > 0) {
             this.stunTimer -= delta;
             if (this.stunGfx) {
@@ -189,6 +196,50 @@ export class Tower {
                 this.fireTimer = rate;
             }
         }
+    }
+
+    get frozen() { return this.frozenTimer > 0; }
+
+    /** Locks the tower in a block of ice for `ms`: it does not fire. */
+    freeze(ms) {
+        if (!this.alive) return;
+        this.frozenTimer = ms;
+        this.frozenTotal = ms;
+        if (!this.iceGfx) {
+            const key = this.scene.textures.exists('fx_iceblock') ? 'fx_iceblock' : 'tile_barricade';
+            this.iceGfx = this.scene.add.image(this.x, this.y, key).setDepth(6).setScale(0.4).setAlpha(0);
+            this.scene.tweens.add({ targets: this.iceGfx, scale: 1, alpha: 1, duration: 220, ease: 'Back.easeOut' });
+            this.iceBarBg = this.scene.add.rectangle(this.x, this.y + 18, 26, 4, 0x0b1a2a, 0.9)
+                .setStrokeStyle(1, 0x7FD0F0).setDepth(27);
+            this.iceBar = this.scene.add.rectangle(this.x - 12, this.y + 18, 24, 2, 0x9FE7FF)
+                .setOrigin(0, 0.5).setDepth(28);
+        }
+        this._layoutIce();
+        this._applyTint();
+    }
+
+    /** `melted`: freed early by a fire tower beside it, rather than run out. */
+    thaw(melted) {
+        this.frozenTimer = 0;
+        if (this.iceGfx && this.scene.particleSystem) {
+            this.scene.particleSystem.emitBurst(this.x, this.y, melted ? 0xFFB74D : 0xE1F5FE);
+        }
+        if (melted && this.scene.floating) {
+            this.scene.floating.show(this.x, this.y - 22, '¡DERRETIDA!', { color: '#FFB74D', size: 7, rise: 12, duration: 800 });
+        }
+        this._clearIce();
+        this._applyTint();
+    }
+
+    _layoutIce() {
+        if (!this.iceBar) return;
+        this.iceBar.width = 24 * Math.max(0, this.frozenTimer / (this.frozenTotal || 1));
+    }
+
+    _clearIce() {
+        if (this.iceGfx) { this.scene.tweens.killTweensOf(this.iceGfx); this.iceGfx.destroy(); this.iceGfx = null; }
+        if (this.iceBarBg) { this.iceBarBg.destroy(); this.iceBarBg = null; }
+        if (this.iceBar) { this.iceBar.destroy(); this.iceBar = null; }
     }
 
     /** EGIDA: +30% attack speed for `ms`. */
@@ -470,10 +521,10 @@ export class Tower {
     _applyTint() {
         if (!this.alive) return;
         if (this.stunTimer > 0) return; // the stun's grey owns the sprite until it ends
-        if (this.chilled) {
-            // Glaciar Quebrado's blizzard: frost over everything else, since it
+        if (this.frozen) {
+            // Glaciar Quebrado's blizzard: ice over everything else, since it
             // is the state that is costing the player shots right now.
-            this.sprite.setTint(0x8FD3FF);
+            this.sprite.setTint(0x9FD8FF);
         } else if (this.empowered) {
             if (this.element === 'storm') {
                 // Storm towers don't use the brownish-gold tint — clean original colors
@@ -584,7 +635,7 @@ export class Tower {
         if (this.sprite) this.sprite.destroy();
         if (this.empowerGfx) this.empowerGfx.destroy();
         if (this.stunGfx) { this.stunGfx.destroy(); this.stunGfx = null; }
-        if (this.frostGfx) { this.frostGfx.destroy(); this.frostGfx = null; }
+        this._clearIce();
         if (this._sparkTimer) { this._sparkTimer.remove(); this._sparkTimer = null; }
         
         if (this.selected) {
