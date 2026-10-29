@@ -436,7 +436,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 
 ## 🗺️ Epic 14: Sistemas de Juego Avanzados y Múltiples Niveles
 
-### US 14.1: Arquitectura Modular de Niveles y Selector de Mapas (`LevelData`)
+### US 14.1: Arquitectura Modular de Niveles y Selector de Mapas (`LevelData`) [✓]
 **Como** jugador y desarrollador,  
 **Quiero** que el juego desacople los mapas, rutas y oleadas en estructuras de datos independientes (`LevelData`) y ofrezca un selector de mapas en el menú principal,  
 **Para** poder jugar múltiples niveles con trazados, biomas, puntos de entrada/salida y desafíos únicos, y permitir agregar fácilmente nuevos mapas sin modificar la lógica interna del motor.
@@ -460,7 +460,13 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - **Persistencia Multimapa (`SaveSystem`)**:
 >   - `SaveSystem` incluye el `levelId` en el guardado para restaurar exactamente el mapa y sus obstáculos guardados.
 > 
-> *Estado:* **En progreso** — Paso 1 (desacoplamiento base) hecho: el mapa vive en `js/data/LevelData.js`; se eliminó `WAYPOINTS` y `GridSystem` usa las dimensiones del nivel (`GridSystem.js`, `GameScene.js`, `Hero.js`, `EconomySystem.js`, `SaveSystem.js`). Paso 2 (biomas visuales) hecho: `grass`, `city`, `volcano`, `snow` y `dungeon`, con suelo construible oscuro (luma 13–14 %) y camino de losas irregulares claro (62–71 %) con borde oscuro; rompibles propios por bioma (cajas/barriles/sacos en `city`); `city` tiene suelo de empedrado y casas en 3/4 en la fila superior (con árboles y puestos de mercado pegados a las fachadas) y en `townBlocks` por nivel. Paso 3 (mapas) hecho: 5 niveles en `LevelData.js` (`map_1` Paso de Ceniza, `map_2` Plaza del Mercado, `map_3` Caldera de Magma con plaza para barricadas vía `roadAreas` en `GridSystem`, `map_4` Glaciar Quebrado, `map_5` Cripta Ancestral con 15 vidas y 150 de oro) (`js/systems/Terrain.js`, `js/data/BiomeArt.js`, `Palette.js`, `BootScene.js`, `GameScene.js`). Pendiente: selector en `TitleScene` y oleadas por mapa.
+> *Estado:* **Implementado** — cinco mapas con bioma, trazado, sellos, rompibles, recursos y oleadas propias, elegibles desde un selector con vista previa y progreso guardado.
+> - **Datos**: `js/data/LevelData.js` (`map_1` Paso de Ceniza, `map_2` Plaza del Mercado, `map_3` Caldera de Magma, `map_4` Glaciar Quebrado, `map_5` Cripta Ancestral; `biome`, `waveProfile`, `brief`, `roadAreas`, `townBlocks`), `js/data/WaveData.js` (perfiles de 20 oleadas y receta de Modo Infinito por mapa), `js/data/Palette.js` (paletas de bioma y de sellos).
+> - **Motor**: `js/systems/GridSystem.js` (dimensiones del nivel, `roadAreas`), `js/systems/WaveManager.js` (perfil por mapa, multiplicadores de vida, infinito ponderado), `js/entities/Hero.js`, `js/systems/EconomySystem.js`.
+> - **Biomas** (creados): `js/systems/Terrain.js` (capas por celda sin Phaser, anillo urbano) y `js/data/BiomeArt.js` (terreno de city/volcano/snow/dungeon, casas en 3/4, puestos, rompibles); modificados `js/scenes/BootScene.js` y `js/scenes/GameScene.js`.
+> - **Selector** (creado): `js/systems/MapPreview.js` (mini-mapa con camino, rompibles, ciudad y sellos); `js/scenes/TitleScene.js` (modal ELIGE UN MAPA con lista, vista previa animada de la ruta, oro/vidas/oleadas e insignia COMPLETADO; confirmación antes de reemplazar una partida; CONTINUAR muestra mapa y oleada).
+> - **Persistencia**: `js/systems/SaveSystem.js` (`levelId` en el guardado; progreso por mapa en `elemental-td:progress-v1` con completado y mejor oleada), `js/scenes/UIScene.js` (registro al ganar/perder y en cada oleada del infinito; Reintentar/Reiniciar repiten el mapa jugado).
+> - **Tutorial**: `js/systems/TutorialSystem.js` y `GameScene.js` (solo en `map_1` y hasta completarlo o saltarlo una vez).
 
 ### US 14.2: Modo Sin Fin (Endless Mode) [✓]
 **Como** jugador veterano,  
@@ -495,6 +501,32 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Modificadores seleccionables: enemigos con mayor velocidad, menos vidas iniciales, templos más vulnerables al sabotaje.
 > 
 > *Estado:* **Pendiente**.
+
+### US 14.5: Múltiples Entradas y Caminos por Mapa
+**Como** jugador,  
+**Quiero** mapas con más de una entrada de enemigos y caminos alternativos que la oleada se reparta entre sí,  
+**Para** tener que defender varios frentes a la vez y decidir dónde concentrar torres y barricadas.
+
+> **Criterios de Aceptación:**
+> - **Varias entradas por nivel**: `LevelData` admite una lista de puntos de aparición (`spawnPoints`) y cada grupo de la oleada indica por cuál entra (o se reparte entre todas).
+> - **Reparto entre caminos de igual costo**: cuando dos rutas cuestan lo mismo, cada enemigo sortea cuál toma, así la oleada se divide; si una ruta es más corta se sigue eligiendo la corta, de modo que barricadas y desvíos siguen funcionando igual.
+> - **Puertas y rutas visibles**: una puerta de entrada dibujada por cada spawn, y `RouteView` muestra todas las rutas posibles durante la planificación.
+> - **Validaciones**: ninguna barricada puede dejar sin salida a una sola de las entradas.
+> - **Diseño a evaluar**: en un anillo con lados iguales barricar un lado no alarga la ruta, solo concentra la oleada; decidir por mapa qué tramos reparten y cuáles se alargan (ver el anillo oeste de la Caldera de Magma como candidato).
+> 
+> *Estado:* **Pendiente** (idea a desarrollar).
+
+### US 14.6: Mapas Más Grandes con Zoom Automático [✓]
+**Como** jugador y diseñador de niveles,  
+**Quiero** que un nivel pueda tener más celdas que el tablero de 20×15, mostrándose más chico en pantalla,  
+**Para** jugar mapas más amplios sin perder la nitidez del pixel art.
+
+> **Criterios de Aceptación:**
+> - `LevelData` define `cols`/`rows` libres; la cámara del tablero elige el zoom entero respecto del buffer (1 o 3/4, es decir 32 o 24 px por celda) para que entre en el área de 640×480.
+> - El HUD (`UIScene`) no cambia; clicks, colocación, héroe, enemigos, proyectiles y hechizos funcionan en coordenadas del mundo.
+> - Mapa de prueba de 26×20 celdas.
+> 
+> *Estado:* **Implementado** en `Viewport.js` (`applyBoardViewport`, `boardZoom`: los mapas de 20×15 conservan la cámara de siempre; los más grandes reciben una cámara solo sobre el tablero a zoom 3/4 o 1/2, centrada), `GridSystem.js` (`worldWidth`/`worldHeight`), `GameScene.js` (`_onBoard` en lugar de `x < 640`; tarjetas acotadas al mundo del nivel), `Hero.js`, `Sentinel.js`, `TouchControls.js` (límites del nivel), `TitleScene.js` (mini-mapa con celda según tamaño, lista de 6 mapas) y `LevelData.js` (`map_test` Llanura Extensa, 26×20).
 
 ---
 
@@ -682,7 +714,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Script de compilación `update_mana.cjs` que convierte `mana.ase` en Data URI en `ManaSprite.js`.
 > - Carga de textura `'mana_mote'` en `BootScene.js` e integración en tarjeta de recursos y HUD de `UIScene.js`.
 > 
-> *Estado:* **Implementado** en `mana.ase`, `update_mana.cjs`, `ManaSprite.js`, `BootScene.js` y `UIScene.js`.
+> *Estado:* **Implementado** en `mana.ase`, `update_mana.cjs`, `ManaSprite.js`, `BootScene.js` y `UIScene.js`. El glifo ✦ en textos (costos de hechizos y mejoras, avisos, tooltips, tutorial, etiqueta del cursor, texto flotante) se dibuja con el mismo sprite vía `js/systems/IconText.js` (`UIScene.js`, `GameScene.js`, `FloatingText.js`).
 
 ---
 

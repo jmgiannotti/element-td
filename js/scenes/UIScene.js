@@ -14,12 +14,14 @@ import {
 } from '../data/Elements.js';
 import { HERO_ABILITIES, ABILITY_ORDER, COMBO, abilityHeading } from '../data/HeroData.js';
 import { SPELLS, SPELL_ORDER, spellHeading } from '../data/SpellData.js';
+import { IconText, hasManaGlyph } from '../systems/IconText.js';
 import { HERO_LORE, DEFAULT_LOOK, heroTextureKey } from '../data/HeroLook.js';
-import { applyViewport } from '../systems/Viewport.js';
+import { applyViewport, worldToView } from '../systems/Viewport.js';
 import { OptionsModal } from '../systems/OptionsModal.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 
 const FONT = '"Press Start 2P"';
+// Stands for the maná sprite in any string drawn through IconText.
 const MANA = '✦';
 
 // Sidebar geometry. The map owns x < 640; everything here lives to the right
@@ -659,10 +661,12 @@ export class UIScene extends Phaser.Scene {
             },
             onRestart: () => {
                 this.optionsModal = null;
+                // Restart the map being played, not the default one
+                const levelData = this.gs.levelData;
                 SaveSystem.clearSave();
                 this.scene.stop('UIScene');
                 this.scene.stop('GameScene');
-                this.scene.start('GameScene', { continueGame: false });
+                this.scene.start('GameScene', { continueGame: false, levelData });
             },
         });
     }
@@ -704,15 +708,21 @@ export class UIScene extends Phaser.Scene {
     _buildWaveMarker() {
         const sp = this.gs.gridSystem.spawnPoint;
         const { cols, rows } = this.gs.gridSystem;
-        const gate = this.gs.gridSystem.gridToWorld(
+        const gateWorld = this.gs.gridSystem.gridToWorld(
             Phaser.Math.Clamp(sp.col, 0, cols - 1), Phaser.Math.Clamp(sp.row, 0, rows - 1),
         );
+        // Where the board camera draws the gate: the same point on a standard
+        // board, smaller and shifted on a zoomed-out one (US 14.6).
+        const gate = worldToView(this.gs, gateWorld.x, gateWorld.y);
+        const k = this.gs.boardZoom ?? 1;
         // Straight over the gate's centre, so the arrow points at the arch,
         // 36px above the gate's centre: room for the arrow to stand off the
         // medallion and still stop short of the arch. Always above, because
         // the arrow is part of the sprite and points down; a gate on the top
         // row just gets the marker pressed against the board's edge.
-        const y = Math.max(gate.y - 36, 14);
+        // The medallion stays UI-sized; only the gate shrinks, so the gap to
+        // its arch shrinks with it (36px at full size).
+        const y = Math.max(Math.round(gate.y - 21 - 15 * k), 14);
         const x = Math.round(Phaser.Math.Clamp(gate.x, 16, 624));
 
         const c = this.add.container(x, y).setDepth(40);
@@ -1210,11 +1220,9 @@ export class UIScene extends Phaser.Scene {
             .setVisible(false);
 
         // Wrapped with comfortable margins leaving the skip button its own column
-        this.tutorialText = this.add.text(285, 452, '', {
-            fontFamily: FONT, fontSize: '7.5px', color: '#ECEFF1',
-            align: 'center', lineSpacing: 4,
-            wordWrap: { width: 410 },
-        }).setOrigin(0.5).setDepth(71).setVisible(false);
+        this.tutorialText = new IconText(this, 285, 452, '', {
+            fontFamily: FONT, fontSize: '7.5px', color: '#ECEFF1', lineSpacing: 4,
+        }, { wrap: 54, align: 'center' }).setOrigin(0.5).setDepth(71).setVisible(false);
 
         this.tutorialSkipBg = this.add.rectangle(530, 452, 54, 22, 0x2a2a4a)
             .setStrokeStyle(1, 0x555577)
@@ -1356,7 +1364,7 @@ export class UIScene extends Phaser.Scene {
         });
         on('spell-cast', (key) => {
             const s = SPELLS[key];
-            if (s) this._flashNotification(`${s.label}  −${s.cost}✦`, s.colorHex);
+            if (s) this._flashNotification(`${s.label}  −${s.cost}${MANA}`, s.colorHex);
             this._refreshCancelButton();
         });
 
@@ -1437,7 +1445,7 @@ export class UIScene extends Phaser.Scene {
             if (this.heroHintShown) return;
             if (this.gs.tutorial && this.gs.tutorial.active) return;
             this.heroHintShown = true;
-            this._flashNotification('El heroe recoge ✦ sin refinar', '#B388FF');
+            this._flashNotification(`El heroe recoge ${MANA} sin refinar`, '#B388FF');
         });
 
         // ── Elemental match-ups ─────────────────
@@ -1506,12 +1514,20 @@ export class UIScene extends Phaser.Scene {
         on('boss-hp-changed', (boss) => this._onBossHpChanged(boss));
         on('boss-ability-cast', (data) => this._onBossAbilityCast(data));
         on('boss-defeated', (boss) => this._onBossDefeated(boss));
+        on('enemy-reached-end', (enemy) => {
+            if (enemy?.isBoss) this._onBossEscaped(enemy);
+        });
 
         on('game-over', () => {
             this._closeUpgradePanel();
             this._closeHelpPanel();
             this._showTutorialStep(null, null);
             this._showEndScreen('¡DERROTA!', '#EF5350');
+        });
+        on('wave-complete', (wave) => {
+            if (wave > this.gs.waveManager.totalWaves) {
+                SaveSystem.recordProgress(this.gs.levelData?.id, { wave });
+            }
         });
         on('all-waves-complete', () => {
             this._closeUpgradePanel();
@@ -1650,26 +1666,45 @@ export class UIScene extends Phaser.Scene {
             });
 
             this._flashNotification(`¡${boss.data.name.toUpperCase()} HA SIDO DERROTADO!`, '#4CAF50');
-
-            this.time.delayedCall(1800, () => {
-                // Check if another boss is still alive
-                const remainingBoss = this.gs.enemies.find(e => e.alive && e.isBoss && e !== boss);
-                if (remainingBoss) {
-                    this._onBossSpawned(remainingBoss);
-                } else {
-                    this.tweens.add({
-                        targets: this.bossBarContainer,
-                        y: -50,
-                        duration: 350,
-                        ease: 'Quad.easeIn',
-                        onComplete: () => {
-                            this.bossBarContainer.setVisible(false);
-                            this.activeBoss = null;
-                        },
-                    });
-                }
-            });
+            this._retireBossBar(boss);
         }
+    }
+
+    /**
+     * A boss that walked out of the exit. Its bar used to stay up forever,
+     * reading the health of something no longer on the board; now it says what
+     * happened and what it cost, then comes down like a defeated boss's.
+     */
+    _onBossEscaped(boss) {
+        const cost = boss.data.leak ?? 1;
+        this._flashNotification(
+            `¡${boss.data.name.toUpperCase()} ESCAPO! -${cost} ${cost === 1 ? 'VIDA' : 'VIDAS'}`, '#EF5350'
+        );
+        if (this.activeBoss !== boss) return;
+        this.bossStatusText.setText('¡ESCAPO!').setColor('#EF5350').setVisible(true);
+        this._retireBossBar(boss);
+    }
+
+    /** After a beat, hands the bar to another living boss or slides it away. */
+    _retireBossBar(boss) {
+        this.time.delayedCall(1800, () => {
+            if (this.activeBoss !== boss) return;
+            const remainingBoss = this.gs.enemies.find(e => e.alive && e.isBoss && e !== boss);
+            if (remainingBoss) {
+                this._onBossSpawned(remainingBoss);
+            } else {
+                this.tweens.add({
+                    targets: this.bossBarContainer,
+                    y: -50,
+                    duration: 350,
+                    ease: 'Quad.easeIn',
+                    onComplete: () => {
+                        this.bossBarContainer.setVisible(false);
+                        this.activeBoss = null;
+                    },
+                });
+            }
+        });
     }
 
     // ─── Modal plumbing ─────────────────────────────────
@@ -1914,7 +1949,7 @@ export class UIScene extends Phaser.Scene {
      * is competing for the same number.
      */
     _buildSpellsTab(container) {
-        container.add(this.add.text(0, -124, `Gastan ${MANA}, el mismo que las mejoras de templo.`, {
+        container.add(new IconText(this, 0, -124, `Gastan ${MANA}, el mismo que las mejoras de templo.`, {
             fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
         }).setOrigin(0.5));
         container.add(this.add.text(0, -110, 'Se apuntan con un click en el mapa.', {
@@ -1932,7 +1967,7 @@ export class UIScene extends Phaser.Scene {
                 .setStrokeStyle(2, s.color));
             container.add(this.add.image(-180, y, safeTexture(this, s.icon, 'mana_mote')));
 
-            container.add(this.add.text(-152, y - 22, spellHeading(key), {
+            container.add(new IconText(this, -152, y - 22, spellHeading(key), {
                 fontFamily: FONT, fontSize: '8px', color: s.colorHex,
             }).setOrigin(0, 0.5));
 
@@ -1991,7 +2026,7 @@ export class UIScene extends Phaser.Scene {
 
         container.add(this.add.rectangle(0, 44, 420, 58, 0x0d0d1c, 0.55)
             .setStrokeStyle(1, 0x22223a));
-        container.add(this.add.text(-196, 26, `COMBO DE ${MANA}`, {
+        container.add(new IconText(this, -196, 26, `COMBO DE ${MANA}`, {
             fontFamily: FONT, fontSize: '8px', color: '#FFD54F',
         }).setOrigin(0, 0.5));
         container.add(this.add.text(-196, 50, [
@@ -2031,7 +2066,7 @@ export class UIScene extends Phaser.Scene {
         }).setOrigin(0, 0.5);
         container.add(this.panelTitle);
 
-        this.panelSubtitle = this.add.text(-132, -120, '', {
+        this.panelSubtitle = new IconText(this, -132, -120, '', {
             fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
         }).setOrigin(0, 0.5);
         container.add(this.panelSubtitle);
@@ -2086,7 +2121,7 @@ export class UIScene extends Phaser.Scene {
         const btnTop = this.add.text(120, y - 11, 'MEJORAR', {
             fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
         }).setOrigin(0.5);
-        const btnCost = this.add.text(120, y + 10, '', {
+        const btnCost = new IconText(this, 120, y + 10, '', {
             fontFamily: FONT, fontSize: '8px', color: '#B388FF',
         }).setOrigin(0.5);
 
@@ -2212,7 +2247,20 @@ export class UIScene extends Phaser.Scene {
      */
     _showTooltip(lines, x, y, originX = 1) {
         this._hideTooltip();
-        this.tooltip = this.add.text(x, y, lines.join('\n'), {
+        const text = lines.join('\n');
+        if (hasManaGlyph(text)) {
+            // Same box as the plain tooltip, drawn by hand so the maná sprite
+            // can sit inside the line it belongs to.
+            const body = new IconText(this, 0, 0, text, {
+                fontFamily: FONT, fontSize: '8px', color: '#ECEFF1', lineSpacing: 7,
+            });
+            const pad = 10, w = body.width + pad * 2, h = body.height + pad * 2;
+            body.setOrigin(0, 0).setPosition(-w * originX + pad, -h / 2 + pad);
+            const bg = this.add.rectangle(0, 0, w, h, 0x0a0a1a, 0.94).setOrigin(originX, 0.5);
+            this.tooltip = this.add.container(x, y, [bg, body]).setDepth(100);
+            return;
+        }
+        this.tooltip = this.add.text(x, y, text, {
             fontFamily: FONT,
             fontSize: '8px',
             color: '#ECEFF1',
@@ -2236,8 +2284,11 @@ export class UIScene extends Phaser.Scene {
         if (!link || !link.b1 || !link.b2) return;
 
         const isTemple = link.kind === 'temple';
-        const midX = (link.b1.x + link.b2.x) / 2;
-        const minY = Math.min(link.b1.y, link.b2.y);
+        // The towers live in the board's world; the card in this scene's view.
+        const a = worldToView(this.gs, link.b1.x, link.b1.y);
+        const b = worldToView(this.gs, link.b2.x, link.b2.y);
+        const midX = (a.x + b.x) / 2;
+        const minY = Math.min(a.y, b.y);
 
         // Clamp inside map boundaries
         const targetX = Phaser.Math.Clamp(midX, 100, 540);
@@ -2353,10 +2404,14 @@ export class UIScene extends Phaser.Scene {
         while (this.notifSlots[slot]) slot++;
         this.notifSlots[slot] = true;
 
-        const n = this.add.text(MAP_CX, 34 + slot * 18, text, {
+        const style = {
             fontFamily: FONT, fontSize: '8px', color,
             stroke: '#000000', strokeThickness: 4,
-        }).setOrigin(0.5).setDepth(100);
+        };
+        const n = (hasManaGlyph(text)
+            ? new IconText(this, MAP_CX, 34 + slot * 18, text, style)
+            : this.add.text(MAP_CX, 34 + slot * 18, text, style)
+        ).setOrigin(0.5).setDepth(100);
 
         this.tweens.add({
             targets: n, y: 12 + slot * 18, alpha: 0,
@@ -2405,6 +2460,15 @@ export class UIScene extends Phaser.Scene {
 
     // ─── End screen ─────────────────────────────────────
     _showEndScreen(message, color) {
+        const isVictory = message === '¡VICTORIA!';
+        // Remembered for the map selector: a victory marks the map completed;
+        // either way the furthest wave cleared counts as its best.
+        const wm = this.gs.waveManager;
+        SaveSystem.recordProgress(this.gs.levelData?.id, {
+            completed: isVictory,
+            wave: isVictory ? wm.currentWave : wm.currentWave - 1,
+        });
+
         const c = this.add.container(0, 0).setDepth(90);
         
         const shade = this.add.rectangle(460, 240, 920, 480, 0x000000, 0.78);
@@ -2421,7 +2485,6 @@ export class UIScene extends Phaser.Scene {
             const total = this.gs.templeSystem ? this.gs.templeSystem.totalLevels(t.element) : 0;
             return {
                 element: t.element,
-                emoji: t.data?.emoji || '◈',
                 name: t.data?.name || t.element,
                 totalDamageDealt: t.totalDamageDealt || 0,
                 enemiesKilled: t.enemiesKilled || 0,
@@ -2452,7 +2515,7 @@ export class UIScene extends Phaser.Scene {
 
         if (mvp) {
             stats.push(
-                `👑 Torre MVP: ${mvp.emoji} ${mvp.name}${mvp.level > 0 ? ` (Nv.${mvp.level})` : ''}`,
+                `Torre MVP: ${mvp.name}${mvp.level > 0 ? ` (Nv.${mvp.level})` : ''}`,
                 `Daño: ${Math.round(mvp.totalDamageDealt)}  ·  Bajas: ${mvp.enemiesKilled}`
             );
         } else {
@@ -2465,7 +2528,6 @@ export class UIScene extends Phaser.Scene {
         }).setOrigin(0.5);
         c.add(statsText);
 
-        const isVictory = message === '¡VICTORIA!';
         const rx = isVictory ? MAP_CX - 150 : MAP_CX - 90;
         const mx = isVictory ? MAP_CX + 150 : MAP_CX + 90;
 
@@ -2479,10 +2541,12 @@ export class UIScene extends Phaser.Scene {
         c.add([rbg, rtext]);
 
         rbg.on('pointerdown', () => {
+            // The same map again, not the default one
+            const levelData = this.gs.levelData;
             SaveSystem.clearSave();
             this.scene.stop('UIScene');
             this.scene.stop('GameScene');
-            this.scene.start('GameScene', { continueGame: false });
+            this.scene.start('GameScene', { continueGame: false, levelData });
         });
         rbg.on('pointerover', () => { rbg.fillColor = 0x388E3C; });
         rbg.on('pointerout', () => { rbg.fillColor = 0x2E7D32; });
@@ -2491,7 +2555,7 @@ export class UIScene extends Phaser.Scene {
         const mbg = this.add.rectangle(mx, 340, 140, 38, 0x282848);
         mbg.setStrokeStyle(2, 0x90CAF9);
         mbg.setInteractive({ useHandCursor: true });
-        const mtext = this.add.text(mx, 340, 'MENÚ PRINCIPAL', {
+        const mtext = this.add.text(mx, 340, 'MENU PRINCIPAL', {
             fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
         }).setOrigin(0.5);
         c.add([mbg, mtext]);

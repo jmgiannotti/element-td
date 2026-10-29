@@ -4,7 +4,7 @@ import {
     volume, blit, line, groundShadow, edgePixel,
 } from '../systems/Pixels.js';
 import {
-    EL, STONE, STONE_HI, MARBLE, BASALT, GOLD, BANNER, SOUL, GRASS, ROAD,
+    EL, STONE, STONE_HI, MARBLE, BASALT, GOLD, BANNER, SOUL, GRASS, ROAD, SEAL_RAMPS,
 } from '../data/Palette.js';
 import {
     DEFAULT_LOOK, LANTERN_TIERS, POSE_NAMES, HERO_GLOW_KEY, HERO_SLASH_KEY,
@@ -688,12 +688,7 @@ export class BootScene extends Phaser.Scene {
      *   seal_<el>_halo   the light under the pedestal's footing, pulsed
      */
     _generateSeals() {
-        const RAMPS = {
-            fire:  EL.fire,
-            water: EL.ice,
-            earth: ramp(0x1a2608, 0x3d5a14, 0x7a9a2a, 0xc8d25a, 0xfff0a8),
-            air:   ramp(0x241c48, 0x5a4a9a, 0xa898d8, 0xe4ddff, 0xffffff),
-        };
+        const RAMPS = SEAL_RAMPS;
 
         // One faceted crystal: 1px dark outline, lit left face, shaded right
         // face, a bright ridge, a white glint. `base` is the row it stands on.

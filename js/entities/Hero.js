@@ -1,5 +1,4 @@
 import * as Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT } from '../systems/GridSystem.js';
 import { HERO_ABILITIES, ABILITY_ORDER, COMBO, comboMultiplier } from '../data/HeroData.js';
 import {
     DEFAULT_LOOK, LANTERNS, HERO_GLOW_KEY, HERO_SLASH_KEY, WALK_CYCLE,
@@ -361,8 +360,8 @@ export class Hero {
         const reach = Math.min(a.range, Math.max(60, len));
 
         this.dashTarget = {
-            x: Phaser.Math.Clamp(this.posX + (dx / len) * reach, 10, GAME_WIDTH - 10),
-            y: Phaser.Math.Clamp(this.posY + (dy / len) * reach, 12, GAME_HEIGHT - 10),
+            x: Phaser.Math.Clamp(this.posX + (dx / len) * reach, 10, this.scene.gridSystem.worldWidth - 10),
+            y: Phaser.Math.Clamp(this.posY + (dy / len) * reach, 12, this.scene.gridSystem.worldHeight - 10),
         };
         this.dashing = true;
         this.dashSpeed = (reach / a.castTime) * 1000;
@@ -528,8 +527,8 @@ export class Hero {
         // channel owns it for the same reason — see channel().
         if (this.dashing || this.channelTimer > 0) return;
 
-        const tx = Phaser.Math.Clamp(worldX, 10, GAME_WIDTH - 10);
-        const ty = Phaser.Math.Clamp(worldY, 12, GAME_HEIGHT - 10);
+        const tx = Phaser.Math.Clamp(worldX, 10, this.scene.gridSystem.worldWidth - 10);
+        const ty = Phaser.Math.Clamp(worldY, 12, this.scene.gridSystem.worldHeight - 10);
         this.targetPos = { x: tx, y: ty };
         this.moving = true;
         this.steering = false;
@@ -575,8 +574,8 @@ export class Hero {
         const speed = this.speed * Math.min(1, Math.max(0.1, force));
         const step = speed * (delta / 1000);
 
-        this.posX = Phaser.Math.Clamp(this.posX + normX * step, 10, GAME_WIDTH - 10);
-        this.posY = Phaser.Math.Clamp(this.posY + normY * step, 12, GAME_HEIGHT - 10);
+        this.posX = Phaser.Math.Clamp(this.posX + normX * step, 10, this.scene.gridSystem.worldWidth - 10);
+        this.posY = Phaser.Math.Clamp(this.posY + normY * step, 12, this.scene.gridSystem.worldHeight - 10);
 
         if (Math.abs(normX) > 0.05) {
             this._face(normX);
@@ -602,8 +601,8 @@ export class Hero {
             }
         }
 
-        this.posX = Phaser.Math.Clamp(this.posX, 10, GAME_WIDTH - 10);
-        this.posY = Phaser.Math.Clamp(this.posY, 12, GAME_HEIGHT - 10);
+        this.posX = Phaser.Math.Clamp(this.posX, 10, this.scene.gridSystem.worldWidth - 10);
+        this.posY = Phaser.Math.Clamp(this.posY, 12, this.scene.gridSystem.worldHeight - 10);
 
         this._syncSprite(delta);
         this.steering = false;

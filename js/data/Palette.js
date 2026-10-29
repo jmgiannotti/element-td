@@ -46,6 +46,15 @@ export const SOUL = ramp(0x2a1060, 0x5b2bb0, 0x8f5ce8, 0xb388ff, 0xf1e6ff);
 // defending and the thing defending it are visibly the same side.
 export const BANNER = ramp(0x2b0d4a, 0x5b1e94, 0x8b34c9, 0xb463e8, 0xe3bcff);
 
+// The seal crystals (US 12.1). Water borrows ice and earth goes lime so the
+// four still tell apart at a glance — including as dots on the map preview.
+export const SEAL_RAMPS = {
+    fire:  EL.fire,
+    water: EL.ice,
+    earth: ramp(0x1a2608, 0x3d5a14, 0x7a9a2a, 0xc8d25a, 0xfff0a8),
+    air:   ramp(0x241c48, 0x5a4a9a, 0xa898d8, 0xe4ddff, 0xffffff),
+};
+
 // ─── Terrain palettes ───────────────────────────────────
 export const GRASS = {
     shadow: 0x081a10, deep: 0x0f2a1b, base: 0x173824,

@@ -65,6 +65,10 @@ export class GridSystem {
         return grid;
     }
 
+    /** The level's size in world pixels — the board is this big, whatever it looks like on screen. */
+    get worldWidth() { return this.cols * TILE_SIZE; }
+    get worldHeight() { return this.rows * TILE_SIZE; }
+
     /** Starting HP of the breakable block at (col,row), as the level defines it. */
     breakableHp(col, row) {
         const block = (this.levelData.breakableBlocks || []).find(b =>

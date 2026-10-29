@@ -1,6 +1,5 @@
 import * as Phaser from 'phaser';
 import { HERO_SLASH_KEY } from '../data/HeroLook.js';
-import { GAME_WIDTH, GAME_HEIGHT } from '../systems/GridSystem.js';
 import { safeTexture } from '../systems/TextureGuard.js';
 import { audio } from '../systems/AudioSystem.js';
 
@@ -171,8 +170,8 @@ export class Sentinel {
         const k = Math.min(1, delta / STEER_MS);
         this.vx += (wx - this.vx) * k;
         this.vy += (wy - this.vy) * k;
-        this.posX = Phaser.Math.Clamp(this.posX + this.vx * dt, 8, GAME_WIDTH - 8);
-        this.posY = Phaser.Math.Clamp(this.posY + this.vy * dt, 10, GAME_HEIGHT - 8);
+        this.posX = Phaser.Math.Clamp(this.posX + this.vx * dt, 8, this.scene.gridSystem.worldWidth - 8);
+        this.posY = Phaser.Math.Clamp(this.posY + this.vy * dt, 10, this.scene.gridSystem.worldHeight - 8);
     }
 
     // ─── Fighting ───────────────────────────────────────
