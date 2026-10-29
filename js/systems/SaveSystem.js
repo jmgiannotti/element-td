@@ -4,6 +4,9 @@ import { BARRICADE_COST } from './EconomySystem.js';
 import { TILE } from './GridSystem.js';
 
 const SAVE_KEY = 'elemental-td:save-v1';
+// Kept apart from the save on purpose: a save is one game in progress and is
+// wiped when it ends; progress is what the player has done across all of them.
+const PROGRESS_KEY = 'elemental-td:progress-v1';
 
 export class SaveSystem {
     static hasSave() {
@@ -263,5 +266,36 @@ export class SaveSystem {
         try {
             localStorage.removeItem(SAVE_KEY);
         } catch {}
+    }
+
+    // ─── Progress across games ───────────────────────────
+    /** levelId → { completed, bestWave }. Empty when nothing is stored. */
+    static getProgress() {
+        try {
+            const data = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}');
+            return data && typeof data === 'object' ? data : {};
+        } catch {
+            return {};
+        }
+    }
+
+    /**
+     * Records what a game reached on a map: `completed` once the last base wave
+     * falls (it never goes back to false), and the furthest wave cleared, which
+     * is how endless runs are compared.
+     */
+    static recordProgress(levelId, { completed = false, wave = 0 } = {}) {
+        if (!levelId) return;
+        const all = SaveSystem.getProgress();
+        const prev = all[levelId] || { completed: false, bestWave: 0 };
+        all[levelId] = {
+            completed: prev.completed || completed,
+            bestWave: Math.max(prev.bestWave || 0, wave),
+        };
+        try {
+            localStorage.setItem(PROGRESS_KEY, JSON.stringify(all));
+        } catch {
+            // Private window or blocked storage: progress just is not kept.
+        }
     }
 }

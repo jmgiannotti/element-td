@@ -1515,6 +1515,11 @@ export class UIScene extends Phaser.Scene {
             this._showTutorialStep(null, null);
             this._showEndScreen('¡DERROTA!', '#EF5350');
         });
+        on('wave-complete', (wave) => {
+            if (wave > this.gs.waveManager.totalWaves) {
+                SaveSystem.recordProgress(this.gs.levelData?.id, { wave });
+            }
+        });
         on('all-waves-complete', () => {
             this._closeUpgradePanel();
             this._closeHelpPanel();
@@ -2407,6 +2412,15 @@ export class UIScene extends Phaser.Scene {
 
     // ─── End screen ─────────────────────────────────────
     _showEndScreen(message, color) {
+        const isVictory = message === '¡VICTORIA!';
+        // Remembered for the map selector: a victory marks the map completed;
+        // either way the furthest wave cleared counts as its best.
+        const wm = this.gs.waveManager;
+        SaveSystem.recordProgress(this.gs.levelData?.id, {
+            completed: isVictory,
+            wave: isVictory ? wm.currentWave : wm.currentWave - 1,
+        });
+
         const c = this.add.container(0, 0).setDepth(90);
         
         const shade = this.add.rectangle(460, 240, 920, 480, 0x000000, 0.78);
@@ -2423,7 +2437,6 @@ export class UIScene extends Phaser.Scene {
             const total = this.gs.templeSystem ? this.gs.templeSystem.totalLevels(t.element) : 0;
             return {
                 element: t.element,
-                emoji: t.data?.emoji || '◈',
                 name: t.data?.name || t.element,
                 totalDamageDealt: t.totalDamageDealt || 0,
                 enemiesKilled: t.enemiesKilled || 0,
@@ -2454,7 +2467,7 @@ export class UIScene extends Phaser.Scene {
 
         if (mvp) {
             stats.push(
-                `👑 Torre MVP: ${mvp.emoji} ${mvp.name}${mvp.level > 0 ? ` (Nv.${mvp.level})` : ''}`,
+                `Torre MVP: ${mvp.name}${mvp.level > 0 ? ` (Nv.${mvp.level})` : ''}`,
                 `Daño: ${Math.round(mvp.totalDamageDealt)}  ·  Bajas: ${mvp.enemiesKilled}`
             );
         } else {
@@ -2467,7 +2480,6 @@ export class UIScene extends Phaser.Scene {
         }).setOrigin(0.5);
         c.add(statsText);
 
-        const isVictory = message === '¡VICTORIA!';
         const rx = isVictory ? MAP_CX - 150 : MAP_CX - 90;
         const mx = isVictory ? MAP_CX + 150 : MAP_CX + 90;
 
@@ -2481,10 +2493,12 @@ export class UIScene extends Phaser.Scene {
         c.add([rbg, rtext]);
 
         rbg.on('pointerdown', () => {
+            // The same map again, not the default one
+            const levelData = this.gs.levelData;
             SaveSystem.clearSave();
             this.scene.stop('UIScene');
             this.scene.stop('GameScene');
-            this.scene.start('GameScene', { continueGame: false });
+            this.scene.start('GameScene', { continueGame: false, levelData });
         });
         rbg.on('pointerover', () => { rbg.fillColor = 0x388E3C; });
         rbg.on('pointerout', () => { rbg.fillColor = 0x2E7D32; });
@@ -2493,7 +2507,7 @@ export class UIScene extends Phaser.Scene {
         const mbg = this.add.rectangle(mx, 340, 140, 38, 0x282848);
         mbg.setStrokeStyle(2, 0x90CAF9);
         mbg.setInteractive({ useHandCursor: true });
-        const mtext = this.add.text(mx, 340, 'MENÚ PRINCIPAL', {
+        const mtext = this.add.text(mx, 340, 'MENU PRINCIPAL', {
             fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
         }).setOrigin(0.5);
         c.add([mbg, mtext]);

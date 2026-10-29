@@ -13,6 +13,9 @@
  *    the road until the player barricades it, and only then smash through.
  *  · `roadAreas` are open plazas of road, room to maze with barricades.
  *  · Seals sit on buildable ground beside the road.
+ *  · `waveProfile` names the map's waves in WaveData.WAVE_PROFILES.
+ *  · `brief` is the one- or two-line pitch on the map selector; `description`
+ *    the longer note.
  *  · 'city' maps: houses fill the top row, so it carries no road; `townBlocks`
  *    are short rows of houses set into the board (see Terrain.townProps).
  */
@@ -24,6 +27,7 @@ export const MAP_1 = {
     biome: 'grass',
     waveProfile: 'ceniza',
     description: 'Trazado clásico con bloques de piedra y espacio abierto para laberintos.',
+    brief: 'Trazado clásico en zigzag con desvíos de piedra y lugar para templos. El mapa para aprender.',
     cols: 20,
     rows: 15,
     heroSpawn: { col: 10, row: 7 },
@@ -78,6 +82,7 @@ export const MAP_2 = {
     biome: 'city',
     waveProfile: 'mercado',
     description: 'Avenidas en ángulo recto frente al mercado y dos manzanas cortadas por cajas: barricá la vuelta larga y los enemigos romperán el atajo.',
+    brief: 'Avenidas frente al mercado. Cazadores y saboteadores llegan temprano: frenalos con Vesper.',
     cols: 20,
     rows: 15,
     heroSpawn: { col: 14, row: 9 },
@@ -192,6 +197,7 @@ export const MAP_4 = {
     biome: 'snow',
     waveProfile: 'glaciar',
     description: 'Un camino largo en zigzag con explanadas a los lados para templos —al alcance de los Sillares— y sellos de agua y aire que cubren dos tramos a la vez.',
+    brief: 'Un zigzag larguísimo con templos en las explanadas, al alcance de los Sillares. Enemigos veloces.',
     cols: 20,
     rows: 15,
     heroSpawn: { col: 9, row: 6 },
@@ -238,6 +244,7 @@ export const MAP_5 = {
     biome: 'dungeon',
     waveProfile: 'cripta',
     description: 'El desafío avanzado: un laberinto simétrico con pilares rompibles y dos sellos de cada elemento junto al centro, para armar Torres Legendarias.',
+    brief: 'Desafío avanzado: resistencias mezcladas y jefes duros. Sellos de los cuatro elementos al centro.',
     cols: 20,
     rows: 15,
     heroSpawn: { col: 9, row: 5 },

@@ -436,7 +436,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 
 ## 🗺️ Epic 14: Sistemas de Juego Avanzados y Múltiples Niveles
 
-### US 14.1: Arquitectura Modular de Niveles y Selector de Mapas (`LevelData`)
+### US 14.1: Arquitectura Modular de Niveles y Selector de Mapas (`LevelData`) [✓]
 **Como** jugador y desarrollador,  
 **Quiero** que el juego desacople los mapas, rutas y oleadas en estructuras de datos independientes (`LevelData`) y ofrezca un selector de mapas en el menú principal,  
 **Para** poder jugar múltiples niveles con trazados, biomas, puntos de entrada/salida y desafíos únicos, y permitir agregar fácilmente nuevos mapas sin modificar la lógica interna del motor.
@@ -460,7 +460,13 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - **Persistencia Multimapa (`SaveSystem`)**:
 >   - `SaveSystem` incluye el `levelId` en el guardado para restaurar exactamente el mapa y sus obstáculos guardados.
 > 
-> *Estado:* **En progreso** — Paso 1 (desacoplamiento base) hecho: el mapa vive en `js/data/LevelData.js`; se eliminó `WAYPOINTS` y `GridSystem` usa las dimensiones del nivel (`GridSystem.js`, `GameScene.js`, `Hero.js`, `EconomySystem.js`, `SaveSystem.js`). Paso 2 (biomas visuales) hecho: `grass`, `city`, `volcano`, `snow` y `dungeon`, con suelo construible oscuro (luma 13–14 %) y camino de losas irregulares claro (62–71 %) con borde oscuro; rompibles propios por bioma (cajas/barriles/sacos en `city`); `city` tiene suelo de empedrado y casas en 3/4 en la fila superior (con árboles y puestos de mercado pegados a las fachadas) y en `townBlocks` por nivel. Paso 3 (mapas) hecho: 5 niveles en `LevelData.js` (`map_1` Paso de Ceniza, `map_2` Plaza del Mercado, `map_3` Caldera de Magma con plaza para barricadas vía `roadAreas` en `GridSystem`, `map_4` Glaciar Quebrado, `map_5` Cripta Ancestral con 15 vidas y 150 de oro) (`js/systems/Terrain.js`, `js/data/BiomeArt.js`, `Palette.js`, `BootScene.js`, `GameScene.js`). Pendiente: selector en `TitleScene` y oleadas por mapa.
+> *Estado:* **Implementado** — cinco mapas con bioma, trazado, sellos, rompibles, recursos y oleadas propias, elegibles desde un selector con vista previa y progreso guardado.
+> - **Datos**: `js/data/LevelData.js` (`map_1` Paso de Ceniza, `map_2` Plaza del Mercado, `map_3` Caldera de Magma, `map_4` Glaciar Quebrado, `map_5` Cripta Ancestral; `biome`, `waveProfile`, `brief`, `roadAreas`, `townBlocks`), `js/data/WaveData.js` (perfiles de 20 oleadas y receta de Modo Infinito por mapa), `js/data/Palette.js` (paletas de bioma y de sellos).
+> - **Motor**: `js/systems/GridSystem.js` (dimensiones del nivel, `roadAreas`), `js/systems/WaveManager.js` (perfil por mapa, multiplicadores de vida, infinito ponderado), `js/entities/Hero.js`, `js/systems/EconomySystem.js`.
+> - **Biomas** (creados): `js/systems/Terrain.js` (capas por celda sin Phaser, anillo urbano) y `js/data/BiomeArt.js` (terreno de city/volcano/snow/dungeon, casas en 3/4, puestos, rompibles); modificados `js/scenes/BootScene.js` y `js/scenes/GameScene.js`.
+> - **Selector** (creado): `js/systems/MapPreview.js` (mini-mapa con camino, rompibles, ciudad y sellos); `js/scenes/TitleScene.js` (modal ELIGE UN MAPA con lista, vista previa animada de la ruta, oro/vidas/oleadas e insignia COMPLETADO; confirmación antes de reemplazar una partida; CONTINUAR muestra mapa y oleada).
+> - **Persistencia**: `js/systems/SaveSystem.js` (`levelId` en el guardado; progreso por mapa en `elemental-td:progress-v1` con completado y mejor oleada), `js/scenes/UIScene.js` (registro al ganar/perder y en cada oleada del infinito; Reintentar/Reiniciar repiten el mapa jugado).
+> - **Tutorial**: `js/systems/TutorialSystem.js` y `GameScene.js` (solo en `map_1` y hasta completarlo o saltarlo una vez).
 
 ### US 14.2: Modo Sin Fin (Endless Mode) [✓]
 **Como** jugador veterano,  
