@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { GridSystem, TILE_SIZE, GAME_WIDTH, GAME_HEIGHT, TILE } from '../systems/GridSystem.js';
+import { GridSystem, TILE_SIZE, TILE } from '../systems/GridSystem.js';
 import { DEFAULT_LEVEL, getLevelById } from '../data/LevelData.js';
 import { WaveManager } from '../systems/WaveManager.js';
 import { EconomySystem, BARRICADE_COST, refundValue } from '../systems/EconomySystem.js';
@@ -29,7 +29,7 @@ import {
     cellHash, cellLayers, breakableKey, biomeKey, resolveBiome, townProps, BIOMES,
 } from '../systems/Terrain.js';
 import { safeTexture } from '../systems/TextureGuard.js';
-import { applyViewport, pointerWorld } from '../systems/Viewport.js';
+import { applyBoardViewport, pointerWorld } from '../systems/Viewport.js';
 
 // Depth budget above the terrain layers (see Terrain.js), below entities (≥ 1).
 const D_GRID = 0.5;
@@ -60,14 +60,15 @@ export class GameScene extends Phaser.Scene {
     }
 
     create() {
-        // The canvas is a supersampled buffer, so the camera has to be zoomed to
-        // it before anything is drawn — otherwise the world would render into one
-        // corner. Done here rather than once at boot because restarting the game
-        // builds a brand-new camera.
-        applyViewport(this);
-
         // ── Systems ─────────────────────────────
         this.gridSystem = new GridSystem(this.levelData);
+
+        // The canvas is a supersampled buffer, so the camera has to be zoomed to
+        // it before anything is drawn — otherwise the world would render into one
+        // corner. A level bigger than 20×15 is also zoomed out to fit the board.
+        // Done here rather than once at boot because restarting the game builds
+        // a brand-new camera.
+        this.boardZoom = applyBoardViewport(this, this.gridSystem.worldWidth, this.gridSystem.worldHeight);
         // Built before anything that can take damage: Enemy.takeDamage reaches
         // for it on the very first hit.
         this.floating = new FloatingText(this);
@@ -181,7 +182,7 @@ export class GameScene extends Phaser.Scene {
             // Read through the camera, never off the pointer: `pointer.x` is in
             // the supersampled buffer's space, which is 2× or 3× the world.
             const p = pointerWorld(this, pointer);
-            if (p.x >= GAME_WIDTH) return;       // sidebar click
+            if (!this._onBoard(p)) return;       // sidebar click
 
             // Right click → cancel active mode, or move hero
             if (pointer.button === 2) {
@@ -246,7 +247,7 @@ export class GameScene extends Phaser.Scene {
 
             if (wasDrag || consumed) return;
             if (gameObjects && gameObjects.some(o => o.getData && o.getData('uiBlocker'))) return;
-            if (p.x >= GAME_WIDTH) return;
+            if (!this._onBoard(p)) return;
             this._inspectAt(p);
         });
         this.input.keyboard.on('keydown-ESC', () => {
@@ -493,6 +494,15 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
+    /**
+     * Whether a world point is on the board. The board camera shows exactly the
+     * level's world, so anything outside it is the sidebar (or the margin round
+     * a zoomed-out board) — the same test whatever the level's size.
+     */
+    _onBoard(p) {
+        return p.x >= 0 && p.y >= 0 && p.x < this.gridSystem.worldWidth && p.y < this.gridSystem.worldHeight;
+    }
+
     // ─── Map rendering ──────────────────────────────────
     _renderMap() {
         this.tileNodes = new Map();  // 'c,r' → terrain sprites for that cell
@@ -643,7 +653,7 @@ export class GameScene extends Phaser.Scene {
         // Arming from the button or the hotkey and seeing nothing until you
         // twitch the mouse reads as the spell not having armed at all.
         const p = pointerWorld(this, this.input.activePointer);
-        if (p.x < GAME_WIDTH) this.spellCursor.setPosition(p.x, p.y).setVisible(true);
+        if (this._onBoard(p)) this.spellCursor.setPosition(p.x, p.y).setVisible(true);
 
         this.events.emit('spell-armed', this.spellMode);
     }
@@ -956,7 +966,7 @@ export class GameScene extends Phaser.Scene {
 
         // Clamp and position above/below the structure
         const clampedX = Phaser.Math.Clamp(
-            t.x, cardW / 2 + 4, GAME_WIDTH - cardW / 2 - 4
+            t.x, cardW / 2 + 4, this.gridSystem.worldWidth - cardW / 2 - 4
         );
         if (t.y - 20 - cardH < 2) {
             // Below structure
@@ -1002,7 +1012,7 @@ export class GameScene extends Phaser.Scene {
 
     _handleMove(pointer) {
         const p = pointerWorld(this, pointer);
-        if ((!this.placementMode && !this.sellMode && !this.spellMode) || p.x >= GAME_WIDTH) {
+        if ((!this.placementMode && !this.sellMode && !this.spellMode) || !this._onBoard(p)) {
             this.previewSprite.setVisible(false);
             this.previewRange.setVisible(false);
             this.previewTile.setVisible(false);
@@ -1167,7 +1177,7 @@ export class GameScene extends Phaser.Scene {
     _showCursorLabel(pos, text, color) {
         // Clamped so a long refusal never runs off the edge of the map.
         this.cursorLabel
-            .setPosition(Phaser.Math.Clamp(pos.x, 90, GAME_WIDTH - 90), pos.y - 16)
+            .setPosition(Phaser.Math.Clamp(pos.x, 90, this.gridSystem.worldWidth - 90), pos.y - 16)
             .setText(text)
             .setColor(color)
             .setVisible(true);

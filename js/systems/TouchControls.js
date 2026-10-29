@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser';
 import { pointerWorld } from './Viewport.js';
-import { GAME_WIDTH, GAME_HEIGHT, TILE_SIZE } from './GridSystem.js';
+import { TILE_SIZE } from './GridSystem.js';
 import { isJoystickEnabled } from './OptionsModal.js';
 
 const JOYSTICK_BASE_RADIUS = 36;
@@ -98,7 +98,7 @@ export class TouchControls {
      */
     startJoystick(pointer, worldPos) {
         if (!this.joystickEnabled || this.joystickActive) return false;
-        if (worldPos.x >= GAME_WIDTH) return false;
+        if (worldPos.x >= this.scene.gridSystem.worldWidth) return false;
 
         this.joystickActive = true;
         this.joystickPointerId = pointer.id;

@@ -502,6 +502,32 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > 
 > *Estado:* **Pendiente**.
 
+### US 14.5: Múltiples Entradas y Caminos por Mapa
+**Como** jugador,  
+**Quiero** mapas con más de una entrada de enemigos y caminos alternativos que la oleada se reparta entre sí,  
+**Para** tener que defender varios frentes a la vez y decidir dónde concentrar torres y barricadas.
+
+> **Criterios de Aceptación:**
+> - **Varias entradas por nivel**: `LevelData` admite una lista de puntos de aparición (`spawnPoints`) y cada grupo de la oleada indica por cuál entra (o se reparte entre todas).
+> - **Reparto entre caminos de igual costo**: cuando dos rutas cuestan lo mismo, cada enemigo sortea cuál toma, así la oleada se divide; si una ruta es más corta se sigue eligiendo la corta, de modo que barricadas y desvíos siguen funcionando igual.
+> - **Puertas y rutas visibles**: una puerta de entrada dibujada por cada spawn, y `RouteView` muestra todas las rutas posibles durante la planificación.
+> - **Validaciones**: ninguna barricada puede dejar sin salida a una sola de las entradas.
+> - **Diseño a evaluar**: en un anillo con lados iguales barricar un lado no alarga la ruta, solo concentra la oleada; decidir por mapa qué tramos reparten y cuáles se alargan (ver el anillo oeste de la Caldera de Magma como candidato).
+> 
+> *Estado:* **Pendiente** (idea a desarrollar).
+
+### US 14.6: Mapas Más Grandes con Zoom Automático [✓]
+**Como** jugador y diseñador de niveles,  
+**Quiero** que un nivel pueda tener más celdas que el tablero de 20×15, mostrándose más chico en pantalla,  
+**Para** jugar mapas más amplios sin perder la nitidez del pixel art.
+
+> **Criterios de Aceptación:**
+> - `LevelData` define `cols`/`rows` libres; la cámara del tablero elige el zoom entero respecto del buffer (1 o 3/4, es decir 32 o 24 px por celda) para que entre en el área de 640×480.
+> - El HUD (`UIScene`) no cambia; clicks, colocación, héroe, enemigos, proyectiles y hechizos funcionan en coordenadas del mundo.
+> - Mapa de prueba de 26×20 celdas.
+> 
+> *Estado:* **Implementado** en `Viewport.js` (`applyBoardViewport`, `boardZoom`: los mapas de 20×15 conservan la cámara de siempre; los más grandes reciben una cámara solo sobre el tablero a zoom 3/4 o 1/2, centrada), `GridSystem.js` (`worldWidth`/`worldHeight`), `GameScene.js` (`_onBoard` en lugar de `x < 640`; tarjetas acotadas al mundo del nivel), `Hero.js`, `Sentinel.js`, `TouchControls.js` (límites del nivel), `TitleScene.js` (mini-mapa con celda según tamaño, lista de 6 mapas) y `LevelData.js` (`map_test` Llanura Extensa, 26×20).
+
 ---
 
 ## 🎨 Epic 15: Pulido Visual y Game Feel

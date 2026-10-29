@@ -15,7 +15,7 @@ import {
 import { HERO_ABILITIES, ABILITY_ORDER, COMBO, abilityHeading } from '../data/HeroData.js';
 import { SPELLS, SPELL_ORDER, spellHeading } from '../data/SpellData.js';
 import { HERO_LORE, DEFAULT_LOOK, heroTextureKey } from '../data/HeroLook.js';
-import { applyViewport } from '../systems/Viewport.js';
+import { applyViewport, worldToView } from '../systems/Viewport.js';
 import { OptionsModal } from '../systems/OptionsModal.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 
@@ -706,15 +706,21 @@ export class UIScene extends Phaser.Scene {
     _buildWaveMarker() {
         const sp = this.gs.gridSystem.spawnPoint;
         const { cols, rows } = this.gs.gridSystem;
-        const gate = this.gs.gridSystem.gridToWorld(
+        const gateWorld = this.gs.gridSystem.gridToWorld(
             Phaser.Math.Clamp(sp.col, 0, cols - 1), Phaser.Math.Clamp(sp.row, 0, rows - 1),
         );
+        // Where the board camera draws the gate: the same point on a standard
+        // board, smaller and shifted on a zoomed-out one (US 14.6).
+        const gate = worldToView(this.gs, gateWorld.x, gateWorld.y);
+        const k = this.gs.boardZoom ?? 1;
         // Straight over the gate's centre, so the arrow points at the arch,
         // 36px above the gate's centre: room for the arrow to stand off the
         // medallion and still stop short of the arch. Always above, because
         // the arrow is part of the sprite and points down; a gate on the top
         // row just gets the marker pressed against the board's edge.
-        const y = Math.max(gate.y - 36, 14);
+        // The medallion stays UI-sized; only the gate shrinks, so the gap to
+        // its arch shrinks with it (36px at full size).
+        const y = Math.max(Math.round(gate.y - 21 - 15 * k), 14);
         const x = Math.round(Phaser.Math.Clamp(gate.x, 16, 624));
 
         const c = this.add.container(x, y).setDepth(40);
@@ -2243,8 +2249,11 @@ export class UIScene extends Phaser.Scene {
         if (!link || !link.b1 || !link.b2) return;
 
         const isTemple = link.kind === 'temple';
-        const midX = (link.b1.x + link.b2.x) / 2;
-        const minY = Math.min(link.b1.y, link.b2.y);
+        // The towers live in the board's world; the card in this scene's view.
+        const a = worldToView(this.gs, link.b1.x, link.b1.y);
+        const b = worldToView(this.gs, link.b2.x, link.b2.y);
+        const midX = (a.x + b.x) / 2;
+        const minY = Math.min(a.y, b.y);
 
         // Clamp inside map boundaries
         const targetX = Phaser.Math.Clamp(midX, 100, 540);

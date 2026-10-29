@@ -288,7 +288,56 @@ export const MAP_5 = {
     initialLives: 15,
 };
 
-export const LEVELS = [MAP_1, MAP_2, MAP_3, MAP_4, MAP_5];
+// Test map for larger boards (US 14.6): 26×20 cells, shown at 3/4 zoom so it
+// still fits the 640×480 board. Same rules as every other map; only the size
+// is new.
+export const MAP_TEST = {
+    id: 'map_test',
+    name: 'Llanura Extensa',
+    biome: 'grass',
+    waveProfile: 'ceniza',
+    description: 'Mapa de prueba de 26x20 celdas, mostrado a 3/4 de zoom: el mismo juego en un tablero casi el doble de grande.',
+    brief: 'Mapa de prueba de 26x20 celdas a 3/4 de zoom. Un zigzag largo con desvíos de piedra en las curvas.',
+    cols: 26,
+    rows: 20,
+    heroSpawn: { col: 12, row: 10 },
+    spawnPoint: { col: -1, row: 3 },
+    exitPoint: { col: 26, row: 17 },
+    waypoints: [
+        { col: -1, row: 3 },
+        { col: 21, row: 3 },
+        { col: 21, row: 8 },
+        { col: 4, row: 8 },
+        { col: 4, row: 13 },
+        { col: 21, row: 13 },
+        { col: 21, row: 17 },
+        { col: 26, row: 17 },
+    ],
+    breakableBlocks: [
+        // Detour around the first turn, one column out
+        { c1: 22, r1: 3, c2: 23, r2: 3, hp: 80 },
+        { c1: 23, r1: 4, c2: 23, r2: 8, hp: 80 },
+        { c1: 22, r1: 8, c2: 22, r2: 8, hp: 80 },
+        // Detour around the second turn
+        { c1: 2, r1: 8, c2: 3, r2: 8, hp: 80 },
+        { c1: 2, r1: 9, c2: 2, r2: 13, hp: 80 },
+        { c1: 3, r1: 13, c2: 3, r2: 13, hp: 80 },
+    ],
+    seals: [
+        { col: 8, row: 5, element: 'fire' },
+        { col: 15, row: 6, element: 'air' },
+        { col: 2, row: 5, element: 'air' },
+        { col: 9, row: 10, element: 'water' },
+        { col: 16, row: 11, element: 'earth' },
+        { col: 8, row: 15, element: 'earth' },
+        { col: 15, row: 15, element: 'fire' },
+        { col: 22, row: 15, element: 'water' },
+    ],
+    initialGold: 120,
+    initialLives: 20,
+};
+
+export const LEVELS = [MAP_1, MAP_2, MAP_3, MAP_4, MAP_5, MAP_TEST];
 export const DEFAULT_LEVEL = MAP_1;
 
 // Saves from before the maps had numbers name the first map by its old id;
