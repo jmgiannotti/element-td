@@ -431,7 +431,10 @@ export class GameScene extends Phaser.Scene {
                     const [c, r] = key.split(',').map(Number);
                     return { col: c, row: r, hp };
                 }),
-                templeLevels: { ...this.templeSystem.levels },
+                // Copied a level deep: an upgrade bought mid-wave mutates the
+                // inner objects, and a checkpoint must not move with it.
+                templeLevels: SaveSystem.copyLevels(this.templeSystem.levels),
+                templeOvercharge: { ...this.templeSystem.overcharge },
             };
         });
         onCustom('gold-changed', () => {
@@ -845,9 +848,11 @@ export class GameScene extends Phaser.Scene {
             lines.push(`DMG ${Math.round(t.damage)}   RNG ${Math.round(t.range)}`);
             lines.push(`${t.shotsPerSecond.toFixed(2)}/s   ${t.data.specialDesc}`);
             lines.push(`Daño: ${Math.round(t.totalDamageDealt || 0)}  ·  Bajas: ${t.enemiesKilled || 0}`);
+            const over = ts ? ts.overchargeOf(t.element) : 0;
             lines.push(
                 templeLvl > 0
                     ? TRACK_ORDER.map(tr => `${TRACK_SHORT[tr]} ${ts.levelOf(t.element, tr)}`).join('  ')
+                        + (over > 0 ? `  SOB ${over}` : '')
                     : 'sin mejoras de templo'
             );
             if (t.empowered) lines.push('potenciada por el heroe');

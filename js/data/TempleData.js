@@ -39,6 +39,22 @@ export const UPGRADE_TRACKS = {
 
 export const TRACK_ORDER = ['damage', 'fireRate', 'range'];
 
+/**
+ * Sobrecarga Elemental: the late-game maná sink. Unlocked for an element once
+ * its three tracks are maxed, and repeatable without end — each purchase adds
+ * `step` damage to every tower of that element and costs `growth` times the
+ * last, so it soaks up a hoard without ever turning into a free win.
+ */
+export const OVERCHARGE = {
+    key: 'overcharge', label: 'SOBRECARGA',
+    step: 0.05, baseCost: 350, growth: 1.4,
+    color: '#E040FB', colorNum: 0xE040FB,
+};
+
+export function overchargeCost(currentLevel) {
+    return Math.round(OVERCHARGE.baseCost * Math.pow(OVERCHARGE.growth, currentLevel));
+}
+
 /** Temples you can buy outright. The hybrids are only reachable by fusion. */
 export const TEMPLE_ELEMENTS = [
     ELEMENTS.WATER, ELEMENTS.AIR, ELEMENTS.FIRE, ELEMENTS.EARTH,

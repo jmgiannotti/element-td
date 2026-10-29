@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser';
 import {
-    TEMPLE_DATA, UPGRADE_TRACKS, TRACK_ORDER, templeCost, upgradeCost,
+    TEMPLE_DATA, UPGRADE_TRACKS, TRACK_ORDER, OVERCHARGE, templeCost, upgradeCost, overchargeCost,
 } from '../data/TempleData.js';
 import { TOWER_DATA } from '../data/TowerData.js';
 
@@ -18,6 +18,9 @@ export class TempleSystem {
         this.scene = scene;
         /** element → { damage, fireRate, range } level counters */
         this.levels = {};
+        /** element → Sobrecarga purchases. Apart from `levels` on purpose:
+         *  it is not a track, and has no maxLevel or track cost to look up. */
+        this.overcharge = {};
     }
 
     // ── Building ─────────────────────────────────
@@ -69,10 +72,52 @@ export class TempleSystem {
             return track === 'fireRate' ? Math.min(...ms) : Math.max(...ms);
         }
         const lvl = this.levelOf(element, track);
-        if (lvl === 0) return 1;
+        // Sobrecarga stacks on top of the damage track, multiplicatively.
+        const over = track === 'damage' ? 1 + OVERCHARGE.step * this.overchargeOf(element) : 1;
+        if (lvl === 0) return over;
         const bonus = UPGRADE_TRACKS[track].step * lvl;
         // fireRate is a cooldown: a shorter one is the improvement.
-        return track === 'fireRate' ? 1 / (1 + bonus) : 1 + bonus;
+        return track === 'fireRate' ? 1 / (1 + bonus) : (1 + bonus) * over;
+    }
+
+    // ── Sobrecarga Elemental ─────────────────────
+    /** True once every regular track of this element is maxed. */
+    allMaxed(element) {
+        return TRACK_ORDER.every(t => this.isMaxed(element, t));
+    }
+
+    overchargeOf(element) {
+        return this.overcharge[element] ?? 0;
+    }
+
+    overchargeCostOf(element) {
+        return overchargeCost(this.overchargeOf(element));
+    }
+
+    canOvercharge(element) {
+        return this.hasTemple(element)
+            && this.allMaxed(element)
+            && this.scene.economySystem.mana >= this.overchargeCostOf(element);
+    }
+
+    buyOvercharge(element) {
+        if (!this.canOvercharge(element)) return false;
+        if (!this.scene.economySystem.spendMana(this.overchargeCostOf(element))) return false;
+        const lvl = (this.overcharge[element] = this.overchargeOf(element) + 1);
+        this._refreshTowers(element);
+        this.scene.events.emit('temple-upgraded', element, OVERCHARGE.key, lvl);
+        return true;
+    }
+
+    _refreshTowers(element) {
+        for (const tower of this.scene.towers) {
+            if (tower.alive && (tower.element === element || tower.data.parents?.includes(element))) {
+                tower.refreshStats();
+            }
+        }
+        for (const temple of this.scene.temples) {
+            if (temple.alive && temple.element === element) temple.celebrate();
+        }
     }
 
     canUpgrade(element, track) {
@@ -93,14 +138,7 @@ export class TempleSystem {
         l[track]++;
 
         // Towers cache nothing, but their range ring is a real display object.
-        for (const tower of this.scene.towers) {
-            if (tower.alive && (tower.element === element || tower.data.parents?.includes(element))) {
-                tower.refreshStats();
-            }
-        }
-        for (const temple of this.scene.temples) {
-            if (temple.alive && temple.element === element) temple.celebrate();
-        }
+        this._refreshTowers(element);
 
         this.scene.events.emit('temple-upgraded', element, track, l[track]);
         return true;
@@ -123,6 +161,12 @@ export class TempleSystem {
     cheapestUpgrade() {
         let best = null;
         for (const element of this.unlockedElements()) {
+            // A maxed temple still has somewhere to put maná: Sobrecarga.
+            if (this.allMaxed(element)) {
+                const cost = this.overchargeCostOf(element);
+                if (!best || cost < best.cost) best = { element, track: OVERCHARGE.key, cost };
+                continue;
+            }
             for (const track of TRACK_ORDER) {
                 if (this.isMaxed(element, track)) continue;
                 const cost = this.costOf(element, track);

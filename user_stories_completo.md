@@ -350,6 +350,18 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > 
 > *Estado:* **Implementado** en `Tower.js` (`upgradeSpent`), `FusionSystem.js` (`UPGRADE_REFUND`, `fusionRefund`), `UIScene.js` (línea en el preview), `AudioSystem.js` (cue `coin`), `GameScene.js` y `SaveSystem.js` (campo `upg` por torre).
 
+### US 8.3: Sobrecarga Elemental (Sumidero de Maná) [✓]
+**Como** jugador con los templos al máximo,
+**Quiero** una mejora repetible donde seguir invirtiendo maná,
+**Para** que el maná acumulado en el late game siga sirviendo de algo.
+
+> **Criterios de Aceptación:**
+> - Con las 3 mejoras de un elemento al máximo se desbloquea `SOBRECARGA`: +5% de daño a las torres de ese elemento por compra, sin límite.
+> - El costo escala exponencialmente (350 × 1.4ⁿ de maná).
+> - El panel del templo la muestra siempre (bloqueada hasta maxear) y la barra de objetivo de maná apunta a ella en lugar de decir "todo al maximo".
+> 
+> *Estado:* **Implementado** en `TempleData.js` (`OVERCHARGE`, `overchargeCost`), `TempleSystem.js` (`overcharge`, `allMaxed`, `buyOvercharge`, multiplicador de daño), `UIScene.js` (fila en el panel, barra y aviso), `GameScene.js` (`SOB n` en la tarjeta) y `SaveSystem.js` (`templeOvercharge`; los niveles de templo se copian en profundidad).
+
 ---
 
 ## 👑 Epic 9: Jefes y Eventos de Oleada

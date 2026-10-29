@@ -61,6 +61,7 @@ export class SaveSystem {
 
         let heroData = null;
         let towersToSave, templesToSave, barricadesToSave, breakableBlocksToSave, templeLevelsToSave;
+        let overchargeToSave;
 
         if (gameScene.waveManager.waveActive && gameScene.waveStartCheckpoint) {
             // Mid-wave save: checkpoint is the EXACT START of the current wave.
@@ -84,6 +85,7 @@ export class SaveSystem {
             barricadesToSave = cp.barricades || [];
             breakableBlocksToSave = cp.breakableBlocks || [];
             templeLevelsToSave = cp.templeLevels || {};
+            overchargeToSave = cp.templeOvercharge || {};
         } else {
             // Prep phase (between waves) or post-wave save:
             currentWave = gameScene.waveManager.currentWave;
@@ -122,7 +124,8 @@ export class SaveSystem {
                 const [c, r] = key.split(',').map(Number);
                 return { col: c, row: r, hp };
             });
-            templeLevelsToSave = { ...gameScene.templeSystem.levels };
+            templeLevelsToSave = SaveSystem.copyLevels(gameScene.templeSystem.levels);
+            overchargeToSave = { ...gameScene.templeSystem.overcharge };
         }
 
         const data = {
@@ -141,6 +144,8 @@ export class SaveSystem {
             barricades: barricadesToSave,
             breakableBlocks: breakableBlocksToSave,
             templeLevels: templeLevelsToSave,
+            // Sobrecarga purchases. Optional: saves from before it load without.
+            templeOvercharge: overchargeToSave,
         };
 
         try {
@@ -169,7 +174,10 @@ export class SaveSystem {
 
             // 3. Restore TempleSystem upgrade levels
             if (data.templeLevels) {
-                gameScene.templeSystem.levels = { ...data.templeLevels };
+                gameScene.templeSystem.levels = SaveSystem.copyLevels(data.templeLevels);
+            }
+            if (data.templeOvercharge) {
+                gameScene.templeSystem.overcharge = { ...data.templeOvercharge };
             }
 
             // 4. Restore Hero
@@ -261,6 +269,11 @@ export class SaveSystem {
             console.error('[SaveSystem] Error al cargar partida:', e);
             return false;
         }
+    }
+
+    /** Temple levels copied one level deep — each element's counters too. */
+    static copyLevels(levels) {
+        return Object.fromEntries(Object.entries(levels || {}).map(([el, l]) => [el, { ...l }]));
     }
 
     static clearSave() {
