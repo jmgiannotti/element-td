@@ -110,6 +110,7 @@ export class FusionSystem {
         this.clearHints();
 
         const seenPairs = new Set();
+        let fresh = null;
 
         for (const list of [this.scene.temples, this.scene.towers]) {
             for (const b of list) {
@@ -126,12 +127,14 @@ export class FusionSystem {
                         : `${other.col},${other.row}-${b.col},${b.row}`;
                     if (!seenPairs.has(pairKey)) {
                         seenPairs.add(pairKey);
-                        this.links.push({
+                        const link = {
                             b1: b,
                             b2: other,
                             result: p.result,
                             kind: this._kindOf(b),
-                        });
+                        };
+                        this.links.push(link);
+                        if (!fresh && !this._knownPairs?.has(pairKey)) fresh = link;
                     }
                 }
             }
@@ -139,8 +142,12 @@ export class FusionSystem {
 
         this._redrawLinks();
 
-        if (!silent && this.links.length > 0) {
-            this.scene.events.emit('fusion-available', this.links[0]);
+        // Announced once per pair, when it first appears. Every change to the
+        // board lands here, so announcing whatever pair exists put the popup
+        // back over two old towers each time a temple went up anywhere else.
+        this._knownPairs = seenPairs;
+        if (!silent && fresh) {
+            this.scene.events.emit('fusion-available', fresh);
         }
     }
 

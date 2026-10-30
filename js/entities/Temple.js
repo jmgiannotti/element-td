@@ -83,6 +83,13 @@ export class Temple {
             // otherwise you could never drop a tower beside a temple. Same for
             // the sell and spell cursors: there the click is aimed at this tile.
             if (this.scene.placementMode || this.scene.sellMode || this.scene.spellMode) return;
+            // A press spent on a cursor mode is not a click on what it left
+            // behind. The case: the press that builds this very temple also
+            // ends placement when the next one is unaffordable, and its release
+            // then landed on the new sprite with no cursor mode left to stop it.
+            // Read before GameScene's own pointerup clears it, which runs after
+            // the object's.
+            if (this.scene._pressConsumed) return;
             const fs = this.scene.fusionSystem;
             if (fs && (fs.dragging || fs.justDragged)) return;
             pointer.event.stopPropagation();
