@@ -2203,7 +2203,7 @@ export class UIScene extends Phaser.Scene {
             this._closeUpgradePanel();
             this._closeHelpPanel();
             this._showTutorialStep(null, null);
-            this._showEndScreen('¡DERROTA!', '#EF5350');
+            this._showEndScreen(false);
         });
         on('wave-complete', (wave) => {
             if (wave > this.gs.waveManager.totalWaves) {
@@ -2214,7 +2214,7 @@ export class UIScene extends Phaser.Scene {
             this._closeUpgradePanel();
             this._closeHelpPanel();
             this._showTutorialStep(null, null);
-            this._showEndScreen('¡VICTORIA!', '#4CAF50');
+            this._showEndScreen(true);
         });
     }
 
@@ -3202,135 +3202,239 @@ export class UIScene extends Phaser.Scene {
     }
 
     // ─── End screen ─────────────────────────────────────
-    _showEndScreen(message, color) {
-        const isVictory = message === '¡VICTORIA!';
+    /**
+     * Victory or defeat, as a card like every other one: a coloured bar and
+     * the verdict, a line with the map and how it went, three stars for a
+     * win (all lives kept, half or more, less), a table of the run, the MVP
+     * tower with its own sprite, and the buttons along the bottom.
+     */
+    _showEndScreen(isVictory) {
+        // A card left open by the last hover would float over the verdict.
+        this._hideTooltip();
+        const gs = this.gs;
+        const wm = gs.waveManager;
+        const eco = gs.economySystem;
         // Remembered for the map selector: a victory marks the map completed;
         // either way the furthest wave cleared counts as its best.
-        const wm = this.gs.waveManager;
-        SaveSystem.recordProgress(this.gs.levelData?.id, {
+        SaveSystem.recordProgress(gs.levelData?.id, {
             completed: isVictory,
             wave: isVictory ? wm.currentWave : wm.currentWave - 1,
         });
 
-        const c = this.add.container(0, 0).setDepth(90);
-        
-        const shade = this.add.rectangle(460, 240, 920, 480, 0x000000, 0.78);
-        c.add(shade);
+        const endless = wm.currentWave > wm.totalWaves;
+        const accent = isVictory ? 0xFFD54F : endless ? 0xB388FF : 0xEF5350;
+        const W = 380, P = 16;
+        const root = this.add.container(MAP_CX, MAP_CY).setDepth(90);
+        const c = this.add.container(0, 0);
+        const txt = (x, y, s, size, color, ox = 0) => {
+            const t = this.add.text(x, y, s, { fontFamily: FONT, fontSize: size, color }).setOrigin(ox, 0);
+            c.add(t);
+            return t;
+        };
+        const line = (y, color = 0x232a3d) => c.add(this.add.rectangle(P, y, W - P * 2, 1, color).setOrigin(0, 0));
 
-        const title = this.add.text(MAP_CX, 105, message, {
-            fontFamily: FONT, fontSize: '24px', color,
-            stroke: '#000000', strokeThickness: 5,
-        }).setOrigin(0.5);
-        c.add(title);
+        // ── Verdict ─────────────────────────────
+        let cy = 22;
+        txt(W / 2, cy, isVictory ? '¡VICTORIA!' : 'DERROTA', '20px', hexColor(accent), 0.5)
+            .setStroke('#000000', 4);
+        cy += 32;
+        const lives = eco.lives, maxLives = gs.levelData.initialLives;
+        const sub = isVictory
+            ? `${plainUpper(gs.levelData.name)} · ${lives}/${maxLives} VIDAS`
+            : `CAISTE EN LA OLEADA ${wm.currentWave}${endless ? ' (INFINITO)' : ''}`;
+        txt(W / 2, cy, sub, '8px', '#90A4AE', 0.5);
+        cy += 18;
 
-        // Find MVP Tower from active and archived towers
-        const activeTowers = (this.gs.towers || []).map(t => {
-            const total = this.gs.templeSystem ? this.gs.templeSystem.totalLevels(t.element) : 0;
-            return {
-                element: t.element,
-                name: t.data?.name || t.element,
-                totalDamageDealt: t.totalDamageDealt || 0,
-                enemiesKilled: t.enemiesKilled || 0,
-                level: t.level || 1,
-                templeLevel: total,
-            };
-        });
-        const historyTowers = this.gs.towerHistory || [];
-        const allCandidates = [...activeTowers, ...historyTowers].filter(
-            t => t.totalDamageDealt > 0 || t.enemiesKilled > 0
-        );
-
-        allCandidates.sort((a, b) => {
-            if (b.totalDamageDealt !== a.totalDamageDealt) {
-                return b.totalDamageDealt - a.totalDamageDealt;
-            }
-            return b.enemiesKilled - a.enemiesKilled;
-        });
-
-        const mvp = allCandidates[0] || null;
-
-        const stats = [
-            `Oleadas: ${this.gs.waveManager.currentWave}/${this.gs.waveManager.totalWaves}`,
-            `Oro: ${this.gs.economySystem.gold}   Fuerza vital: ${this.gs.economySystem.mana}`,
-            `Recogida por el heroe: ${this.gs.hero ? this.gs.hero.manaCollected : 0}`,
-            `Templos: ${this.gs.temples.length}   Torres: ${this.gs.towers.length}`,
-        ];
-
-        if (mvp) {
-            stats.push(
-                `Torre MVP: ${mvp.name}${mvp.level > 0 ? ` (Nv.${mvp.level})` : ''}`,
-                `Daño: ${Math.round(mvp.totalDamageDealt)}  ·  Bajas: ${mvp.enemiesKilled}`
-            );
-        } else {
-            stats.push(`Torre MVP: Ninguna`);
+        if (isVictory) {
+            const stars = lives >= maxLives ? 3 : lives >= maxLives / 2 ? 2 : 1;
+            for (let i = 0; i < 3; i++) this._endStar(c, W / 2 + (i - 1) * 34, cy + 10, i < stars);
+            cy += 30;
         }
 
-        const statsText = this.add.text(MAP_CX, 215, stats.join('\n'), {
-            fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
-            lineSpacing: 8, align: 'center',
-        }).setOrigin(0.5);
-        c.add(statsText);
+        // ── The run ─────────────────────────────
+        cy += 4;
+        line(cy, 0x3a3a55);
+        cy += 9;
+        const row = (label, value, { color = '#FFFFFF', icon = null, small = false } = {}) => {
+            const size = small ? '7px' : '8px';
+            txt(small ? P + 12 : P, cy, label, size, small ? '#6f7f99' : '#90A4AE');
+            const v = txt(W - P, cy, value, size, color, 1);
+            if (icon) {
+                const img = this.add.image(v.x - v.width - 5, cy + 4, safeTexture(this, icon, MANA_SPRITE.key))
+                    .setOrigin(1, 0.5);
+                img.setScale(11 / Math.max(img.width, img.height));
+                c.add(img);
+            }
+            cy += small ? 14 : 16;
+        };
+        const waves = endless ? `${wm.currentWave}` : `${Math.min(wm.currentWave, wm.totalWaves)} / ${wm.totalWaves}`;
+        row(endless ? 'OLEADAS (INFINITO)' : 'OLEADAS', waves);
+        line(cy - 5);
+        row('ORO OBTENIDO', `${Math.round(eco.goldEarned)}`, { color: '#FFD54F', icon: 'icon_coin' });
+        line(cy - 5);
+        row('MANA REFINADO', `${Math.round(eco.manaEarned)}`, { color: '#B388FF', icon: 'mana_mote' });
+        row('RECOLECTADO POR VESPER', `${Math.round(gs.hero?.manaCollected ?? 0)}`, { color: '#B388FF', small: true });
+        line(cy - 5);
+        const nT = gs.towers.filter(t => t.alive).length;
+        const nM = gs.temples.filter(t => t.alive).length;
+        row('ESTRUCTURAS', `${nT} ${nT === 1 ? 'Torre' : 'Torres'} · ${nM} ${nM === 1 ? 'Templo' : 'Templos'}`);
 
-        const rx = isVictory ? MAP_CX - 150 : MAP_CX - 90;
-        const mx = isVictory ? MAP_CX + 150 : MAP_CX + 90;
+        // ── MVP ─────────────────────────────────
+        cy += 6;
+        cy = this._endMvp(c, P, cy, W - P * 2);
 
-        // Restart Button
-        const rbg = this.add.rectangle(rx, 340, 140, 38, 0x2E7D32);
-        rbg.setStrokeStyle(2, 0x4CAF50);
-        rbg.setInteractive({ useHandCursor: true });
-        const rtext = this.add.text(rx, 340, 'REINTENTAR', {
-            fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
-        }).setOrigin(0.5);
-        c.add([rbg, rtext]);
-
-        rbg.on('pointerdown', () => {
-            // The same map again, not the default one
-            const levelData = this.gs.levelData;
-            SaveSystem.clearSave();
-            this.scene.stop('UIScene');
-            this.scene.stop('GameScene');
-            this.scene.start('GameScene', { continueGame: false, levelData });
-        });
-        rbg.on('pointerover', () => { rbg.fillColor = 0x388E3C; });
-        rbg.on('pointerout', () => { rbg.fillColor = 0x2E7D32; });
-
-        // Main Menu Button
-        const mbg = this.add.rectangle(mx, 340, 140, 38, 0x282848);
-        mbg.setStrokeStyle(2, 0x90CAF9);
-        mbg.setInteractive({ useHandCursor: true });
-        const mtext = this.add.text(mx, 340, 'MENU PRINCIPAL', {
-            fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
-        }).setOrigin(0.5);
-        c.add([mbg, mtext]);
-
-        mbg.on('pointerdown', () => {
+        // ── Buttons ─────────────────────────────
+        cy += 14;
+        const buttons = [
+            { label: 'REINTENTAR', fill: 0x1f4a2a, stroke: 0x4CAF50, onClick: () => {
+                // The same map again, not the default one
+                const levelData = gs.levelData;
+                SaveSystem.clearSave();
+                this.scene.stop('UIScene');
+                this.scene.stop('GameScene');
+                this.scene.start('GameScene', { continueGame: false, levelData });
+            } },
+        ];
+        if (isVictory) {
+            buttons.push({ label: 'MODO INFINITO', fill: 0x3d1f52, stroke: 0xAB47BC, onClick: () => {
+                audio.play('click');
+                root.destroy();
+                gs.gameWon = false; // Unfreeze game
+                gs.events.emit('start-wave');
+            } });
+        }
+        buttons.push({ label: 'MENU PRINCIPAL', fill: 0x1f2740, stroke: 0x90CAF9, onClick: () => {
             SaveSystem.clearSave();
             this.scene.stop('UIScene');
             this.scene.stop('GameScene');
             this.scene.start('TitleScene');
+        } });
+        const gap = 8, bh = 28;
+        const bw = (W - P * 2 - gap * (buttons.length - 1)) / buttons.length;
+        buttons.forEach((b, i) => {
+            const x = P + i * (bw + gap) + bw / 2;
+            this._endButton(c, x, cy + bh / 2, bw, bh, b, buttons.length > 2 ? '7px' : '8px');
         });
-        mbg.on('pointerover', () => { mbg.fillColor = 0x3a3a68; });
-        mbg.on('pointerout', () => { mbg.fillColor = 0x282848; });
+        cy += bh + P;
 
-        // Infinite Mode Button (Only on Victory)
-        if (isVictory) {
-            const ibg = this.add.rectangle(MAP_CX, 340, 140, 38, 0x8E24AA);
-            ibg.setStrokeStyle(2, 0xAB47BC);
-            ibg.setInteractive({ useHandCursor: true });
-            const itext = this.add.text(MAP_CX, 340, 'MODO INFINITO', {
-                fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
-            }).setOrigin(0.5);
-            c.add([ibg, itext]);
+        // ── Box, last, under everything ──────────
+        const H = cy;
+        const bg = this.add.rectangle(0, 0, W, H, 0x10131d, 0.95).setOrigin(0, 0).setStrokeStyle(1, 0x2a3048);
+        c.addAt(this.add.rectangle(0, 0, W, 4, accent).setOrigin(0, 0), 0);
+        c.addAt(bg, 0);
+        c.setPosition(-W / 2, -H / 2);
 
-            ibg.on('pointerdown', () => {
-                audio.play('click');
-                c.destroy();
-                this.gs.gameWon = false; // Unfreeze game
-                // Optionally start the next wave immediately
-                this.gs.events.emit('start-wave');
-            });
-            ibg.on('pointerover', () => { ibg.fillColor = 0x9C27B0; });
-            ibg.on('pointerout', () => { ibg.fillColor = 0x8E24AA; });
+        // The shade swallows clicks, so nothing behind the card answers.
+        const shade = this.add.rectangle(460, 240, 920, 480, 0x000000, 0.72).setInteractive().setDepth(89);
+        root.add(c);
+        root.once('destroy', () => shade.destroy());
+
+        root.setScale(0.92).setAlpha(0);
+        shade.setAlpha(0);
+        this.tweens.add({ targets: root, scaleX: 1, scaleY: 1, alpha: 1, duration: 180, ease: 'Back.easeOut' });
+        this.tweens.add({ targets: shade, alpha: 1, duration: 180 });
+    }
+
+    /**
+     * The tower that did the most damage over the run, sold or fused ones
+     * included, in its own amber-framed box: its sprite on the left, name,
+     * level, damage and kills on the right. Returns the y under the box.
+     */
+    _endMvp(c, x, y, w) {
+        const gs = this.gs;
+        const live = (gs.towers || []).filter(t => t.alive).map(t => ({
+            element: t.element,
+            name: t.data?.name || t.element,
+            totalDamageDealt: t.totalDamageDealt || 0,
+            enemiesKilled: t.enemiesKilled || 0,
+            level: t.level || 1,
+        }));
+        const mvp = [...live, ...(gs.towerHistory || [])]
+            .filter(t => t.totalDamageDealt > 0 || t.enemiesKilled > 0)
+            .sort((a, b) => (b.totalDamageDealt - a.totalDamageDealt) || (b.enemiesKilled - a.enemiesKilled))[0];
+
+        const h = 64;
+        c.add(this.add.rectangle(x, y, w, h, 0x1a1608, 0.9).setOrigin(0, 0).setStrokeStyle(1, 0xFFB300));
+        const text = (tx, ty, s, size, color) => {
+            const t = this.add.text(tx, ty, s, { fontFamily: FONT, fontSize: size, color }).setOrigin(0, 0);
+            c.add(t);
+            return t;
+        };
+        if (!mvp) {
+            text(x + 12, y + 12, 'TORRE MVP', '7px', '#FFB300');
+            text(x + 12, y + 32, 'Ninguna torre llego a pelear', '8px', '#90A4AE');
+            return y + h;
         }
+
+        // The tower's own sprite (pedestal and crown are one texture), on a
+        // small plinth of light.
+        const sx = x + 34, sy = y + h / 2;
+        c.add(this.add.ellipse(sx, sy + 16, 40, 10, 0xFFB300, 0.18));
+        const spr = this.add.image(sx, sy, safeTexture(this, `tower_${mvp.element}`, 'tower_earth'));
+        spr.setScale(46 / Math.max(spr.width, spr.height));
+        c.add(spr);
+
+        const tx = x + 68;
+        text(tx, y + 9, 'TORRE MVP', '7px', '#FFB300');
+        text(tx, y + 21, `${mvp.name} · Nv. ${mvp.level}`, '9px', '#FFFFFF');
+        text(tx, y + 39, 'DAÑO', '7px', '#90A4AE');
+        const dmg = text(tx + 38, y + 37, `${Math.round(mvp.totalDamageDealt)}`, '10px', '#FFD54F');
+        const kx = Math.max(tx + 150, dmg.x + dmg.width + 18);
+        text(kx, y + 39, 'BAJAS', '7px', '#90A4AE');
+        text(kx + 44, y + 37, `${mvp.enemiesKilled}`, '10px', '#EF9A9A');
+        return y + h;
+    }
+
+    /** A button of the end card: lights its border and brightens on hover. */
+    _endButton(c, x, y, w, h, b, size) {
+        const bg = this.add.rectangle(x, y, w, h, b.fill).setStrokeStyle(1, b.stroke).setInteractive({ useHandCursor: true });
+        const t = this.add.text(x, y, b.label, { fontFamily: FONT, fontSize: size, color: '#ECEFF1' }).setOrigin(0.5);
+        const lit = Phaser.Display.Color.IntegerToColor(b.fill).lighten(12).color;
+        bg.on('pointerover', () => { bg.fillColor = lit; bg.setStrokeStyle(2, 0xFFFFFF); t.setColor('#FFFFFF'); });
+        bg.on('pointerout', () => { bg.fillColor = b.fill; bg.setStrokeStyle(1, b.stroke); t.setColor('#ECEFF1'); });
+        bg.on('pointerdown', (pointer) => {
+            pointer.event.stopPropagation();
+            pointer.event._uiConsumed = true;
+            b.onClick();
+        });
+        c.add([bg, t]);
+    }
+
+    /** A pixel-art star, 9×9 cells of 2px: gold when earned, dark when not. */
+    _endStar(c, cx, cy, lit) {
+        const SHAPE = [
+            '....#....',
+            '...###...',
+            '...###...',
+            '#########',
+            '.#######.',
+            '..#####..',
+            '..#####..',
+            '.###.###.',
+            '.##...##.',
+        ];
+        const px = 2, ox = cx - 9, oy = cy - 9;
+        const g = this.add.graphics();
+        const fill = lit ? 0xFFD54F : 0x2a2f45;
+        const edge = lit ? 0xE0A000 : 0x1a1e2e;
+        const has = (r, col) => SHAPE[r]?.[col] === '#';
+        SHAPE.forEach((rowStr, r) => {
+            for (let col = 0; col < 9; col++) {
+                if (!has(r, col)) continue;
+                // Cells on the silhouette's edge take the dark stop.
+                const rim = !has(r - 1, col) || !has(r + 1, col) || !has(r, col - 1) || !has(r, col + 1);
+                g.fillStyle(rim ? edge : fill);
+                g.fillRect(ox + col * px, oy + r * px, px, px);
+            }
+        });
+        if (lit) {
+            // A glint, top-left: the game's one light.
+            g.fillStyle(0xFFF8E1);
+            g.fillRect(ox + 4 * px, oy + 2 * px, px, px);
+            g.fillRect(ox + 3 * px, oy + 4 * px, px, px);
+        }
+        g.setScale(1.5);
+        g.setPosition(cx * (1 - 1.5), cy * (1 - 1.5));
+        c.add(g);
     }
 }

@@ -232,8 +232,13 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Pantalla de Derrota al llegar a 0 vidas con botón de "Reintentar".
 > - Pantalla de Victoria al completar la oleada 20 con felicitaciones y resumen.
 > - Borra los datos de guardado para permitir una nueva partida limpia.
+> - Rediseño con el estilo de las tarjetas: panel centrado con barra superior de 4px (dorada en victoria, roja en derrota, violeta si se pierde en Modo Infinito), título y una línea con el mapa y las vidas (`PASO DE CENIZA · 18/20 VIDAS`) o la oleada en que se cayó (`CAISTE EN LA OLEADA 12`).
+> - Victoria con 3 estrellas pixel art dibujadas con Graphics: 3 con todas las vidas, 2 con la mitad o más, 1 con menos.
+> - Tabla a dos columnas con divisores: OLEADAS, ORO OBTENIDO (moneda; oro ganado en toda la partida, sin contar reembolsos por vender o fusionar), MANA REFINADO (orbe; todo el maná ganado) con RECOLECTADO POR VESPER debajo, y ESTRUCTURAS (`X Torres · Y Templos`).
+> - Recuadro ámbar de la TORRE MVP con el sprite real de la torre, nombre y nivel, DAÑO y BAJAS.
+> - Botones REINTENTAR, MODO INFINITO (victoria) y MENU PRINCIPAL dentro del panel, con borde iluminado al pasar el mouse; el cartel entra con una animación de 180 ms y el fondo oscuro bloquea los clics.
 > 
-> *Estado:* **Implementado** en `UIScene._showEndScreen()`.
+> *Estado:* **Implementado** en `UIScene._showEndScreen()` (`_endMvp`, `_endButton`, `_endStar`), `EconomySystem.js` (`goldEarned`, `manaEarned`), `SaveSystem.js` y `GameScene.js` (los totales se guardan con la partida y el checkpoint), `FusionSystem.js` (el reembolso no cuenta como oro obtenido).
 
 ### US 5.3: Pantalla de Título y Menú Principal [✓]
 **Como** jugador,  

@@ -605,7 +605,7 @@ export class FusionSystem {
         const pos = scene.gridSystem.gridToWorld(col, row);
         // One movement of gold: the refund minus the fee.
         const net = refund - cost;
-        if (net > 0) scene.economySystem.addGold(net);
+        if (net > 0) scene.economySystem.addGold(net, false);
         else if (net < 0) scene.economySystem.spendGold(-net);
         if (net !== 0) {
             if (net > 0) audio.play('coin');

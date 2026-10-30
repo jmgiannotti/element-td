@@ -58,6 +58,7 @@ export class SaveSystem {
         let goldToSave;
         let manaToSave;
         let livesToSave;
+        let earnedToSave;
 
         let heroData = null;
         let towersToSave, templesToSave, barricadesToSave, breakableBlocksToSave, templeLevelsToSave;
@@ -70,6 +71,7 @@ export class SaveSystem {
             goldToSave = cp.gold;
             manaToSave = cp.mana;
             livesToSave = cp.lives;
+            earnedToSave = { gold: cp.goldEarned ?? 0, mana: cp.manaEarned ?? 0 };
 
             // Hero state at wave start
             heroData = gameScene.hero ? {
@@ -93,6 +95,7 @@ export class SaveSystem {
             goldToSave = gameScene.economySystem.gold;
             manaToSave = gameScene.economySystem.mana;
             livesToSave = gameScene.economySystem.lives;
+            earnedToSave = { gold: gameScene.economySystem.goldEarned, mana: gameScene.economySystem.manaEarned };
 
             heroData = gameScene.hero ? {
                 posX: gameScene.hero.posX,
@@ -137,6 +140,9 @@ export class SaveSystem {
             gold: goldToSave,
             mana: manaToSave,
             lives: livesToSave,
+            // Run totals for the end screen; optional, old saves start at 0.
+            goldEarned: earnedToSave.gold,
+            manaEarned: earnedToSave.mana,
             currentWave: currentWave,
             hero: heroData,
             towers: towersToSave,
@@ -169,6 +175,8 @@ export class SaveSystem {
             gameScene.economySystem.gold = data.gold ?? 110;
             gameScene.economySystem.mana = data.mana ?? 0;
             gameScene.economySystem.lives = data.lives ?? 20;
+            gameScene.economySystem.goldEarned = data.goldEarned ?? 0;
+            gameScene.economySystem.manaEarned = data.manaEarned ?? 0;
 
             // 2. Restore wave state (ready before wave starts)
             gameScene.waveManager.currentWave = data.currentWave ?? 0;

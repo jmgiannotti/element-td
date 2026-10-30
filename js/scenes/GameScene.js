@@ -415,6 +415,8 @@ export class GameScene extends Phaser.Scene {
                 gold: this.economySystem.gold,
                 mana: this.economySystem.mana,
                 lives: this.economySystem.lives,
+                goldEarned: this.economySystem.goldEarned,
+                manaEarned: this.economySystem.manaEarned,
                 heroPosX: this.hero ? this.hero.posX : null,
                 heroPosY: this.hero ? this.hero.posY : null,
                 heroHp: this.hero ? this.hero.hp : null,
@@ -1145,7 +1147,7 @@ export class GameScene extends Phaser.Scene {
             this.fusionSystem.refresh();
         }
 
-        this.economySystem.addGold(sale.refund);
+        this.economySystem.addGold(sale.refund, false);
         audio.play('sell');
         this._sellPoof(pos.x, pos.y, sale.refund);
         this.events.emit('structure-sold', sale.kind, sale.refund);

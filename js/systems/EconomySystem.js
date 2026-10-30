@@ -37,6 +37,11 @@ export class EconomySystem {
         this.gold = scene.levelData.initialGold;
         this.mana = 0;
         this.lives = scene.levelData.initialLives;
+        // What the game has paid out over the whole run, for the end screen:
+        // gold earned (refunds for selling or fusing are not earnings) and
+        // every point of maná gained.
+        this.goldEarned = 0;
+        this.manaEarned = 0;
 
         // A death drops life force and nothing else. Gold comes as a fixed
         // purse at the end of each wave (payWave), so where an enemy dies —
@@ -47,8 +52,9 @@ export class EconomySystem {
     }
 
     // ── Gold ─────────────────────────────────────
-    addGold(amount) {
+    addGold(amount, earned = true) {
         this.gold += amount;
+        if (earned && amount > 0) this.goldEarned += amount;
         this.scene.events.emit('gold-changed', this.gold);
     }
 
@@ -69,6 +75,7 @@ export class EconomySystem {
     // ── Mana (fuerza vital) ──────────────────────
     addMana(amount) {
         this.mana += amount;
+        if (amount > 0) this.manaEarned += amount;
         this.scene.events.emit('mana-changed', this.mana);
     }
 
