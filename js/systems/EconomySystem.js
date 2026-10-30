@@ -19,15 +19,15 @@ export function refundValue(paidCost) {
     return Math.floor(paidCost * SELL_REFUND);
 }
 
-// Calling the next wave before the rest runs out pays for every second left
-// on the clock (rounded up). The rate climbs every `stepEvery` waves, so the
-// bonus keeps pace with the purses without making the first waves a gold rush.
-export const EARLY_CALL = { goldPerSecond: 3, stepEvery: 5 };
+// Calling the next wave over a live one (WaveManager) pays for every second
+// left in the window that opens when the last enemy is out of the gate,
+// rounded up: 18 at most. It is a premium for taking on two waves at once,
+// not income — a cleared board pays nothing for calling early.
+export const EARLY_CALL = { windowMs: 12000, goldPerSecond: 1.5 };
 
-export function earlyCallBonus(secondsLeft, waveNumber) {
+export function earlyCallBonus(secondsLeft) {
     if (secondsLeft <= 0) return 0;
-    const rate = EARLY_CALL.goldPerSecond + Math.floor(Math.max(0, waveNumber - 1) / EARLY_CALL.stepEvery);
-    return Math.ceil(secondsLeft) * rate;
+    return Math.round(Math.ceil(secondsLeft) * EARLY_CALL.goldPerSecond);
 }
 
 export class EconomySystem {

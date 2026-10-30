@@ -368,13 +368,13 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 **Para** que no convenga amontonar torres baratas en el spawn para farmear, y que adelantar una oleada sea una apuesta que se paga.
 
 > **Criterios de Aceptación:**
-> - Los enemigos no sueltan oro al morir (solo maná). Cada oleada paga un monto fijo al terminar, mueran o se filtren sus enemigos: 10 + el valor de cada enemigo (incluidos los que suelta al morir), redondeado a 5. La tarjeta de la oleada muestra `Paga al terminar: +N ORO`.
-> - Al morir el último enemigo arranca un descanso de 12 s visible en el botón (`OLEADA N EN Xs`, barra que se vacía y se pone ámbar en los últimos 3 s). Al llegar a cero la oleada se lanza sola. Antes de la primera oleada, tras cargar una partida y después de la oleada 20 no hay temporizador.
-> - Durante el descanso el botón (y la calavera del spawn) adelantan la oleada y pagan por los segundos que quedaban: 3 de oro por segundo (oleadas 2–5), +1 cada 5 oleadas. El botón muestra `ADELANTAR: +N ORO`; al cobrarlo suena una moneda y aparece un aviso.
+> - Los enemigos no sueltan oro al morir (solo maná). Cada oleada paga un monto fijo al terminar, mueran o se filtren sus enemigos: (10 + el valor de cada enemigo, incluidos los que suelta al morir) × 0,62, redondeado a 5 (ver US 8.6). Se paga al limpiar el mapa o al llamar la siguiente oleada encima, lo que pase primero. La tarjeta de la oleada muestra `Paga al terminar: +N ORO`.
+> - Cuando sale el último enemigo por el portal se abre una ventana de 12 s para adelantar la siguiente oleada encima de la actual: el botón se pone dorado (`ADELANTAR OLEADA N`, `+X ORO · Ys`, barra que se vacía) y paga 1,5 de oro por segundo restante (máx. +18). Si el jugador limpia el mapa antes, ya no hay bono. No se puede adelantar sobre la oleada 20.
+> - Con el mapa limpio corre un descanso de 12 s (`OLEADA N EN Xs`, barra ámbar los últimos 3 s); al llegar a cero la oleada se lanza sola, y el botón o la calavera la inician antes sin bono. Antes de la primera oleada, tras cargar una partida y después de la oleada 20 no hay temporizador.
 > - Se quita el botón `AUTO` (las oleadas ya son automáticas).
 > - Torres base más caras: Tierra 30, Agua y Aire 35, Fuego 40 (antes 20/25/25/30); templo base 80 (antes 60). Las mejoras con oro escalan con el precio de la torre.
 > 
-> *Estado:* **Implementado** en `WaveData.js` (`WAVE_REWARD`, `waveReward`, `WAVE_REST`), `EconomySystem.js` (sin botín, `payWave`, `EARLY_CALL`, `earlyCallBonus`), `WaveManager.js` (`restTimer`, `callNextWave`, `earlyBonus`, `nextReward`), `GameScene.js` (`start-wave` → `callNextWave`), `UIScene.js` (botón con cuenta regresiva, aviso de pago y de adelanto, sin `AUTO`), `TowerData.js`, `TempleData.js` y `SaveSystem.js` (sin `autoWave`).
+> *Estado:* **Implementado** en `WaveData.js` (`WAVE_REWARD`, `waveReward`, `WAVE_REST`), `EconomySystem.js` (sin botín, `payWave`, `EARLY_CALL`, `earlyCallBonus`), `WaveManager.js` (`restTimer`, `earlyTimer`, `canCallEarly`, `callNextWave`, `earlyBonus`, `nextReward`, evento `wave-paid`), `GameScene.js` (`start-wave` → `callNextWave`), `UIScene.js` (botón con cuenta regresiva, aviso de pago y de adelanto, sin `AUTO`), `TowerData.js`, `TempleData.js` y `SaveSystem.js` (sin `autoWave`).
 
 ### US 8.5: Recorte de Maná [✓]
 **Como** jugador,
@@ -388,6 +388,19 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Hechizos: LUNA 200, CENTINELAS 150, EGIDA 125 (antes 120/90/75). Barricada de Escarcha 50 (antes 35).
 > 
 > *Estado:* **Implementado** en `EconomySystem.js` (`MOTE_VALUE`), `HeroData.js` (`COMBO`), `TempleData.js` (`UPGRADE_TRACKS`, `OVERCHARGE`, `absorbBonus`), `SpellData.js` y `BarricadeData.js`.
+
+### US 8.6: Menos Oro, Más Presión y Fusiones con Costo [✓]
+**Como** jugador,
+**Quiero** que el oro no sobre en el early y que las oleadas obliguen a gastarlo,
+**Para** que llegar a la oleada 7 con ~1.000 de oro sin gastar y 4 híbridas limpiando todo no sea posible.
+
+> **Criterios de Aceptación:**
+> - Pagos por oleada −38% en todos los mapas (`WAVE_REWARD.share` 0,62). Puestos del Mercado: +5 por puesto (antes +10), tope acumulado 25; se llenan una vez por oleada pagada, aunque se encadenen.
+> - El bono por adelantar solo existe con la oleada todavía en el mapa (ver US 8.4), máx. +18.
+> - Vida de los enemigos ×1,25 desde la oleada 4 y ×1,85 desde la 10 (antes ×1 y ×1,25), también en modo sin fin.
+> - Fusionar torres cuesta oro: 50 a Híbrida, 150 a Legendaria, neteado con el reembolso de mejoras; el preview lo muestra (y avisa si falta oro), sin oro suficiente la fusión se cancela con aviso. El costo suma a lo pagado por la torre (venta al 60%). Los templos fusionan gratis.
+> 
+> *Estado:* **Implementado** en `WaveData.js` (`WAVE_REWARD.share`, `WAVE_HP_STEPS`, `waveHpMult`), `EconomySystem.js` (`EARLY_CALL`), `WaveManager.js`, `LevelData.js` y `MapEventSystem.js` (puestos), `TowerData.js` (`FUSION_COST`), `FusionSystem.js` (`fusionCost`, cobro y cancelación) y `UIScene.js` (botón dorado, avisos, línea de costo en el preview).
 
 ---
 
@@ -601,7 +614,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Cadencia global −29% (intervalo ×1.4); +15% de daño por impacto en Tierra, Fuego, Lava y Obsidiana.
 > - Cada Legendaria rinde ~1.7–2.3× el DPS de la mejor Híbrida de la que sale.
 > - La cadena pega 100/50/30/18% por blanco sucesivo y la quemadura o el congelamiento que lleva bajan en la misma proporción.
-> - Enemigos estándar ~13% más rápidos; +25% de vida desde la oleada 10, también en modo sin fin.
+> - Enemigos estándar ~13% más rápidos; +25% de vida desde la oleada 10, también en modo sin fin (luego subido en US 8.6).
 > 
 > *Estado:* **Implementado** en `TowerData.js` (stats, `CHAIN_FALLOFF`, curva de `TOWER_UPGRADE`), `Projectile.js`, `EnemyData.js`, `WaveData.js` (`LATE_WAVE_HP`) y `WaveManager.js`.
 

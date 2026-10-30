@@ -89,8 +89,10 @@ export function fusionResult(a, b) {
  * EconomySystem.earlyCallBonus). With a farm at the gate gone, the base towers
  * were the thing to spam, so they cost 1.4–1.5× what they did (Tierra 30,
  * Agua and Aire 35, Fuego 40): the opening buys three, not four. Gold
- * upgrades key off these prices, so they rose with them; fusions still cost
- * nothing on top of their two parents.
+ * upgrades key off these prices, so they rose with them.
+ *
+ * Fusing costs gold too (FUSION_COST): a hybrid used to be two base towers
+ * and nothing else, ~60–70 gold for a tower that outperforms both.
  */
 export const TOWER_DATA = {
     // ── Pure Elements ──────────────────────────
@@ -346,6 +348,14 @@ export const TOWER_DATA = {
  * keeps less. The burn and freeze a chain carries fall off the same way.
  */
 export const CHAIN_FALLOFF = [1, 0.5, 0.3, 0.18];
+
+/**
+ * Gold charged to fuse into a tower of this tier: 50 for a hybrid, 150 for a
+ * legendary. Paid at the drop, netted against the refund of the parents'
+ * levels (FusionSystem), and added to the new tower's bill so selling it
+ * returns a cut of it like any other gold that went in. Temples fuse free.
+ */
+export const FUSION_COST = { 2: 50, 3: 150 };
 
 /**
  * Configuration and exponential scaling formula for individual tower upgrades with gold.

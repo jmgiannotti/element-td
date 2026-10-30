@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { TOWER_DATA, fusionResult, tierOf } from '../data/TowerData.js';
+import { TOWER_DATA, FUSION_COST, fusionResult, tierOf } from '../data/TowerData.js';
 import { TEMPLE_DATA } from '../data/TempleData.js';
 import { Tower } from '../entities/Tower.js';
 import { Temple } from '../entities/Temple.js';
@@ -59,6 +59,16 @@ export const UPGRADE_REFUND = 0.85;
 /** Gold the fusion of `a` and `b` gives back for their individual levels. */
 export function fusionRefund(a, b) {
     return Math.round(((a?.upgradeSpent ?? 0) + (b?.upgradeSpent ?? 0)) * UPGRADE_REFUND);
+}
+
+/** Gold charged to fuse into `result` (TowerData.FUSION_COST). Temples fuse free. */
+export function fusionCost(kind, result) {
+    return kind === 'tower' ? (FUSION_COST[tierOf(result)] ?? 0) : 0;
+}
+
+/** Whether the purse covers `net` gold (nothing to cover if it is not positive). */
+function canCover(scene, net) {
+    return net <= 0 || scene.economySystem.gold >= net;
 }
 
 export class FusionSystem {
@@ -380,10 +390,14 @@ export class FusionSystem {
         this.scene.tweens.add({
             targets: match.other.sprite, scale: 1.12, duration: 120, ease: 'Quad.easeOut',
         });
+        const kind = this._kindOf(d.b);
+        const refund = kind === 'tower' ? fusionRefund(d.b, match.other) : 0;
+        const cost = fusionCost(kind, match.result);
         this.scene.events.emit('fusion-hover', {
             b1: d.b, b2: match.other, result: match.result,
-            kind: this._kindOf(d.b), x: match.other.x, y: match.other.y,
-            refund: fusionRefund(d.b, match.other),
+            kind, x: match.other.x, y: match.other.y,
+            refund, cost,
+            affordable: cost - refund <= this.scene.economySystem.gold,
         });
     }
 
@@ -442,6 +456,17 @@ export class FusionSystem {
         const target = match.other;
         const result = match.result;
         const kind = this._kindOf(b);
+
+        // The fee is netted against the refund of the parents' levels, so a
+        // pair with enough gold in its levels pays for its own fusion.
+        const refund = kind === 'tower' ? fusionRefund(b, target) : 0;
+        const short = fusionCost(kind, result) - refund - this.scene.economySystem.gold;
+        if (short > 0) {
+            this._cancel();
+            audio.play('deny');
+            this.scene.events.emit('fusion-denied', short);
+            return;
+        }
 
         this._teardown({ keepGhost: true });
 
@@ -534,9 +559,12 @@ export class FusionSystem {
         // everything that went into it rather than of a list price it never had.
         // Gold spent on levels is the exception: most of it is paid back right
         // now, so it leaves the bill instead of being refunded twice.
+        // The fusion fee goes on the bill like any other gold put in.
         const levelGold = (dragged.upgradeSpent ?? 0) + (target.upgradeSpent ?? 0);
         const refund = kind === 'tower' ? fusionRefund(dragged, target) : 0;
-        const paid = (dragged.paidCost ?? 0) + (target.paidCost ?? 0) - levelGold;
+        const cost = fusionCost(kind, resultElement);
+        if (!canCover(this.scene, cost - refund)) return;
+        const paid = (dragged.paidCost ?? 0) + (target.paidCost ?? 0) - levelGold + cost;
 
         let combinedDamage = 0;
         let combinedKills = 0;
@@ -568,13 +596,16 @@ export class FusionSystem {
 
         // VFX – expanding flash
         const pos = scene.gridSystem.gridToWorld(col, row);
-        if (refund > 0) {
-            scene.economySystem.addGold(refund);
-            audio.play('coin');
+        // One movement of gold: the refund minus the fee.
+        const net = refund - cost;
+        if (net > 0) scene.economySystem.addGold(net);
+        else if (net < 0) scene.economySystem.spendGold(-net);
+        if (net !== 0) {
+            if (net > 0) audio.play('coin');
             if (scene.floating) {
                 // Starts low: a legendary's own banner rises from just above.
-                scene.floating.show(pos.x, pos.y - 2, `+${refund} ORO`, {
-                    color: '#FFD700', size: 8, rise: 26, duration: 1300,
+                scene.floating.show(pos.x, pos.y - 2, `${net > 0 ? '+' : '-'}${Math.abs(net)} ORO`, {
+                    color: net > 0 ? '#FFD700' : '#FFB74D', size: 8, rise: 26, duration: 1300,
                 });
             }
         }

@@ -358,20 +358,33 @@ export const WAVE_PROFILES = {
 export const DEFAULT_WAVE_PROFILE = 'ceniza';
 
 /**
- * The back half of every map hits harder: from wave 10 on, every enemy has
- * this much more health, on top of the map's own hpMult (and, past wave 20,
- * on top of endless scaling — so the curve does not dip when endless starts).
+ * Health steps over the base list, on top of the map's own hpMult (and, past
+ * wave 20, under endless scaling, so the curve does not dip when endless
+ * starts). The highest step reached applies: ×1.25 from wave 4, and from wave
+ * 10 the old ×1.25 raised by a further ~48%. Four low-level hybrids were
+ * clearing wave 7 with gold to spare; these make the bank worth spending.
  */
-export const LATE_WAVE_HP = { from: 10, mult: 1.25 };
+export const WAVE_HP_STEPS = [
+    { from: 4, mult: 1.25 },
+    { from: 10, mult: 1.85 },
+];
+
+export function waveHpMult(waveNumber) {
+    let mult = 1;
+    for (const s of WAVE_HP_STEPS) if (waveNumber >= s.from) mult = s.mult;
+    return mult;
+}
 
 /**
  * Gold is not a kill bounty any more: every wave pays a fixed purse the moment
  * its last enemy is gone — killed or leaked alike — so a nest of towers at the
  * gate farms nothing. The purse is what the wave is made of: each enemy's
  * `gold` (EnemyData) is its share, the ones it splits into on death included,
- * plus a flat `base`, rounded to `roundTo`.
+ * plus a flat `base`, times `share`, rounded to `roundTo`. `share` was 1 until
+ * a playtest of the Mercado reached wave 7 with ~1400 gold earned and under
+ * 400 of it needed; 0.62 cuts every purse by ~38%.
  */
-export const WAVE_REWARD = { base: 10, roundTo: 5 };
+export const WAVE_REWARD = { base: 10, share: 0.62, roundTo: 5 };
 
 function enemyWorth(type) {
     const d = ENEMY_DATA[type];
@@ -382,13 +395,14 @@ function enemyWorth(type) {
 /** The purse for a wave of this composition ([{ type, count }]). */
 export function waveReward(composition) {
     const worth = (composition || []).reduce((n, g) => n + g.count * enemyWorth(g.type), 0);
-    return Math.round((WAVE_REWARD.base + worth) / WAVE_REWARD.roundTo) * WAVE_REWARD.roundTo;
+    const purse = (WAVE_REWARD.base + worth) * WAVE_REWARD.share;
+    return Math.round(purse / WAVE_REWARD.roundTo) * WAVE_REWARD.roundTo;
 }
 
 /**
- * Between waves: `restMs` to build, then the next wave comes on its own.
- * Calling it before the clock runs out pays for the time saved
- * (EconomySystem.earlyCallBonus).
+ * After a cleared board: `restMs` to build, then the next wave comes on its
+ * own. Calling it sooner is allowed and pays nothing; the bonus is only for
+ * calling over a live wave (EconomySystem.EARLY_CALL).
  */
 export const WAVE_REST = { restMs: 12000 };
 

@@ -75,7 +75,7 @@ export class MapEventSystem {
             on('wave-started', () => this._once('stalls',
                 `Mercado: los puestos juntan +${this.mech.stallGold} oro por oleada. Lleva a Vesper a cobrarlos`,
                 '#FFD700'));
-            on('wave-complete', () => this._fillStalls());
+            on('wave-paid', () => this._fillStalls());
             on('hazard-detonated', (covers, aimed) => { if (aimed) this._hazardOnStalls(covers); });
         }
     }

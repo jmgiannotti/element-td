@@ -754,7 +754,7 @@ export class UIScene extends Phaser.Scene {
         hit.on('pointerdown', (pointer) => {
             pointer.event.stopPropagation();
             pointer.event._uiConsumed = true;
-            if (this.gs.waveManager.waveActive) return;
+            if (!this.gs.waveManager.canCall) return;
             this._hideWaveCard();
             this.gs.events.emit('start-wave');
         });
@@ -854,7 +854,7 @@ export class UIScene extends Phaser.Scene {
         });
 
         if (fromMarker) {
-            c.add(this.add.text(W / 2, H - 9, wm.waveActive ? '' : 'Click: iniciar oleada', {
+            c.add(this.add.text(W / 2, H - 9, wm.canCall ? 'Click: iniciar oleada' : '', {
                 fontFamily: FONT, fontSize: '7px', color: '#4CAF50',
             }).setOrigin(0.5));
         }
@@ -911,6 +911,11 @@ export class UIScene extends Phaser.Scene {
             // The levels bought with gold do not survive the merge; most of
             // that gold does, and saying so before the drop is the point.
             if (info.refund > 0) lines.push(`Reembolso mejoras: +${info.refund} ORO`);
+            if (info.cost > 0) {
+                lines.push(info.affordable
+                    ? `Costo de fusion: ${info.cost} ORO`
+                    : `Costo de fusion: ${info.cost} ORO (falta oro)`);
+            }
             if (d.tier === 3) lines.splice(1, 0, 'TORRE LEGENDARIA');
         }
 
@@ -954,55 +959,91 @@ export class UIScene extends Phaser.Scene {
         this.waveBtnText = this.add.text(CX, ROW_WAVE_BTN, '', {
             fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
         }).setOrigin(0.5);
-        // The rest between waves: a bar draining along the foot of the button,
-        // and under the label what calling the wave now would pay.
+        // Either clock (the early-call window or the rest) drains as a bar
+        // along the foot of the button; the bonus, when there is one, sits
+        // under the label.
         this.waveRestBar = this.add.rectangle(LEFT + 2, ROW_WAVE_BTN + WAVE_BTN_H / 2 - 4, INNER_W - 4, 3, 0xA5D6A7)
             .setOrigin(0, 0.5).setVisible(false);
         this.waveBonusText = this.add.text(CX, ROW_WAVE_BTN + 6, '', {
             fontFamily: FONT, fontSize: '7px', color: '#FFD54F',
         }).setOrigin(0.5).setVisible(false);
-        this._restShown = -1;
+        this._waveBtnKey = '';
+        this._waveBtnHover = false;
         this._refreshWaveButton();
 
         this.waveBtnBg.on('pointerdown', () => {
-            if (!this.gs.waveManager.waveActive) this.gs.events.emit('start-wave');
+            if (this.gs.waveManager.canCall) this.gs.events.emit('start-wave');
         });
-        this.waveBtnBg.on('pointerover', () => {
-            if (!this.gs.waveManager.waveActive) this.waveBtnBg.fillColor = 0x388E3C;
-        });
-        this.waveBtnBg.on('pointerout', () => {
-            this.waveBtnBg.fillColor = this.gs.waveManager.waveActive ? 0x333344 : 0x2E7D32;
-        });
+        this.waveBtnBg.on('pointerover', () => { this._waveBtnHover = true; this._paintWaveButton(); });
+        this.waveBtnBg.on('pointerout', () => { this._waveBtnHover = false; this._paintWaveButton(); });
     }
 
-    /** Which wave the button starts, when it comes on its own, or which one is running. */
+    /**
+     *   idle   before the first wave, or after a load: start it.
+     *   busy   a wave on the board that cannot be called over (still
+     *          spawning, or its window has closed).
+     *   early  its last enemy is out: call the next one over it, for a bonus.
+     *   rest   the board is clear: the next one comes on its own.
+     */
+    _waveButtonState() {
+        const wm = this.gs.waveManager;
+        if (wm.canCallEarly) return 'early';
+        if (wm.waveActive) return 'busy';
+        return wm.resting ? 'rest' : 'idle';
+    }
+
+    _paintWaveButton() {
+        const st = this._waveButtonState();
+        const hover = this._waveBtnHover;
+        const [fill, hot, stroke, text] = {
+            busy: [0x333344, 0x333344, 0x4CAF50, '#8a8aa0'],
+            early: [0x5D4A10, 0x7A6216, 0xFFD54F, '#FFFFFF'],
+            rest: [0x2E7D32, 0x388E3C, 0x4CAF50, '#FFFFFF'],
+            idle: [0x2E7D32, 0x388E3C, 0x4CAF50, '#FFFFFF'],
+        }[st];
+        this.waveBtnBg.fillColor = hover ? hot : fill;
+        this.waveBtnBg.setStrokeStyle(2, stroke);
+        this.waveBtnText.setColor(text);
+    }
+
+    /** What the button does right now, and the clock it is on. */
     _refreshWaveButton() {
         if (!this.waveBtnText) return;
         const wm = this.gs.waveManager;
-        const resting = wm.resting;
-        this.waveBtnText.setY(resting ? ROW_WAVE_BTN - 6 : ROW_WAVE_BTN);
-        this.waveBtnText.setText(wm.waveActive
-            ? `OLEADA ${wm.currentWave} EN CURSO`
-            : resting
-                ? `OLEADA ${wm.nextWaveNumber} EN ${wm.restSecondsLeft}s ▶`
-                : `INICIAR OLEADA ${wm.nextWaveNumber} ▶`);
-        this.waveBonusText.setVisible(resting).setText(resting ? `ADELANTAR: +${wm.earlyBonus} ORO` : '');
-        this.waveRestBar.setVisible(resting);
-        this._restShown = resting ? wm.restSecondsLeft : -1;
+        const st = this._waveButtonState();
+        const label = {
+            busy: `OLEADA ${wm.currentWave} EN CURSO`,
+            early: `ADELANTAR OLEADA ${wm.nextWaveNumber} ▶`,
+            rest: `OLEADA ${wm.nextWaveNumber} EN ${wm.restSecondsLeft}s ▶`,
+            idle: `INICIAR OLEADA ${wm.nextWaveNumber} ▶`,
+        }[st];
+        this.waveBtnText.setY(st === 'early' ? ROW_WAVE_BTN - 6 : ROW_WAVE_BTN).setText(label);
+        this.waveBonusText.setVisible(st === 'early')
+            .setText(st === 'early' ? `+${wm.earlyBonus} ORO  ·  ${wm.earlySecondsLeft}s` : '');
+        this.waveRestBar.setVisible(st === 'early' || st === 'rest');
+        this._waveBtnKey = this._waveBtnKeyNow();
+        this._paintWaveButton();
     }
 
-    /** The countdown: the bar every frame, the label once a second. */
+    _waveBtnKeyNow() {
+        const wm = this.gs.waveManager;
+        return `${this._waveButtonState()}:${wm.currentWave}:${wm.restSecondsLeft}:${wm.earlySecondsLeft}`;
+    }
+
+    /** The clocks: the bar every frame, the label when its numbers change. */
     _tickRest() {
         if (!this.waveRestBar) return;
         const wm = this.gs.waveManager;
-        if (!wm.resting) {
-            if (this._restShown !== -1) this._refreshWaveButton();
-            return;
+        if (this._waveBtnKeyNow() !== this._waveBtnKey) this._refreshWaveButton();
+        const st = this._waveButtonState();
+        if (st === 'early') {
+            this.waveRestBar.width = (INNER_W - 4) * Math.max(0, wm.earlyTimer / (wm.earlyTotal || 1));
+            this.waveRestBar.fillColor = 0xFFD54F;
+        } else if (st === 'rest') {
+            this.waveRestBar.width = (INNER_W - 4) * Math.max(0, wm.restTimer / (wm.restTotal || 1));
+            // The last three seconds in amber: the wave is about to come anyway.
+            this.waveRestBar.fillColor = wm.restSecondsLeft <= 3 ? 0xFFB74D : 0xA5D6A7;
         }
-        this.waveRestBar.width = (INNER_W - 4) * Math.max(0, wm.restTimer / (wm.restTotal || 1));
-        // The last three seconds in amber: the wave is about to come anyway.
-        this.waveRestBar.fillColor = wm.restSecondsLeft <= 3 ? 0xFFB74D : 0xA5D6A7;
-        if (wm.restSecondsLeft !== this._restShown) this._refreshWaveButton();
     }
 
     // ─── Hero ability bar ───────────────────────────────
@@ -1399,32 +1440,29 @@ export class UIScene extends Phaser.Scene {
 
         on('wave-started', () => {
             this._updateStatus();
-            this.waveBtnBg.fillColor = 0x333344;
-            this.waveBtnText.setColor('#8a8aa0');
             this._refreshWaveButton();
             // currentWave has already advanced, so the readout now describes the
             // wave after this one — which is the one still worth preparing for.
             this._refreshWavePreview();
         });
 
-        on('wave-complete', (_wave, reward) => {
+        on('wave-complete', () => {
             this._refreshWavePreview();
             if (this.gs.waveManager.isLastWave) return;
-
-            this.waveBtnBg.fillColor = 0x2E7D32;
-            this.waveBtnText.setColor('#FFFFFF');
             this._refreshWaveButton();
+        });
 
-            // The purse itself is paid by WaveManager; this only says so.
-            if (reward > 0) {
-                audio.play('coin');
-                this._flashNotification(`¡Oleada completada! +${reward} ORO`, '#4CAF50');
-            }
+        // The purse is paid by WaveManager, when the board clears or when the
+        // next wave is called over it; this only says so.
+        on('wave-paid', (wave, reward) => {
+            this._lastPurse = reward;
+            if (reward <= 0) return;
+            audio.play('coin');
+            this._flashNotification(`¡Oleada ${wave} completada! +${reward} ORO`, '#4CAF50');
         });
 
         on('wave-called-early', (bonus) => {
-            audio.play('coin');
-            this._flashNotification(`¡Oleada adelantada! +${bonus} ORO`, '#FFD54F');
+            this._flashNotification(`Oleada +${this._lastPurse ?? 0}  ·  adelanto +${bonus} ORO`, '#FFD54F');
         });
 
         on('placement-cancelled', () => {
@@ -1448,6 +1486,7 @@ export class UIScene extends Phaser.Scene {
             this._updateManaBar();
         });
 
+        on('fusion-denied', (short) => this._flashNotification(`Fusion: faltan ${short} ORO`, '#EF5350'));
         on('fusion-hover', (info) => {
             if (info) this._showFusionTooltip(info);
             else this._hideTooltip();
