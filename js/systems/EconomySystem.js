@@ -3,6 +3,13 @@ import { ManaMote } from '../entities/ManaMote.js';
 
 export const BARRICADE_COST = 15;
 
+// What one mote is worth, rolled per mote. Enemies drop as many motes as
+// ever — a field full of light to chase is the point — but each one used to
+// be 10–15, and between combos and temple refining that maxed a temple in a
+// couple of late waves. At 6–9 the board looks just as rich and the lantern
+// fills at about half the pace.
+export const MOTE_VALUE = { min: 6, max: 9 };
+
 // What selling hands back, as a fraction of what the building actually cost
 // you. Every structure remembers its own price — a fused one carries the sum of
 // its two parents — so the refund never has to guess at a list price.
@@ -91,7 +98,7 @@ export class EconomySystem {
                 this.scene,
                 enemy.x + (Math.random() - 0.5) * 16,
                 enemy.y + (Math.random() - 0.5) * 16,
-                Phaser.Math.Between(10, 15),
+                Phaser.Math.Between(MOTE_VALUE.min, MOTE_VALUE.max),
             );
             this.scene.manaMotes.push(mote);
         }

@@ -357,7 +357,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 
 > **Criterios de Aceptación:**
 > - Con las 3 mejoras de un elemento al máximo se desbloquea `SOBRECARGA`: +5% de daño a las torres de ese elemento por compra, sin límite.
-> - El costo escala exponencialmente (350 × 1.4ⁿ de maná).
+> - El costo escala exponencialmente (500 × 1.4ⁿ de maná; era 350 antes de US 8.5).
 > - El panel del templo la muestra siempre (bloqueada hasta maxear) y la barra de objetivo de maná apunta a ella en lugar de decir "todo al maximo".
 > 
 > *Estado:* **Implementado** en `TempleData.js` (`OVERCHARGE`, `overchargeCost`), `TempleSystem.js` (`overcharge`, `allMaxed`, `buyOvercharge`, multiplicador de daño), `UIScene.js` (fila en el panel, barra y aviso), `GameScene.js` (`SOB n` en la tarjeta) y `SaveSystem.js` (`templeOvercharge`; los niveles de templo se copian en profundidad).
@@ -375,6 +375,19 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Torres base más caras: Tierra 30, Agua y Aire 35, Fuego 40 (antes 20/25/25/30); templo base 80 (antes 60). Las mejoras con oro escalan con el precio de la torre.
 > 
 > *Estado:* **Implementado** en `WaveData.js` (`WAVE_REWARD`, `waveReward`, `WAVE_REST`), `EconomySystem.js` (sin botín, `payWave`, `EARLY_CALL`, `earlyCallBonus`), `WaveManager.js` (`restTimer`, `callNextWave`, `earlyBonus`, `nextReward`), `GameScene.js` (`start-wave` → `callNextWave`), `UIScene.js` (botón con cuenta regresiva, aviso de pago y de adelanto, sin `AUTO`), `TowerData.js`, `TempleData.js` y `SaveSystem.js` (sin `autoWave`).
+
+### US 8.5: Recorte de Maná [✓]
+**Como** jugador,
+**Quiero** que el maná siga cayendo a montones pero alcance para menos,
+**Para** que maxear un templo o tirar hechizos sea una decisión y no algo que se hace solo en un par de oleadas.
+
+> **Criterios de Aceptación:**
+> - Los enemigos sueltan la misma cantidad de orbes, pero cada uno vale 6–9 (antes 10–15).
+> - El combo de Vesper da +12,5% por orbe hasta ×1,75 (antes +25% hasta ×2,5); los templos refinan +10% / +30% en los híbridos (antes +15% / +50%).
+> - Mejoras de templo más caras: DAÑO 75, CADENCIA 90, ALCANCE 65 de base (antes 55/65/45), crecimiento ×1,7; maxear un elemento cuesta ~4.300 (antes ~3.100). Sobrecarga desde 500 (antes 350).
+> - Hechizos: LUNA 200, CENTINELAS 150, EGIDA 125 (antes 120/90/75). Barricada de Escarcha 50 (antes 35).
+> 
+> *Estado:* **Implementado** en `EconomySystem.js` (`MOTE_VALUE`), `HeroData.js` (`COMBO`), `TempleData.js` (`UPGRADE_TRACKS`, `OVERCHARGE`, `absorbBonus`), `SpellData.js` y `BarricadeData.js`.
 
 ---
 
