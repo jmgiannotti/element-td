@@ -43,16 +43,39 @@ e:/Proyectos/Mini juego TD/
   * Ejemplo: la tarjeta fija de una estructura seleccionada. `GameScene` es dueña de la selección y de las compras: emite `pin-card` (estructura o `null`) y escucha `buy-upgrade` / `buy-enchant`. `UIScene` dibuja la tarjeta y sus botones (`_renderPinCard`).
 
 ### ⚙️ Sistemas (`js/systems/`)
+**Reglas de juego**
 * **`EconomySystem.js`**: Maneja el balance de oro, vidas del jugador, maná crudo y refinado.
-* **`WaveManager.js`**: Definición y avance de oleadas (`currentWave`), composiciones procedurales para **Modo Infinito** y detección de jefes.
+* **`WaveManager.js`**: Definición y avance de oleadas (`currentWave`), composiciones procedurales para **Modo Infinito**, detección de jefes y vida real de cada enemigo por oleada (`enemyHpMultiplier`).
 * **`GridSystem.js`**: Matriz del mapa, detección de caminos con A*, validación para que las barricadas no sellen la salida.
 * **`TempleSystem.js`**: Lógica de templos, auras de recolección de maná y escalado de bonificaciones elementales.
-* **`FusionSystem.js`**: Detección de adyacencia e interacción de arrastrar/soltar para fusionar torres compatibles.
-* **`TelegraphSystem.js`**: Señalización visual en el suelo (líneas, conos, círculos) antes de que un jefe lance una habilidad.
+* **`FusionSystem.js`**: Detección de adyacencia e interacción de arrastrar/soltar para fusionar torres compatibles. Avisa `fusion-available` solo cuando se forma una pareja nueva.
+* **`BarricadeSystem.js`**: Encantamientos de barricada (Púas con oro, Escarcha con maná) y su efecto sobre los enemigos que pasan al lado. La barricada en sí sigue en `GameScene.barricades`.
 * **`SealSystem.js`**: Sellos elementales del suelo (cristales): bonus por casilla y su estado visual (en reposo, brillando con una torre compatible en mano, activo con la torre encima).
+* **`SpellSystem.js`**: Hechizos de maná: costo, recarga, si se pueden lanzar (`REFUSAL`) y su animación.
+* **`MapEventSystem.js`**: Reglas propias de cada mapa declaradas en `LevelData.mechanics` (puestos de oro en Plaza del Mercado, brechas, etc.).
+* **`TelegraphSystem.js`**: Señalización visual en el suelo (líneas, conos, círculos) antes de que un jefe lance una habilidad.
+* **`TutorialSystem.js`**: Tutorial de economía dual en dos pasos (recoger maná con el héroe, construir un templo) y cuándo corresponde mostrarlo (`tutorialWanted`).
 * **`SaveSystem.js`**: Serialización y restauración de estado en `localStorage`.
+
+**Dibujo y efectos**
+* **`Pixels.js`**: Herramientas de pixel art (rampas de 5 tonos, siluetas por filas, sombreado) con las que se generan todas las texturas procedurales.
+* **`Terrain.js`**: Qué sprites de terreno lleva cada casilla según el bioma; sin Phaser, para que la vista previa offline dibuje lo mismo que el juego.
+* **`RouteView.js`**: Línea punteada animada en el suelo que muestra por dónde caminarán los enemigos.
+* **`MapPreview.js`**: Mini-mapa de cada nivel para el selector de `TitleScene`, armado con el mismo `GridSystem` y `Terrain`.
+* **`ParticleSystem.js`**: Partículas (chispas, impactos) para no usar tweens ni objetos temporales.
+* **`FloatingText.js`**: Números de daño que salen de los golpes, con pool; ▲ si pega en debilidad y ▼ si choca con resistencia.
+* **`ManaAura.js`**: Aura animada bajo los orbes de maná del piso (la usa `ManaMote.js`).
+* **`IconText.js`**: Texto con el sprite de maná en línea: reemplaza el token `✦` (la fuente no lo tiene) por la imagen.
+
+**Pantalla, entrada y utilidades**
+* **`Viewport.js`**: Supersampling (`SUPER = 4`), cámara del tablero con zoom en mapas grandes, `worldToView` (mundo → vista 920×480) y `pointerWorld` (puntero → mundo).
+* **`DisplaySystem.js`**: Escala de pantalla elegida por el jugador (barra de tamaño, guardada en `localStorage`).
+* **`Typography.js`**: Hace que todo `Text` se rasterice a la resolución del buffer para que las letras se vean nítidas (`installTextResolution`, en `main.js`).
+* **`TextureGuard.js`**: `safeTexture(scene, key, fallback)`: evita el cuadro negro de textura faltante y avisa la clave en consola. Usarlo en toda búsqueda de textura en tiempo de ejecución.
 * **`AudioSystem.js`**: Síntesis de sonido retro procedural y efectos con Web Audio API.
 * **`OptionsModal.js`**: Modal de configuración (escala de resolución, volumen y controles).
+* **`TouchControls.js`**: Joystick y controles táctiles (US 7.1, en pausa). **Sin uso**: no lo importa ningún archivo.
+* **`ManaShader.js`**: Shader de la base de maná (`getManaBaseShader`). **Sin uso**: no lo importa ningún archivo.
 
 ### 👾 Entidades (`js/entities/`)
 * **`Tower.js`**: Estructuras defensivas, detección de objetivos, rango visual, cadencia de disparo y niveles individuales con oro.
