@@ -5,7 +5,7 @@ Este documento es la referencia técnica rápida para cualquier agente o asisten
 ---
 
 ## 🎯 1. Visión y Documentación de Tareas
-* **Tipo de Juego**: Tower Defense pixel art retro desarrollado con **Phaser 3** y empaquetado con **Vite**.
+* **Tipo de Juego**: Tower Defense pixel art retro desarrollado con **Phaser 4** (4.2.x) y empaquetado con **Vite**.
 * **Mecánicas Clave**:
   * **Economía Dual**: Oro (construcción básica y mejoras) y Maná (refinado por Templos o recogido por el Héroe).
   * **Héroe Controlable**: Se mueve por el mapa, combate, absorbe maná y conjura hechizos.
@@ -39,6 +39,8 @@ e:/Proyectos/Mini juego TD/
 * **Comunicación entre Escenas**: Se realiza mediante el bus de eventos de Phaser:
   * `this.gs.events.emit('evento', datos)` desde `GameScene`.
   * `this.gs.events.on('evento', callback)` en `UIScene`.
+  * Lo que UIScene dibuja sobre el mapa se ubica con `worldToView(this.gs, x, y)` (`Viewport.js`), que convierte coordenadas del mundo a la vista de 920×480 (en mapas grandes la cámara del tablero tiene zoom).
+  * Ejemplo: la tarjeta fija de una estructura seleccionada. `GameScene` es dueña de la selección y de las compras: emite `pin-card` (estructura o `null`) y escucha `buy-upgrade` / `buy-enchant`. `UIScene` dibuja la tarjeta y sus botones (`_renderPinCard`).
 
 ### ⚙️ Sistemas (`js/systems/`)
 * **`EconomySystem.js`**: Maneja el balance de oro, vidas del jugador, maná crudo y refinado.
@@ -47,6 +49,7 @@ e:/Proyectos/Mini juego TD/
 * **`TempleSystem.js`**: Lógica de templos, auras de recolección de maná y escalado de bonificaciones elementales.
 * **`FusionSystem.js`**: Detección de adyacencia e interacción de arrastrar/soltar para fusionar torres compatibles.
 * **`TelegraphSystem.js`**: Señalización visual en el suelo (líneas, conos, círculos) antes de que un jefe lance una habilidad.
+* **`SealSystem.js`**: Sellos elementales del suelo (cristales): bonus por casilla y su estado visual (en reposo, brillando con una torre compatible en mano, activo con la torre encima).
 * **`SaveSystem.js`**: Serialización y restauración de estado en `localStorage`.
 * **`AudioSystem.js`**: Síntesis de sonido retro procedural y efectos con Web Audio API.
 * **`OptionsModal.js`**: Modal de configuración (escala de resolución, volumen y controles).
@@ -75,6 +78,8 @@ e:/Proyectos/Mini juego TD/
 2. **Separación Estricta UI vs Gameplay**:
    * **Nunca** pintes elementos de interfaz (botones, paneles fijos, contadores del HUD) en `GameScene`.
    * Todo lo interactivo y relativo a menús pertenece a `UIScene`.
+   * **Tarjetas y tooltips**: se dibujan siempre con `UIScene._showCard` (tooltip) o `_buildCard` (tarjeta que se ubica a mano, como la fija), con el mismo estilo: franja de color, costo con sprite `icon_coin` o de maná, tabla ANTES → DESPUES con % en verde/rojo. No crear cajas de texto sueltas con otro estilo.
+   * **Clics sobre el mapa**: un botón de UIScene encima del tablero hace `pointer.event.stopPropagation()` y `pointer.event._uiConsumed = true` en `pointerdown` para que GameScene no lo tome como clic en el mapa. Los fondos decorativos (como el de la tira `[Q] [E] | [R] [T] [Y]`) no deben ser interactivos, para no tapar las estructuras de atrás.
 3. **Pipeline de Assets Aseprite (`.ase`)**:
    * Los archivos fuente `.ase` y sprites residen en la carpeta `assets/` (ej. `assets/coin.ase`, `assets/mana.ase`, `assets/gear32.ase`, `assets/Sprite-0002.ase`).
    * Se compilan a Data URIs ejecutando sus scripts Node:

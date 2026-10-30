@@ -60,7 +60,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 
 > **Criterios de Aceptación:**
 > - Las torres adyacentes fusionables se conectan visualmente con una línea de energía en el suelo.
-> - La primera vez que se colocan dos estructuras compatibles adyacentes, aparece un mensaje explicativo indicando que se pueden arrastrar una sobre otra para fusionarse.
+> - La primera vez que se colocan dos estructuras compatibles adyacentes, aparece un mensaje explicativo indicando que se pueden arrastrar una sobre otra para fusionarse. Solo sale cuando se forma una pareja nueva (`FusionSystem._knownPairs`), no cada vez que cambia el tablero: antes, poner un templo en cualquier lado volvía a mostrarlo sobre dos torres viejas.
 > - Al arrastrar o inspeccionar, la UI ofrece una vista previa de la torre resultante.
 > 
 > *Estado:* **Implementado** en `FusionSystem.js` y `UIScene.js`.
@@ -363,7 +363,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - El costo escala exponencialmente (500 × 1.4ⁿ de maná; era 350 antes de US 8.5).
 > - El panel del templo la muestra siempre (bloqueada hasta maxear) y la barra de objetivo de maná apunta a ella en lugar de decir "todo al maximo".
 > 
-> *Estado:* **Implementado** en `TempleData.js` (`OVERCHARGE`, `overchargeCost`), `TempleSystem.js` (`overcharge`, `allMaxed`, `buyOvercharge`, multiplicador de daño), `UIScene.js` (fila en el panel, barra y aviso), `GameScene.js` (`SOB n` en la tarjeta) y `SaveSystem.js` (`templeOvercharge`; los niveles de templo se copian en profundidad).
+> *Estado:* **Implementado** en `TempleData.js` (`OVERCHARGE`, `overchargeCost`), `TempleSystem.js` (`overcharge`, `allMaxed`, `buyOvercharge`, multiplicador de daño), `UIScene.js` (fila en el panel, barra y aviso), `UIScene.js` (`SOB n` en la tarjeta fija, `_pinTowerCard`) y `SaveSystem.js` (`templeOvercharge`; los niveles de templo se copian en profundidad).
 
 ### US 8.4: Economía por Oleada y Descanso con Temporizador [✓]
 **Como** jugador,
@@ -430,8 +430,9 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Encantar barricada (US 11.1): la tarjeta de una barricada sin encantar muestra `DAÑO/S 0 → 16` y `LENTITUD 0% → 35%`; se enciende la fila del botón que tiene el mouse.
 > - Botones de TORRES, TEMPLOS y BARRICADA, Q/E y R/T/Y: costo, recarga y efectos exactos tomados de los datos.
 > - Q/E y hechizos en una sola tira baja abajo a la izquierda, `[Q] [E] | [R] [T] [Y]`, con la vida de Vesper fina sobre Q/E y un separador. Solo los 5 botones toman clics: el fondo deja pasar los clics a las estructuras de atrás. Mientras se construye, se vende o se arrastra una fusión, la tira baja a 25% de opacidad y también los botones dejan pasar los clics. El cartel del tutorial empieza a la derecha de la tira.
+> - Corrección: el clic que construye un templo ya no abre su panel de mejoras al soltarlo (`Temple.js` ignora la liberación de un clic ya usado por el cursor de construcción, `_pressConsumed`).
 >
-> *Estado:* **Implementado** en `UIScene.js` (`_showCard`, `_buildCard`, `_renderPinCard`, `_pinTowerCard`, `_pinTempleCard`, `_pinBarricadeCard`, `_tickPinCard`, `_towerShopCard`, `_templeShopCard`, `_barricadeShopCard`, `_abilityCard`, `_spellCard`, `_buildHudStrip`, `_tickHudStrip`) y `GameScene.js` (`_refreshStatLabel` emite `pin-card`; escucha `buy-upgrade` y `buy-enchant`).
+> *Estado:* **Implementado** en `UIScene.js` (`_showCard`, `_buildCard`, `_renderPinCard`, `_pinTowerCard`, `_pinTempleCard`, `_pinBarricadeCard`, `_tickPinCard`, `_towerShopCard`, `_templeShopCard`, `_barricadeShopCard`, `_abilityCard`, `_spellCard`, `_buildHudStrip`, `_tickHudStrip`) `GameScene.js` (`_refreshStatLabel` emite `pin-card`; escucha `buy-upgrade` y `buy-enchant`) y `Temple.js`.
 
 ---
 
@@ -507,7 +508,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > Diseño: el pasto queda limpio; cada sello es un **racimo de 3 cristales facetados** (mismo estilo con outline que los pedestales) con un **marco punteado** en el borde de la casilla. Con una torre compatible encima, el racimo se oculta y aparecen un marco luminoso, 4 cristales en las esquinas y un brillo pulsante bajo la base. Colores: Fuego naranja, Agua cian, Tierra verde/ámbar, Aire blanco/violeta.
 > - Fuego/Tierra: +20% daño · Agua/Aire: +20% alcance.
 > - Híbridos y legendarias cuentan todos sus componentes (Hielo usa sellos de Agua o Aire; Obsidiana y Templo Ancestral, cualquiera).
-> - Con una torre en la mano, los sellos compatibles laten; el cursor muestra el bono y el anillo de alcance ya lo incluye. Ocupado por el elemento correcto, el sello brilla; por otro, se apaga.
+> - Con una torre en la mano, los sellos compatibles brillan: los cristales se dibujan otra vez en luz aditiva y aparece luz debajo, pulsando, siempre más brillantes que en reposo (antes bajaban la opacidad y se notaban menos). El cursor muestra el bono y el anillo de alcance ya lo incluye. Ocupado por el elemento correcto, el sello brilla; por otro, se apaga.
 > - Se definen por mapa en `LevelData.seals`.
 >
 > *Estado:* Implementado en `js/data/SealData.js`, `js/systems/SealSystem.js`, `LevelData.js`, `Tower.js`, `GameScene.js` y `BootScene.js` (sprites `seal_*`).
