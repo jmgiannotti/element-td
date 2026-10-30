@@ -9,7 +9,9 @@ import { ELEMENTS, TOWER_DATA } from './TowerData.js';
 // ── Build cost ───────────────────────────────────────────
 // Priced off how many temples are standing right now, not how many were ever
 // bought — so fusing two temples into one genuinely makes the next one cheaper.
-export const TEMPLE_BASE_COST = 60;
+// 80 rather than 60 since gold comes per wave: the first temple is a decision
+// against two towers, not a purchase you make in passing.
+export const TEMPLE_BASE_COST = 80;
 export const TEMPLE_COST_GROWTH = 1.55;
 
 export function templeCost(standingCount) {
