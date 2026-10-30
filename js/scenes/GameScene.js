@@ -8,7 +8,6 @@ import { TempleSystem } from '../systems/TempleSystem.js';
 import { BarricadeSystem } from '../systems/BarricadeSystem.js';
 import { SealSystem } from '../systems/SealSystem.js';
 import { MapEventSystem } from '../systems/MapEventSystem.js';
-import { BARRICADE_ENCHANTS, ENCHANT_ORDER, enchantCostLabel } from '../data/BarricadeData.js';
 import { RouteView } from '../systems/RouteView.js';
 import { FloatingText } from '../systems/FloatingText.js';
 import { TutorialSystem, tutorialWanted } from '../systems/TutorialSystem.js';
@@ -25,7 +24,7 @@ import { Tower } from '../entities/Tower.js';
 import { Temple } from '../entities/Temple.js';
 import { Hero } from '../entities/Hero.js';
 import { TOWER_DATA, ELEMENTS, TOWER_UPGRADE } from '../data/TowerData.js';
-import { TEMPLE_DATA, TRACK_ORDER, upgradeCost } from '../data/TempleData.js';
+import { TEMPLE_DATA, upgradeCost } from '../data/TempleData.js';
 import {
     cellHash, cellLayers, breakableKey, biomeKey, resolveBiome, townProps, BIOMES,
 } from '../systems/Terrain.js';
@@ -43,10 +42,6 @@ const BLOCK_REASON = {
     route: 'Cerraria el camino',
     enemy: 'Encerraria a un enemigo',
 };
-
-// Three-letter track names for the inspector card. The upgrade panel has room
-// for DAÑO/CADENCIA/ALCANCE; a label hanging over a 32px tile does not.
-const TRACK_SHORT = { damage: 'DMG', fireRate: 'CAD', range: 'ALC' };
 
 export class GameScene extends Phaser.Scene {
     constructor() {
@@ -170,9 +165,6 @@ export class GameScene extends Phaser.Scene {
             color: '#FFD700', stroke: '#000000', strokeThickness: 3,
         }).setOrigin(0.5, 1).setVisible(false).setDepth(31);
 
-        // The pinned tower's live numbers and individual upgrade interface.
-        this._buildStatCard();
-
         // ── Input ───────────────────────────────
         this.input.mouse.disableContextMenu();
         this.input.on('pointerdown', (pointer, gameObjects) => {
@@ -284,6 +276,16 @@ export class GameScene extends Phaser.Scene {
             for (const h of this._customHandlers) {
                 this.events.off(h.ev, h.fn);
             }
+        });
+
+        // The pinned card's buttons, drawn in UIScene.
+        onCustom('buy-upgrade', () => {
+            if (this.gameOver || this.gameWon || this.uiModalOpen) return;
+            this._buyTowerUpgrade();
+        });
+        onCustom('buy-enchant', (type) => {
+            if (this.gameOver || this.gameWon || this.uiModalOpen) return;
+            this._buyEnchant(type);
         });
 
         onCustom('use-ability', (key) => {
@@ -749,67 +751,6 @@ export class GameScene extends Phaser.Scene {
     }
 
     // ─── Inspection & Upgrades ─────────────────────────
-    _buildStatCard() {
-        this.statCard = this.add.container(0, 0).setDepth(31).setVisible(false);
-
-        this.statCardBg = this.add.rectangle(0, 0, 194, 95, 0x0a0a1a, 0.94)
-            .setStrokeStyle(1, 0x3a3a5a)
-            .setInteractive();
-        this.statCardBg.setData('uiBlocker', true);
-        this.statCardBg.on('pointerdown', (pointer) => {
-            if (pointer.button !== 0 && pointer.button !== undefined) return;
-            pointer.event.stopPropagation();
-        });
-
-        this.statText = this.add.text(-88, -40, '', {
-            fontFamily: '"Press Start 2P"',
-            fontSize: '8px',
-            color: '#FFD54F',
-            align: 'left',
-            lineSpacing: 4,
-        }).setOrigin(0, 0);
-
-        this.upgradeBtnBg = this.add.rectangle(0, 30, 178, 22, 0x1e1e3a)
-            .setStrokeStyle(1, 0x3a3a5a)
-            .setInteractive({ useHandCursor: true });
-        this.upgradeBtnBg.setData('uiBlocker', true);
-
-        this.upgradeBtnText = this.add.text(0, 30, '', {
-            fontFamily: '"Press Start 2P"',
-            fontSize: '8px',
-            color: '#FFFFFF',
-        }).setOrigin(0.5);
-
-        this.upgradeBtnBg.on('pointerdown', (pointer) => {
-            if (pointer.button !== 0 && pointer.button !== undefined) return;
-            pointer.event.stopPropagation();
-            if (this.selectedStructure?.kind === 'barricade') this._buyEnchant(ENCHANT_ORDER[0]);
-            else this._buyTowerUpgrade();
-        });
-
-        // Second button, only used by a bare barricade: one per enchantment.
-        this.altBtnBg = this.add.rectangle(0, 30, 178, 22, 0x1e1e3a)
-            .setStrokeStyle(1, 0x3a3a5a)
-            .setInteractive({ useHandCursor: true })
-            .setVisible(false);
-        this.altBtnBg.setData('uiBlocker', true);
-        this.altBtnText = this.add.text(0, 30, '', {
-            fontFamily: '"Press Start 2P"',
-            fontSize: '8px',
-            color: '#FFFFFF',
-        }).setOrigin(0.5).setVisible(false);
-        this.altBtnBg.on('pointerdown', (pointer) => {
-            if (pointer.button !== 0 && pointer.button !== undefined) return;
-            pointer.event.stopPropagation();
-            this._buyEnchant(ENCHANT_ORDER[1]);
-        });
-
-        this.statCard.add([
-            this.statCardBg, this.statText, this.upgradeBtnBg, this.upgradeBtnText,
-            this.altBtnBg, this.altBtnText,
-        ]);
-    }
-
     /**
      * Pins one tower's range open and shows what it actually does and allows upgrading it.
      * Passing null clears it.
@@ -826,7 +767,7 @@ export class GameScene extends Phaser.Scene {
         this.selectedStructure = structure ?? null;
 
         if (!this.selectedStructure) {
-            if (this.statCard) this.statCard.setVisible(false);
+            this._refreshStatLabel();
             return;
         }
 
@@ -836,118 +777,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     /**
-     * The card over a pinned structure: stats, temple buffs, individual rank,
-     * and direct upgrade button with gold.
+     * The card over a pinned structure is drawn by UIScene (_renderPinCard);
+     * this tells it which one, or that there is none. Called on anything that
+     * changes the numbers on it — gold, a level, a hit, a kill.
      */
     _refreshStatLabel() {
         const t = this.selectedStructure;
-        if (!t || !t.alive) {
-            if (this.statCard) this.statCard.setVisible(false);
-            return;
-        }
-
-        const isTower = t instanceof Tower;
-        if (t.kind === 'barricade') {
-            this._refreshBarricadeCard(t);
-            return;
-        }
-        this.altBtnBg.setVisible(false);
-        this.altBtnText.setVisible(false);
-        const ts = this.templeSystem;
-        const templeLvl = ts ? ts.totalLevels(t.element) : 0;
-
-        const lines = [];
-
-        if (isTower) {
-            lines.push(`${t.data.emoji} ${t.data.name}  Nv.${t.level}${templeLvl > 0 ? ` (Templo Nv.${templeLvl})` : ''}`);
-            lines.push(`DMG ${Math.round(t.damage)}   RNG ${Math.round(t.range)}`);
-            lines.push(`${t.shotsPerSecond.toFixed(2)}/s   ${t.data.specialDesc}`);
-            lines.push(`Daño: ${Math.round(t.totalDamageDealt || 0)}  ·  Bajas: ${t.enemiesKilled || 0}`);
-            const over = ts ? ts.overchargeOf(t.element) : 0;
-            lines.push(
-                templeLvl > 0
-                    ? TRACK_ORDER.map(tr => `${TRACK_SHORT[tr]} ${ts.levelOf(t.element, tr)}`).join('  ')
-                        + (over > 0 ? `  SOB ${over}` : '')
-                    : 'sin mejoras de templo'
-            );
-            if (t.empowered) lines.push('potenciada por el heroe');
-            if (t.frozen) lines.push('congelada: no dispara');
-            const seal = this.sealSystem.bonusLabel(t.col, t.row, t.element);
-            if (seal) lines.push(seal);
-
-            // Upgrade button logic (US 8.1 Gold sink)
-            this.upgradeBtnBg.setVisible(true);
-            this.upgradeBtnText.setVisible(true);
-
-            if (t.level >= TOWER_UPGRADE.MAX_LEVEL) {
-                this.upgradeBtnText.setText('✓ NIVEL MAXIMO');
-                this.upgradeBtnText.setColor('#4CAF50');
-                this.upgradeBtnBg.fillColor = 0x14210f;
-                this.upgradeBtnBg.setStrokeStyle(1, 0x4CAF50);
-            } else {
-                const cost = t.getNextUpgradeCost();
-                const canAfford = this.economySystem.gold >= cost;
-                this.upgradeBtnText.setText(`▲ MEJORAR [U]  ${cost} ORO`);
-                this.upgradeBtnText.setColor(canAfford ? '#FFD700' : '#888899');
-                this.upgradeBtnBg.fillColor = canAfford ? 0x241d3d : 0x16162a;
-                this.upgradeBtnBg.setStrokeStyle(1, canAfford ? 0xFFD700 : 0x3a3a5a);
-            }
-        } else {
-            // Temple
-            lines.push(`${t.data.emoji || '🏛️'} ${t.data.name}${templeLvl > 0 ? `  Nv.${templeLvl}` : ''}`);
-            lines.push(`Alcance: ${t.absorbRadius}px`);
-            lines.push(`Absorbido: ${t.absorbed || 0} mana`);
-            lines.push(templeLvl > 0 ? 'Click para ver arbol de mejoras' : 'Click para abrir mejoras');
-            this.upgradeBtnBg.setVisible(false);
-            this.upgradeBtnText.setVisible(false);
-        }
-
-        this.statText.setText(lines.join('\n'));
-        this._layoutStatCard(t, isTower ? 1 : 0);
-    }
-
-    /**
-     * A barricade's card: what it does now, and — while it is still bare — the
-     * two enchantments, each on its own button and in its own currency.
-     */
-    _refreshBarricadeCard(t) {
-        const type = this.barricadeSystem.typeAt(t.col, t.row);
-        const lines = [];
-
-        if (type) {
-            const e = BARRICADE_ENCHANTS[type];
-            lines.push(`Barricada de ${e.name}`);
-            lines.push(e.desc);
-            lines.push('Bloquea el paso');
-            this.upgradeBtnBg.setVisible(false);
-            this.upgradeBtnText.setVisible(false);
-            this.altBtnBg.setVisible(false);
-            this.altBtnText.setVisible(false);
-            this.statText.setText(lines.join('\n'));
-            this._layoutStatCard(t, 0);
-            return;
-        }
-
-        lines.push('Barricada');
-        lines.push('Bloquea el paso');
-        lines.push('Encantala: afecta a quien');
-        lines.push('camine a su lado');
-        this.statText.setText(lines.join('\n'));
-
-        const paint = (bg, txt, enchantType) => {
-            const e = BARRICADE_ENCHANTS[enchantType];
-            const ok = this.barricadeSystem.canAfford(enchantType);
-            const hex = `#${e.color.toString(16).padStart(6, '0')}`;
-            bg.setVisible(true);
-            txt.setVisible(true);
-            txt.setText(`${e.name.toUpperCase()}  ${enchantCostLabel(enchantType)}`);
-            txt.setColor(ok ? hex : '#888899');
-            bg.fillColor = ok ? 0x241d3d : 0x16162a;
-            bg.setStrokeStyle(1, ok ? e.color : 0x3a3a5a);
-        };
-        paint(this.upgradeBtnBg, this.upgradeBtnText, ENCHANT_ORDER[0]);
-        paint(this.altBtnBg, this.altBtnText, ENCHANT_ORDER[1]);
-        this._layoutStatCard(t, 2);
+        this.events.emit('pin-card', t && t.alive ? t : null);
     }
 
     _buyEnchant(type) {
@@ -959,46 +795,6 @@ export class GameScene extends Phaser.Scene {
             audio.play('deny');
             this.cameras.main.shake(90, 0.003);
         }
-    }
-
-    /** Sizes the card around its text and `buttons` stacked buttons, then places it. */
-    _layoutStatCard(t, buttons) {
-        // Measure content dimensions and adapt card size
-        const textBounds = this.statText.getBounds();
-        const cardW = Math.max(198, textBounds.width + 20);
-        const cardH = textBounds.height + 18 + buttons * 26;
-
-        this.statCardBg.setSize(cardW, cardH);
-        if (this.statCardBg.input && this.statCardBg.input.hitArea) {
-            this.statCardBg.input.hitArea.setSize(cardW, cardH);
-        }
-        this.statText.setPosition(-cardW / 2 + 10, -cardH / 2 + 8);
-
-        const btnW = cardW - 16;
-        const btnH = 22;
-        // Bottom-up, so with two buttons the first one sits above the second.
-        const stack = [[this.upgradeBtnBg, this.upgradeBtnText], [this.altBtnBg, this.altBtnText]]
-            .slice(0, buttons);
-        stack.forEach(([bg, txt], i) => {
-            const y = cardH / 2 - 16 - (buttons - 1 - i) * 26;
-            bg.setSize(btnW, btnH);
-            if (bg.input && bg.input.hitArea) bg.input.hitArea.setSize(btnW, btnH);
-            bg.setPosition(0, y);
-            txt.setPosition(0, y);
-        });
-
-        // Clamp and position above/below the structure
-        const clampedX = Phaser.Math.Clamp(
-            t.x, cardW / 2 + 4, this.gridSystem.worldWidth - cardW / 2 - 4
-        );
-        if (t.y - 20 - cardH < 2) {
-            // Below structure
-            this.statCard.setPosition(clampedX, t.y + 22 + cardH / 2);
-        } else {
-            // Above structure
-            this.statCard.setPosition(clampedX, t.y - 18 - cardH / 2);
-        }
-        this.statCard.setVisible(true);
     }
 
     _buyTowerUpgrade() {

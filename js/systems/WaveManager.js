@@ -111,13 +111,23 @@ export class WaveManager {
         this.spawnTimer = 200; // short initial delay
         this.currentWave++;
 
-        // Endless scaling (+20% a wave past the base list) on top of the
-        // base list's own steps (WaveData.waveHpMult).
-        this.currentHpMultiplier = (this.currentWave > this.totalWaves
-            ? Math.pow(1.20, this.currentWave - this.totalWaves)
-            : 1) * waveHpMult(this.currentWave);
+        this.currentHpMultiplier = this.waveHpMultiplier(this.currentWave);
 
         this.scene.events.emit('wave-started', this.currentWave);
+    }
+
+    /**
+     * Health multiplier of wave `n`: endless scaling (+20% a wave past the
+     * base list) on top of the base list's own steps (WaveData.waveHpMult).
+     */
+    waveHpMultiplier(n) {
+        return (n > this.totalWaves ? Math.pow(1.20, n - this.totalWaves) : 1) * waveHpMult(n);
+    }
+
+    /** What one enemy of `type` multiplies its health by in wave `n`, map modifiers included. */
+    enemyHpMultiplier(type, n) {
+        return this.waveHpMultiplier(n) * this.profile.hpMult
+            * (ENEMY_DATA[type]?.isBoss ? this.profile.bossHpMult : 1);
     }
 
     /** The running wave's purse, once. */
@@ -142,8 +152,7 @@ export class WaveManager {
             this.spawnTimer -= delta;
             if (this.spawnTimer <= 0) {
                 const spawn = this.spawnQueue.shift();
-                const hpMult = (this.currentHpMultiplier || 1) * this.profile.hpMult
-                    * (ENEMY_DATA[spawn.type]?.isBoss ? this.profile.bossHpMult : 1);
+                const hpMult = this.enemyHpMultiplier(spawn.type, this.currentWave);
                 const enemy = Enemy.obtain(this.scene, spawn.type, null, null, hpMult);
                 this.scene.enemies.push(enemy);
                 if (enemy.isBoss) {
