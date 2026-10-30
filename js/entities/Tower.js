@@ -331,7 +331,7 @@ export class Tower {
 
     _fire(target) {
         const dmg = this.empowered ? this.damage * 1.5 : this.damage;
-        audio.play('shoot', this.element);
+        audio.play('shoot', this.element, this.x);
         const proj = Projectile.obtain(this.scene, this.x, this.y - 4, target, dmg, this.data, this);
         this.scene.projectiles.push(proj);
 

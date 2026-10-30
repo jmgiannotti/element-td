@@ -489,9 +489,14 @@ export class GameScene extends Phaser.Scene {
         // Wired off the events the game already emits, so the systems stay
         // unaware that anything is listening.
         this.audio = audio;
+        audio.worldWidth = this.gridSystem.worldWidth;
         const onAudio = (event, cue, arg) => onCustom(event, () => audio.play(cue, arg));
-        onAudio('enemy-died', 'die');
-        onAudio('enemy-reached-end', 'leak');
+        // Placed where it happened, so a kill on the far side sounds far.
+        onCustom('enemy-died', (e) => audio.play('die', !!e?.isBoss, e?.x));
+        onCustom('enemy-reached-end', (e) => {
+            audio.play('leak', null, e?.x);
+            if (e?.isBoss) bossGone(e);
+        });
         onAudio('mana-collected', 'mana');
         onAudio('fusion-complete', 'fusion');
         onAudio('temple-upgraded', 'upgrade');
@@ -499,6 +504,25 @@ export class GameScene extends Phaser.Scene {
         onAudio('wave-started', 'wave');
         onAudio('game-over', 'gameOver');
         onAudio('all-waves-complete', 'victory');
+
+        // The music (US 14.3) follows the board: calm while you build, tense
+        // while a wave walks, harder while a boss is out.
+        audio.setSong(this.levelData.music);
+        audio.setMusicMood('calm');
+        onCustom('wave-started', () => audio.setMusicMood(
+            this.enemies.some(e => e.alive && e.isBoss) ? 'boss' : 'tension'));
+        onCustom('boss-spawned', () => audio.setMusicMood('boss'));
+        // Killed or escaped: back to the wave's tension, unless another boss
+        // is still out (the endless mode can field two).
+        const bossGone = (boss) => {
+            if (!this.waveManager.waveActive) return;
+            const another = this.enemies.some(e => e !== boss && e.alive && e.isBoss);
+            audio.setMusicMood(another ? 'boss' : 'tension');
+        };
+        onCustom('boss-defeated', bossGone);
+        onCustom('wave-complete', () => audio.setMusicMood('calm'));
+        onCustom('game-over', () => audio.setMusicMood('calm'));
+        onCustom('all-waves-complete', () => audio.setMusicMood('calm'));
 
         // ── Launch parallel UI scene ────────────
         // Before the tutorial, which speaks through events UIScene renders.

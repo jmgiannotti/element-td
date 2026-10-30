@@ -576,7 +576,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > 
 > *Estado:* **Implementado** en `WaveManager.js` y `UIScene.js`.
 
-### US 14.3: Banda Sonora Ambiental y Música Dinámica
+### US 14.3: Banda Sonora Ambiental y Música Dinámica [✓]
 **Como** jugador,  
 **Quiero** escuchar música ambiental atmosférica que se intensifique durante las oleadas y vuelva a la calma en la fase de preparación,  
 **Para** una experiencia auditiva envolvente acorde a la estética oscura del juego.
@@ -584,8 +584,18 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > **Criterios de Aceptación:**
 > - Bucle musical de fondo con control de volumen independiente en opciones.
 > - Transición sutil entre calma (preparación) y tensión (oleada activa).
-> 
-> *Estado:* **Pendiente**.
+>
+> Diseño: música generada en tiempo real (sin archivos), **una canción por mapa** (`LevelData.music`, datos en `MusicData.js`):
+> - **Paso de Ceniza** (y el menú): Re menor, 70 BPM, Dm – Bb – Gm – A; colchón suave y campanas.
+> - **Plaza del Mercado**: La dórico, 84 BPM; laúd punteado en arpegio, bajo de tónica y quinta, pandero.
+> - **Caldera de Magma**: Mi frigio, 62 BPM; drone grave de sierra, gongs, bajo en negras y tambores tribales.
+> - **Glaciar Quebrado**: Si menor a Re mayor, 58 BPM; colchón de senos con brillo agudo, campanas de cristal y chasquidos de hielo.
+> - **Cripta Ancestral**: Do menor, 66 BPM; órgano, una campana grave por compás, bajo que se apoya en la nota de arriba y bombo de latido.
+>
+> Todas comparten cuatro capas que se cruzan en ~2 s según el clima: **calma** (preparación, menú) = colchón de acordes y campanas sueltas; **tensión** (oleada) = entra un bajo pulsante y batería suave, el colchón se abre; **jefe** = bajo y batería más fuertes, sin campanas. Vuelve a tensión si el jefe muere o se escapa (salvo que quede otro) y a calma al terminar la oleada.
+> Junto con esto se rehízo el sonido general: limitador para que muchos disparos juntos no saturen, reverb compartida, paneo según la posición en el mapa (disparos, golpes, muertes, fugas), un timbre de disparo por elemento (agua, aire, fuego, tierra, hielo, tormenta, arcano), variación de tono en los sonidos repetidos, maná que sube de nota en combos y una muerte de jefe propia.
+>
+> *Estado:* **Implementado** en `AudioSystem.js` (cadena de audio, voces y reproductor de música: `setSong`, `setMusicMood`, `setSfxVolume`, `setMusicVolume`), `js/data/MusicData.js` (las canciones), `LevelData.js` (`music` por mapa), `OptionsModal.js` (volumen de EFECTOS y MUSICA, guardado en `localStorage`), `GameScene.js` (climas por evento y posición de cada sonido), `TitleScene.js` (calma en el menú), `Tower.js`, `Enemy.js` y `Sentinel.js` (posición del sonido).
 
 ### US 14.4: Modificadores de Dificultad (Mutadores)
 **Como** jugador veterano,  

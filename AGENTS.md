@@ -72,7 +72,7 @@ e:/Proyectos/Mini juego TD/
 * **`DisplaySystem.js`**: Escala de pantalla elegida por el jugador (barra de tamaño, guardada en `localStorage`).
 * **`Typography.js`**: Hace que todo `Text` se rasterice a la resolución del buffer para que las letras se vean nítidas (`installTextResolution`, en `main.js`).
 * **`TextureGuard.js`**: `safeTexture(scene, key, fallback)`: evita el cuadro negro de textura faltante y avisa la clave en consola. Usarlo en toda búsqueda de textura en tiempo de ejecución.
-* **`AudioSystem.js`**: Síntesis de sonido retro procedural y efectos con Web Audio API.
+* **`AudioSystem.js`**: Sonido y música generados con Web Audio (sin archivos). `audio.play(cue, arg, x)`: `x` (posición en el mundo) panea el sonido. Música dinámica: `audio.setSong(id)` (cada mapa la elige con `LevelData.music`) y `audio.setMusicMood('calm' | 'tension' | 'boss')`; volúmenes separados de efectos y música.
 * **`OptionsModal.js`**: Modal de configuración (escala de resolución, volumen y controles).
 * **`TouchControls.js`**: Joystick y controles táctiles (US 7.1, en pausa). **Sin uso**: no lo importa ningún archivo.
 * **`ManaShader.js`**: Shader de la base de maná (`getManaBaseShader`). **Sin uso**: no lo importa ningún archivo.
@@ -87,6 +87,7 @@ e:/Proyectos/Mini juego TD/
 * **`TowerData.js`**: Stats base de torres puras e híbridas, costos, radios, colores y multiplicadores.
 * **`EnemyData.js`**: Tipos de enemigos, velocidades, puntos de vida, afinidades y habilidades de jefes.
 * **`WaveData.js`**: Lista secuencial de oleadas base.
+* **`MusicData.js`**: Las canciones, una por mapa: tonalidad, tempo, acordes y cómo toca cada capa (colchón, melodía, bajo, batería). Una canción nueva es una entrada nueva acá.
 * **`Elements.js`**: Reglas de efectividad (`SUPER_MULT = 1.5`, `RESIST_MULT = 0.5`).
 * **`*Sprite.js`** (`CoinSprite.js`, `ManaSprite.js`, `BossSprites.js`): Contenedores generados automáticamente con Base64 de sprites compilados.
 

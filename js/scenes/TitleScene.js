@@ -29,6 +29,10 @@ export class TitleScene extends Phaser.Scene {
 
     create() {
         applyViewport(this);
+        // Leaving a game mid-wave must not carry its drums into the menu,
+        // nor its map's song: the menu has the first map's.
+        audio.setSong('ceniza');
+        audio.setMusicMood('calm');
 
         this.optionsModal = null;
         this.guideModal = null;

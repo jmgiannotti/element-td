@@ -129,17 +129,23 @@ export class OptionsModal {
 
         this.container.add([sec2, this.soundBtn]);
 
-        const div3 = this.scene.add.rectangle(0, -h / 2 + 204, w - 40, 1, 0x2a2a5a);
+        // Effects and music, each on its own scale (US 14.3).
+        this.sfxRow = this._volumeRow(-h / 2 + 210, 'EFECTOS',
+            () => audio.sfxVolume, (v) => audio.setSfxVolume(v));
+        this.musicRow = this._volumeRow(-h / 2 + 236, 'MUSICA',
+            () => audio.musicVolume, (v) => audio.setMusicVolume(v));
+
+        const div3 = this.scene.add.rectangle(0, -h / 2 + 256, w - 40, 1, 0x2a2a5a);
         this.container.add(div3);
 
         // ── 3. Game Management Section ───────────
-        const sec3 = this.scene.add.text(-w / 2 + 24, -h / 2 + 218, 'PARTIDA', {
+        const sec3 = this.scene.add.text(-w / 2 + 24, -h / 2 + 270, 'PARTIDA', {
             fontFamily: FONT, fontSize: '8px', color: '#90CAF9',
         });
         this.container.add(sec3);
 
         if (this.opts.mode === 'ingame') {
-            const bSaveQuit = this._button(-105, -h / 2 + 246, 195, 24, 'GUARDAR Y SALIR', 0x1565C0, () => {
+            const bSaveQuit = this._button(-105, -h / 2 + 298, 195, 24, 'GUARDAR Y SALIR', 0x1565C0, () => {
                 if (this.opts.gameScene) {
                     SaveSystem.saveGame(this.opts.gameScene);
                 }
@@ -152,7 +158,7 @@ export class OptionsModal {
                 }
             });
 
-            const bRestart = this._button(105, -h / 2 + 246, 195, 24, 'REINICIAR PARTIDA', 0x552222, () => {
+            const bRestart = this._button(105, -h / 2 + 298, 195, 24, 'REINICIAR PARTIDA', 0x552222, () => {
                 this.close();
                 if (this.opts.onRestart) this.opts.onRestart();
                 else {
@@ -165,7 +171,7 @@ export class OptionsModal {
 
             this.container.add([bSaveQuit, bRestart]);
         } else {
-            this.clearSaveBtn = this._button(0, -h / 2 + 246, 400, 24, 'BORRAR PARTIDA GUARDADA', 0x442222, () => {
+            this.clearSaveBtn = this._button(0, -h / 2 + 298, 400, 24, 'BORRAR PARTIDA GUARDADA', 0x442222, () => {
                 SaveSystem.clearSave();
                 this._updateClearSaveBtn();
                 if (this.scene.refreshMenuState) this.scene.refreshMenuState();
@@ -218,6 +224,34 @@ export class OptionsModal {
         c.bg = bg;
         c.txt = txt;
         return c;
+    }
+
+    /**
+     * A label, [-], ten segments and [+]: one tenth per press. The segments
+     * are rectangles; the font has no block glyph.
+     */
+    _volumeRow(y, label, get, set) {
+        const left = -200;
+        const name = this.scene.add.text(left, y, label, {
+            fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
+        }).setOrigin(0, 0.5);
+        const segs = [];
+        for (let i = 0; i < 10; i++) {
+            segs.push(this.scene.add.rectangle(-20 + i * 16, y, 12, 10, 0x2a2a5a).setStrokeStyle(1, 0x3a3a6a));
+        }
+        const pct = this.scene.add.text(200, y, '', {
+            fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
+        }).setOrigin(1, 0.5);
+        const paint = () => {
+            const n = Math.round(get() * 10);
+            segs.forEach((r, i) => { r.fillColor = i < n ? 0x4CAF50 : 0x2a2a5a; });
+            pct.setText(`${n * 10}%`);
+        };
+        const minus = this._button(-50, y, 24, 20, '-', 0x2a2a5a, () => { set(get() - 0.1); paint(); });
+        const plus = this._button(150, y, 24, 20, '+', 0x2a2a5a, () => { set(get() + 0.1); paint(); });
+        this.container.add([name, ...segs, pct, minus, plus]);
+        paint();
+        return { paint };
     }
 
     _updateBarBtn(visible) {

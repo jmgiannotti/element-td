@@ -656,7 +656,7 @@ export class Enemy {
         if (effect !== EFFECT.NORMAL) this.scene.events.emit('damage-effect', effect);
 
         if (!silent && this.sprite) {
-            audio.play('hit');
+            audio.play('hit', null, this.x);
             // setTintFill was removed in Phaser 4 — FILL is now a tint mode
             this.sprite.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
             this.scene.time.delayedCall(60, () => {

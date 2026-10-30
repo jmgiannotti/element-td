@@ -279,7 +279,7 @@ export class Sentinel {
             if (Phaser.Math.Distance.Between(x, y, e.x, e.y) <= burstRadius) e.takeDamage(burstDamage);
         }
 
-        audio.play('hit');
+        audio.play('hit', null, x);
         const ring = this.scene.add.circle(x, y, 6, 0x7FE7FF, 0.25)
             .setStrokeStyle(2, 0xB388FF, 0.9).setDepth(23);
         this.scene.tweens.add({
