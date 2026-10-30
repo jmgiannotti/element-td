@@ -1,3 +1,4 @@
+import * as Phaser from 'phaser';
 import { SEAL_BONUS, sealMatches } from '../data/SealData.js';
 import { TOWER_DATA } from '../data/TowerData.js';
 import { safeTexture } from './TextureGuard.js';
@@ -12,7 +13,10 @@ const D_SEAL = 0.4;
  *
  *   empty           a cluster of three crystals and a dotted frame; the
  *                   lawn under them stays clean
- *   tower in hand   the same, pulsing, on every seal that tower could use
+ *   tower in hand   the same, glowing, on every seal that tower could use:
+ *                   the crystals drawn a second time in additive light and
+ *                   light pooled under them, pulsing — brighter than at rest,
+ *                   never dimmer, so the seals stand out across the board
  *   matching tower  the cluster goes (it would fight the pedestal) and the
  *                   tile gets a lit frame, four corner crystals and a pulse of
  *                   light under the tower's base — the bonus is never invisible
@@ -49,6 +53,9 @@ export class SealSystem {
             cluster: layer(''),
             halo: layer('_halo').setVisible(false),
             on: layer('_on').setVisible(false),
+            // The cluster again, added on top of itself: only lit while a
+            // matching tower is in hand.
+            glow: layer('').setBlendMode(Phaser.BlendModes.ADD).setVisible(false),
             active: false,
         });
     }
@@ -94,16 +101,22 @@ export class SealSystem {
             seal.cluster.setVisible(!tower);
             seal.frame.setVisible(!seal.active);
             seal.on.setVisible(seal.active);
-            seal.halo.setVisible(seal.active);
+            seal.halo.setVisible(seal.active || lit);
+            seal.halo.setBlendMode(lit ? Phaser.BlendModes.ADD : Phaser.BlendModes.NORMAL);
+            seal.glow.setVisible(lit);
 
             if (seal.active) {
                 seal.halo.setAlpha(0.55 + 0.45 * pulse);
             } else if (tower) {
                 seal.frame.setAlpha(0.35);
+            } else if (lit) {
+                seal.cluster.setAlpha(1);
+                seal.frame.setAlpha(1);
+                seal.glow.setAlpha(0.3 + 0.7 * pulse);
+                seal.halo.setAlpha(0.6 + 0.4 * pulse);
             } else {
-                const a = lit ? 0.55 + 0.45 * pulse : 1;
-                seal.frame.setAlpha(lit ? a : 0.7);
-                seal.cluster.setAlpha(a);
+                seal.frame.setAlpha(0.7);
+                seal.cluster.setAlpha(1);
             }
         }
     }
@@ -114,6 +127,7 @@ export class SealSystem {
             s.cluster.destroy();
             s.halo.destroy();
             s.on.destroy();
+            s.glow.destroy();
         }
         this.seals.clear();
     }
