@@ -156,6 +156,7 @@ export class UIScene extends Phaser.Scene {
         this._refreshHeroHud();
         this._refreshHeroHealth();
         this._refreshSpellHud();
+        this._tickRest();
     }
 
     // ─── Shared chrome helpers ──────────────────────────
@@ -536,7 +537,7 @@ export class UIScene extends Phaser.Scene {
 
     // ─── Global controls ────────────────────────────────
     /**
-     * Speed, auto-wave, pause and help, styled like BARRICADA / VENDER rather
+     * Speed, pause and help, styled like BARRICADA / VENDER rather
      * than as flat grey blocks. A toggle that is on shows it in its border and
      * its text, the same way an armed build button does.
      *
@@ -561,24 +562,18 @@ export class UIScene extends Phaser.Scene {
             return btn;
         };
 
-        const wm = this.gs.waveManager;
-
-        this.velBtn = mk(LEFT, 54, 'VEL 1x', 0xFF9800, () => {
+        // No auto-wave toggle: after every wave a rest runs down and the next
+        // one starts on its own (WaveManager), so there is nothing to switch.
+        this.velBtn = mk(LEFT, 82, 'VEL 1x', 0xFF9800, () => {
             this.gs.time.timeScale = this.gs.time.timeScale === 1 ? 2 : 1;
             this._refreshControls();
         }, ['Velocidad', 'x1 o x2.']);
 
-        this.autoBtn = mk(LEFT + 58, 74, 'AUTO: NO', 0x42A5F5, () => {
-            wm.autoWave = !wm.autoWave;
-            if (wm.autoWave && !wm.waveActive) this.gs.events.emit('start-wave');
-            this._refreshControls();
-        }, ['Auto oleada', 'Lanza la siguiente', 'oleada sola al', 'terminar la actual.']);
-
-        this.pauseBtn = mk(LEFT + 136, 58, 'PAUSA', 0xFFD54F, () => {
+        this.pauseBtn = mk(LEFT + 87, 82, 'PAUSA', 0xFFD54F, () => {
             if (!this.gs.uiModalOpen) this.togglePause();
         }, ['Pausa  [ESPACIO]']);
 
-        this.helpBtn = mk(LEFT + 198, 58, 'AYUDA', 0xFFD54F, () => this._openHelpPanel(),
+        this.helpBtn = mk(LEFT + 174, 82, 'AYUDA', 0xFFD54F, () => this._openHelpPanel(),
             ['Ayuda', 'Fusiones, elementos,', 'heroe y hechizos.']);
 
         this._refreshControls();
@@ -594,8 +589,6 @@ export class UIScene extends Phaser.Scene {
         };
         const fast = this.gs.time.timeScale > 1.5;
         paint(this.velBtn, fast, fast ? 'VEL 2x' : 'VEL 1x');
-        const auto = this.gs.waveManager.autoWave;
-        paint(this.autoBtn, auto, auto ? 'AUTO: SI' : 'AUTO: NO');
         paint(this.pauseBtn, this.isPaused, this.isPaused ? 'SEGUIR' : 'PAUSA');
     }
 
@@ -813,7 +806,7 @@ export class UIScene extends Phaser.Scene {
         const W = 252;
         const ROW = 26;
         const isBoss = wm.isNextWaveBoss || comp.some(g => ENEMY_DATA[g.type]?.isBoss);
-        const H = 30 + comp.length * ROW + (fromMarker ? 16 : 4);
+        const H = 44 + comp.length * ROW + (fromMarker ? 16 : 4);
         const left = Phaser.Math.Clamp(x - W * ox, 4, 636 - W);
         const top = Phaser.Math.Clamp(y - H * oy, 4, 476 - H);
 
@@ -830,12 +823,16 @@ export class UIScene extends Phaser.Scene {
             }).setOrigin(1, 0.5));
         }
         c.add(this.add.rectangle(10, 22, W - 20, 1, 0x2a2a4a).setOrigin(0, 0.5));
+        // Gold only comes at the end of a wave now, so the card says how much.
+        c.add(this.add.text(10, 32, `Paga al terminar: +${wm.nextReward} ORO`, {
+            fontFamily: FONT, fontSize: '7px', color: '#FFD54F',
+        }).setOrigin(0, 0.5));
 
         const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
         comp.forEach((g, i) => {
             const d = ENEMY_DATA[g.type];
             if (!d) return;
-            const ry = 30 + i * ROW + ROW / 2;
+            const ry = 44 + i * ROW + ROW / 2;
 
             const icon = this.add.sprite(18, ry, safeTexture(this, `enemy_${g.type}`, 'enemy_slime'));
             icon.setScale(18 / Math.max(icon.width, icon.height));
@@ -957,6 +954,14 @@ export class UIScene extends Phaser.Scene {
         this.waveBtnText = this.add.text(CX, ROW_WAVE_BTN, '', {
             fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
         }).setOrigin(0.5);
+        // The rest between waves: a bar draining along the foot of the button,
+        // and under the label what calling the wave now would pay.
+        this.waveRestBar = this.add.rectangle(LEFT + 2, ROW_WAVE_BTN + WAVE_BTN_H / 2 - 4, INNER_W - 4, 3, 0xA5D6A7)
+            .setOrigin(0, 0.5).setVisible(false);
+        this.waveBonusText = this.add.text(CX, ROW_WAVE_BTN + 6, '', {
+            fontFamily: FONT, fontSize: '7px', color: '#FFD54F',
+        }).setOrigin(0.5).setVisible(false);
+        this._restShown = -1;
         this._refreshWaveButton();
 
         this.waveBtnBg.on('pointerdown', () => {
@@ -970,13 +975,34 @@ export class UIScene extends Phaser.Scene {
         });
     }
 
-    /** Which wave the button starts, or which one is running. */
+    /** Which wave the button starts, when it comes on its own, or which one is running. */
     _refreshWaveButton() {
         if (!this.waveBtnText) return;
         const wm = this.gs.waveManager;
+        const resting = wm.resting;
+        this.waveBtnText.setY(resting ? ROW_WAVE_BTN - 6 : ROW_WAVE_BTN);
         this.waveBtnText.setText(wm.waveActive
             ? `OLEADA ${wm.currentWave} EN CURSO`
-            : `INICIAR OLEADA ${wm.nextWaveNumber} ▶`);
+            : resting
+                ? `OLEADA ${wm.nextWaveNumber} EN ${wm.restSecondsLeft}s ▶`
+                : `INICIAR OLEADA ${wm.nextWaveNumber} ▶`);
+        this.waveBonusText.setVisible(resting).setText(resting ? `ADELANTAR: +${wm.earlyBonus} ORO` : '');
+        this.waveRestBar.setVisible(resting);
+        this._restShown = resting ? wm.restSecondsLeft : -1;
+    }
+
+    /** The countdown: the bar every frame, the label once a second. */
+    _tickRest() {
+        if (!this.waveRestBar) return;
+        const wm = this.gs.waveManager;
+        if (!wm.resting) {
+            if (this._restShown !== -1) this._refreshWaveButton();
+            return;
+        }
+        this.waveRestBar.width = (INNER_W - 4) * Math.max(0, wm.restTimer / (wm.restTotal || 1));
+        // The last three seconds in amber: the wave is about to come anyway.
+        this.waveRestBar.fillColor = wm.restSecondsLeft <= 3 ? 0xFFB74D : 0xA5D6A7;
+        if (wm.restSecondsLeft !== this._restShown) this._refreshWaveButton();
     }
 
     // ─── Hero ability bar ───────────────────────────────
@@ -1381,7 +1407,7 @@ export class UIScene extends Phaser.Scene {
             this._refreshWavePreview();
         });
 
-        on('wave-complete', () => {
+        on('wave-complete', (_wave, reward) => {
             this._refreshWavePreview();
             if (this.gs.waveManager.isLastWave) return;
 
@@ -1389,16 +1415,16 @@ export class UIScene extends Phaser.Scene {
             this.waveBtnText.setColor('#FFFFFF');
             this._refreshWaveButton();
 
-            this.gs.economySystem.addGold(15);
-            this._flashNotification('¡Oleada completada! +15 oro', '#4CAF50');
-
-            if (this.gs.waveManager.autoWave) {
-                this.time.delayedCall(2000, () => {
-                    if (this.gs.waveManager.autoWave && !this.gs.waveManager.waveActive) {
-                        this.gs.events.emit('start-wave');
-                    }
-                });
+            // The purse itself is paid by WaveManager; this only says so.
+            if (reward > 0) {
+                audio.play('coin');
+                this._flashNotification(`¡Oleada completada! +${reward} ORO`, '#4CAF50');
             }
+        });
+
+        on('wave-called-early', (bonus) => {
+            audio.play('coin');
+            this._flashNotification(`¡Oleada adelantada! +${bonus} ORO`, '#FFD54F');
         });
 
         on('placement-cancelled', () => {

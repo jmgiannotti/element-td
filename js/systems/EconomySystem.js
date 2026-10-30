@@ -12,6 +12,17 @@ export function refundValue(paidCost) {
     return Math.floor(paidCost * SELL_REFUND);
 }
 
+// Calling the next wave before the rest runs out pays for every second left
+// on the clock (rounded up). The rate climbs every `stepEvery` waves, so the
+// bonus keeps pace with the purses without making the first waves a gold rush.
+export const EARLY_CALL = { goldPerSecond: 3, stepEvery: 5 };
+
+export function earlyCallBonus(secondsLeft, waveNumber) {
+    if (secondsLeft <= 0) return 0;
+    const rate = EARLY_CALL.goldPerSecond + Math.floor(Math.max(0, waveNumber - 1) / EARLY_CALL.stepEvery);
+    return Math.ceil(secondsLeft) * rate;
+}
+
 export class EconomySystem {
     constructor(scene) {
         this.scene = scene;
@@ -20,13 +31,10 @@ export class EconomySystem {
         this.mana = 0;
         this.lives = scene.levelData.initialLives;
 
-        // Gold is now a kill bounty. It used to come from motes, but motes are
-        // life force and only temples may drink them — without a bounty you
-        // could not afford the first temple.
-        scene.events.on('enemy-died', (enemy) => {
-            this.addGold(enemy.data.gold ?? 4);
-            this._spawnMotes(enemy);
-        });
+        // A death drops life force and nothing else. Gold comes as a fixed
+        // purse at the end of each wave (payWave), so where an enemy dies —
+        // at the gate or at the last tile — is worth exactly the same.
+        scene.events.on('enemy-died', (enemy) => this._spawnMotes(enemy));
         scene.events.on('enemy-reached-end', (enemy) => this._loseLife(enemy?.data?.leak ?? 1));
         scene.events.on('mana-collected', (value) => this.addMana(value));
     }
@@ -35,6 +43,11 @@ export class EconomySystem {
     addGold(amount) {
         this.gold += amount;
         this.scene.events.emit('gold-changed', this.gold);
+    }
+
+    /** The wave's fixed purse (WaveData.waveReward), paid when it ends. */
+    payWave(amount) {
+        if (amount > 0) this.addGold(amount);
     }
 
     spendGold(amount) {

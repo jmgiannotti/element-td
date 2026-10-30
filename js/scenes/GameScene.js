@@ -396,7 +396,7 @@ export class GameScene extends Phaser.Scene {
             this._barricadeProbeKey = null;
         });
 
-        this.events.on('start-wave', () => this.waveManager.startWave());
+        this.events.on('start-wave', () => this.waveManager.callNextWave());
 
         // A global upgrade is meant to be felt. If a tower is pinned open when
         // one lands, its numbers change under the cursor.

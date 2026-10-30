@@ -1,6 +1,7 @@
-import { getWaveProfile, LATE_WAVE_HP } from '../data/WaveData.js';
+import { getWaveProfile, LATE_WAVE_HP, waveReward, WAVE_REST } from '../data/WaveData.js';
 import { ENEMY_DATA } from '../data/EnemyData.js';
 import { Enemy } from '../entities/Enemy.js';
+import { earlyCallBonus } from './EconomySystem.js';
 
 export class WaveManager {
     constructor(scene) {
@@ -15,11 +16,46 @@ export class WaveManager {
         this.waves = this.profile.waves;
         this.totalWaves = this.waves.length;
         this._checkingComplete = false;
+        // The rest between waves: when it runs out the next wave starts on
+        // its own. Zero before the first wave and after a load — those wait
+        // for the player.
+        this.restTimer = 0;
+        this.restTotal = 0;
+        // What the running wave pays when it ends (WaveData.waveReward).
+        this.currentReward = 0;
+    }
+
+    get resting() { return !this.waveActive && this.restTimer > 0; }
+
+    get restSecondsLeft() { return Math.ceil(this.restTimer / 1000); }
+
+    /** What calling the next wave right now would pay. */
+    get earlyBonus() {
+        return this.resting ? earlyCallBonus(this.restTimer / 1000, this.nextWaveNumber) : 0;
+    }
+
+    /** What the next wave pays when it ends. */
+    get nextReward() { return waveReward(this.nextComposition); }
+
+    /**
+     * The player asking for the next wave — the button, the gate, the endless
+     * prompt. During the rest it pays for the seconds saved first.
+     */
+    callNextWave() {
+        if (this.waveActive) return;
+        const bonus = this.earlyBonus;
+        if (bonus > 0) {
+            this.scene.economySystem.addGold(bonus);
+            this.scene.events.emit('wave-called-early', bonus);
+        }
+        this.startWave();
     }
 
     startWave() {
         if (this.waveActive) return;
 
+        this.restTimer = 0;
+        this.currentReward = this.nextReward;
         this.waveActive = true;
         this.spawnQueue = [];
 
@@ -59,7 +95,13 @@ export class WaveManager {
     }
 
     update(_time, delta) {
-        if (!this.waveActive) return;
+        if (!this.waveActive) {
+            if (this.restTimer > 0) {
+                this.restTimer -= delta;
+                if (this.restTimer <= 0) this.startWave();
+            }
+            return;
+        }
 
         // Spawn enemies from queue
         if (this.spawnQueue.length > 0) {
@@ -88,7 +130,15 @@ export class WaveManager {
         const alive = this.scene.enemies.some(e => e.alive);
         if (!alive) {
             this.waveActive = false;
-            this.scene.events.emit('wave-complete', this.currentWave);
+            // Paid before the event goes out, so the save it triggers has it.
+            const reward = this.currentReward;
+            this.scene.economySystem.payWave(reward);
+            // Then the rest — except after the last base wave, where the
+            // victory screen decides whether there is a next one.
+            if (this.currentWave !== this.totalWaves) {
+                this.restTimer = this.restTotal = WAVE_REST.restMs;
+            }
+            this.scene.events.emit('wave-complete', this.currentWave, reward);
             
             // Only emit victory on the exact final base wave
             if (this.currentWave === this.totalWaves) {

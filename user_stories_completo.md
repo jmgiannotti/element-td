@@ -362,6 +362,20 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > 
 > *Estado:* **Implementado** en `TempleData.js` (`OVERCHARGE`, `overchargeCost`), `TempleSystem.js` (`overcharge`, `allMaxed`, `buyOvercharge`, multiplicador de daño), `UIScene.js` (fila en el panel, barra y aviso), `GameScene.js` (`SOB n` en la tarjeta) y `SaveSystem.js` (`templeOvercharge`; los niveles de templo se copian en profundidad).
 
+### US 8.4: Economía por Oleada y Descanso con Temporizador [✓]
+**Como** jugador,
+**Quiero** que el oro llegue como un pago fijo por oleada y que las oleadas sigan solas tras un descanso corto,
+**Para** que no convenga amontonar torres baratas en el spawn para farmear, y que adelantar una oleada sea una apuesta que se paga.
+
+> **Criterios de Aceptación:**
+> - Los enemigos no sueltan oro al morir (solo maná). Cada oleada paga un monto fijo al terminar, mueran o se filtren sus enemigos: 10 + el valor de cada enemigo (incluidos los que suelta al morir), redondeado a 5. La tarjeta de la oleada muestra `Paga al terminar: +N ORO`.
+> - Al morir el último enemigo arranca un descanso de 12 s visible en el botón (`OLEADA N EN Xs`, barra que se vacía y se pone ámbar en los últimos 3 s). Al llegar a cero la oleada se lanza sola. Antes de la primera oleada, tras cargar una partida y después de la oleada 20 no hay temporizador.
+> - Durante el descanso el botón (y la calavera del spawn) adelantan la oleada y pagan por los segundos que quedaban: 3 de oro por segundo (oleadas 2–5), +1 cada 5 oleadas. El botón muestra `ADELANTAR: +N ORO`; al cobrarlo suena una moneda y aparece un aviso.
+> - Se quita el botón `AUTO` (las oleadas ya son automáticas).
+> - Torres base más caras: Tierra 30, Agua y Aire 35, Fuego 40 (antes 20/25/25/30); templo base 80 (antes 60). Las mejoras con oro escalan con el precio de la torre.
+> 
+> *Estado:* **Implementado** en `WaveData.js` (`WAVE_REWARD`, `waveReward`, `WAVE_REST`), `EconomySystem.js` (sin botín, `payWave`, `EARLY_CALL`, `earlyCallBonus`), `WaveManager.js` (`restTimer`, `callNextWave`, `earlyBonus`, `nextReward`), `GameScene.js` (`start-wave` → `callNextWave`), `UIScene.js` (botón con cuenta regresiva, aviso de pago y de adelanto, sin `AUTO`), `TowerData.js`, `TempleData.js` y `SaveSystem.js` (sin `autoWave`).
+
 ---
 
 ## 👑 Epic 9: Jefes y Eventos de Oleada
