@@ -36,9 +36,9 @@ export const SPELLS = {
         icon: 'spell_luna',
 
         // ── Cost ────────────────────────────────
-        // One CADENCIA rank, roughly. Enough that casting is a choice you can
-        // regret, cheap enough that it is not a once-a-run trophy.
-        cost: 120,
+        // A CADENCIA rank 2–3, roughly. Enough that casting is a choice you
+        // can regret, cheap enough that it is not a once-a-run trophy.
+        cost: 200,
         cooldown: 25000,
 
         // ── Shape ───────────────────────────────
@@ -81,7 +81,7 @@ export const SPELLS = {
         hotkey: 'T',
         icon: 'spell_centinelas',
 
-        cost: 90,
+        cost: 150,
         cooldown: 25000,
 
         targeted: true,
@@ -120,7 +120,7 @@ export const SPELLS = {
         hotkey: 'Y',
         icon: 'spell_egida',
 
-        cost: 75,
+        cost: 125,
         cooldown: 20000,
 
         targeted: true,

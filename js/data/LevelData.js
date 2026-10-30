@@ -126,7 +126,7 @@ export const MAP_2 = {
     // to walk over to collect it; on waves 8 and 14 the enemies blow one line
     // of crates each, opening the short way for good.
     mechanics: {
-        stallGold: 10, stallCap: 50, collectRadius: 40,
+        stallGold: 5, stallCap: 25, collectRadius: 40,
         breaches: [
             { wave: 8, block: 0, cause: 'blast' },
             { wave: 14, block: 1, cause: 'blast' },

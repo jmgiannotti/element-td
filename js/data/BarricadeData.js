@@ -48,7 +48,7 @@ export const BARRICADE_ENCHANTS = {
         key: ENCHANT.FROST,
         name: 'Escarcha',
         currency: 'mana',
-        cost: 35,
+        cost: 50,
         // Re-applied every frame while in reach, and held a moment after, so
         // an enemy walking a whole corridor of frost stays slow the whole way
         // instead of flickering between cells. Never stacks with a stronger

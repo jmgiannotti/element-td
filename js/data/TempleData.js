@@ -9,7 +9,9 @@ import { ELEMENTS, TOWER_DATA } from './TowerData.js';
 // ── Build cost ───────────────────────────────────────────
 // Priced off how many temples are standing right now, not how many were ever
 // bought — so fusing two temples into one genuinely makes the next one cheaper.
-export const TEMPLE_BASE_COST = 60;
+// 80 rather than 60 since gold comes per wave: the first temple is a decision
+// against two towers, not a purchase you make in passing.
+export const TEMPLE_BASE_COST = 80;
 export const TEMPLE_COST_GROWTH = 1.55;
 
 export function templeCost(standingCount) {
@@ -19,20 +21,23 @@ export function templeCost(standingCount) {
 // ── Upgrade tracks ───────────────────────────────────────
 // `step` is the effect per level. fireRate is a cooldown in milliseconds, so
 // shorter is better and its multiplier divides — see TempleSystem.multiplier().
+// Priced so that maxing one element (all three tracks: ~4300 maná) is most
+// of a run's maná rather than two late waves' worth — it used to be ~3100
+// against roughly twice the income.
 export const UPGRADE_TRACKS = {
     damage: {
         key: 'damage', label: 'DAÑO',
-        step: 0.20, maxLevel: 5, baseCost: 55, growth: 1.7,
+        step: 0.20, maxLevel: 5, baseCost: 75, growth: 1.7,
         color: '#FF7043', colorNum: 0xFF7043,
     },
     fireRate: {
         key: 'fireRate', label: 'CADENCIA',
-        step: 0.14, maxLevel: 5, baseCost: 65, growth: 1.7,
+        step: 0.14, maxLevel: 5, baseCost: 90, growth: 1.7,
         color: '#FFD54F', colorNum: 0xFFD54F,
     },
     range: {
         key: 'range', label: 'ALCANCE',
-        step: 0.10, maxLevel: 5, baseCost: 45, growth: 1.7,
+        step: 0.10, maxLevel: 5, baseCost: 65, growth: 1.7,
         color: '#4FC3F7', colorNum: 0x4FC3F7,
     },
 };
@@ -47,7 +52,7 @@ export const TRACK_ORDER = ['damage', 'fireRate', 'range'];
  */
 export const OVERCHARGE = {
     key: 'overcharge', label: 'SOBRECARGA',
-    step: 0.05, baseCost: 350, growth: 1.4,
+    step: 0.05, baseCost: 500, growth: 1.4,
     color: '#E040FB', colorNum: 0xE040FB,
 };
 
@@ -73,7 +78,7 @@ export const TEMPLE_DATA = Object.fromEntries(
         // A hybrid temple costs you two elemental upgrade trees, so it has to
         // pay for itself: it reaches further and refines more out of each mote.
         absorbRadius: t.isHybrid ? 132 : 104,
-        absorbBonus: t.isHybrid ? 0.5 : 0.15,
+        absorbBonus: t.isHybrid ? 0.3 : 0.1,
     }])
 );
 

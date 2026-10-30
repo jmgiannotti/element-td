@@ -37,9 +37,10 @@ export const ENEMY_TYPES = {
  * tile is what stops a small corner of towers from holding the whole road.
  * Bosses kept their pace — their fight is the telegraphs, not the walk.
  *
- * `gold` is the kill bounty. Since motes became life force that only temples
- * may absorb, this is where the entire building budget comes from — retuning
- * it is retuning the pace of the whole game.
+ * `gold` is what the enemy adds to its wave's purse (WaveData.waveReward),
+ * paid when the wave ends whether it was killed or not — nothing drops gold on
+ * death. That purse is the entire building budget, so retuning these is
+ * retuning the pace of the whole game.
  *
  * Elemental class, `weakness` and `resistance` are what make fusion a tactical
  * decision rather than a strictly-better upgrade: a wave is a question about

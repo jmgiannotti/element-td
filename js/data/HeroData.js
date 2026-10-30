@@ -62,8 +62,8 @@ export function abilityHeading(key) {
  */
 export const COMBO = {
     window: 2600,   // ms of grace before the streak dies
-    step: 0.25,     // bonus per extra mote in the streak
-    maxMult: 2.5,   // reached at 7 motes
+    step: 0.125,    // bonus per extra mote in the streak
+    maxMult: 1.75,  // reached at 7 motes (was ×2.5: half of all late maná)
 };
 
 export function comboMultiplier(count) {

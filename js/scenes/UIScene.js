@@ -1,12 +1,13 @@
 import * as Phaser from 'phaser';
-import { ELEMENTS, TOWER_DATA, FUSION_MAP, LEGENDARY_MAP } from '../data/TowerData.js';
+import { ELEMENTS, TOWER_DATA, FUSION_MAP, LEGENDARY_MAP, TOWER_UPGRADE } from '../data/TowerData.js';
 import {
     TEMPLE_DATA, TEMPLE_ELEMENTS, UPGRADE_TRACKS, TRACK_ORDER, OVERCHARGE,
 } from '../data/TempleData.js';
 import { safeTexture } from '../systems/TextureGuard.js';
 import { audio } from '../systems/AudioSystem.js';
 import { BARRICADE_COST, SELL_REFUND } from '../systems/EconomySystem.js';
-import { BARRICADE_ENCHANTS } from '../data/BarricadeData.js';
+import { BARRICADE_ENCHANTS, ENCHANT, enchantCostLabel } from '../data/BarricadeData.js';
+import { MANA_SPRITE } from '../data/ManaSprite.js';
 import { ENEMY_DATA } from '../data/EnemyData.js';
 import {
     EFFECT, EFFECT_MARK, EFFECT_LABEL, EFFECT_COLOR,
@@ -16,9 +17,10 @@ import { HERO_ABILITIES, ABILITY_ORDER, COMBO, abilityHeading } from '../data/He
 import { SPELLS, SPELL_ORDER, spellHeading } from '../data/SpellData.js';
 import { IconText, hasManaGlyph } from '../systems/IconText.js';
 import { HERO_LORE, DEFAULT_LOOK, heroTextureKey } from '../data/HeroLook.js';
-import { applyViewport, worldToView } from '../systems/Viewport.js';
+import { applyViewport, worldToView, pointerWorld, SUPER } from '../systems/Viewport.js';
 import { OptionsModal } from '../systems/OptionsModal.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
+import { fusionCost } from '../systems/FusionSystem.js';
 
 const FONT = '"Press Start 2P"';
 // Stands for the maná sprite in any string drawn through IconText.
@@ -45,26 +47,43 @@ const ROW_CONTROLS = 398;
 const ROW_PREVIEW = 423;
 const ROW_WAVE_BTN = 452;
 const WAVE_BTN_H = 34;
+// The next-wave row: one cell per kind of enemy, as many as fit after the label.
+const PREVIEW_CELL = 46;
+const PREVIEW_MAX = 4;
 
-// Hero ability bar, over the bottom-left of the map. The sidebar is full, and
-// the two cells it covers are the only corner of the board no route touches.
-const HUD_X = 22;
-const HUD_Y = 455;
+// Vesper's Q/E and the spells, one row over the bottom-left of the map:
+// [Q] [E] | [R] [T] [Y]. The sidebar is full, and a strip along the board's
+// bottom edge hides less of it than the two stacked rows it replaced.
+const HUD_X = 22;          // centre of Q
+const HUD_Y = 450;         // centre of the row
 const HUD_SIZE = 30;
 const HUD_GAP = 36;
-
-// Spells sit in their own row above the abilities, left edges aligned with it.
-// Wider cells than an ability: a spell carries a price as well as a key, and a
-// price you cannot see is not a price. Stacked rather than continuing the
-// ability row because the tutorial banner owns the strip at y≈456 to the right.
-// Spell slots are the same square as Vesper's Q/E, in the same columns, so the
-// two rows read as one block and neither reaches further into the lane.
 const SPELL_SIZE = HUD_SIZE;
-const SPELL_GAP = HUD_GAP;
-// Raised 12px over the Q/E row's spacing to make room for the price line that
-// hangs under each slot.
-const SPELL_Y = HUD_Y - 64;
-const SPELL_X = HUD_X;
+// The rule between Vesper's buttons and the spells, and the first spell.
+const HUD_SEP_X = HUD_X + HUD_GAP + HUD_SIZE / 2 + 10;
+const SPELL_X = HUD_SEP_X + 10 + HUD_SIZE / 2;
+// The backing panel: room for the health bar over the row and the spell
+// prices under it.
+const HUD_LEFT = 3;
+const HUD_RIGHT = SPELL_X + HUD_GAP * 2 + HUD_SIZE / 2 + 6;
+const HUD_TOP = HUD_Y - HUD_SIZE / 2 - 13;
+const HUD_BOTTOM = 477;
+
+// Cards (UIScene._showCard): the width every card and tooltip shares unless
+// it asks for another, and the number formats their stats use.
+const CARD_W = 256;
+const fmtInt = (n) => `${Math.round(n)}`;
+const fmtRate = (n) => `${n.toFixed(2)}/s`;
+const fmtDps = (n) => (n >= 100 ? `${Math.round(n)}` : n.toFixed(1));
+const fmtPct = (n) => `${Math.round(n * 100)}%`;
+const fmtBonus = (n) => `+${Math.round(n * 100)}%`;
+const fmtSec = (ms) => `${+(ms / 1000).toFixed(1)}s`;
+const fmtBig = (n) => (n >= 10000 ? `${+(n / 1000).toFixed(1)}k` : `${Math.round(n)}`);
+// Temple ranks on a tower's card, short enough to share one line.
+const TRACK_TAG = { damage: 'DAÑO', fireRate: 'CAD', range: 'ALC' };
+const hexColor = (n) => `#${n.toString(16).padStart(6, '0')}`;
+// Capitals without accents: the font has none.
+const plainUpper = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
 
 export class UIScene extends Phaser.Scene {
     constructor() {
@@ -84,6 +103,10 @@ export class UIScene extends Phaser.Scene {
         this.helpTab = null;
         this.fusionPopup = null;
         this.fusionPopupTimer = null;
+        // The pinned card: a scene restart keeps the instance, not its objects.
+        this.pinCard = null;
+        this._pinned = null;
+        this._pinHover = null;
         this.notifSlots = [];
         // One-shot teaching moments, each said the first time it can be seen.
         this.saidOnce = {};
@@ -96,9 +119,7 @@ export class UIScene extends Phaser.Scene {
         this._buildTopRightGear();
         this._buildWavePreview();
         this._buildWaveButton();
-        this._buildHudPanel();
-        this._buildSpellHud();
-        this._buildHeroHud();
+        this._buildHudStrip();
         this._buildTutorialBanner();
         this._buildPauseOverlay();
         this._buildBossHpBar();
@@ -156,6 +177,9 @@ export class UIScene extends Phaser.Scene {
         this._refreshHeroHud();
         this._refreshHeroHealth();
         this._refreshSpellHud();
+        this._tickRest();
+        this._tickHudStrip();
+        this._tickPinCard();
     }
 
     // ─── Shared chrome helpers ──────────────────────────
@@ -347,7 +371,7 @@ export class UIScene extends Phaser.Scene {
             if (this.gs.economySystem.gold < td.cost) { audio.play('deny'); return; }
             this._select(btn, () => this.gs.events.emit('select-element', element));
         });
-        bg.on('pointerover', () => this._showTowerTooltip(element, x - 34, y));
+        bg.on('pointerover', () => this._showCard(this._towerShopCard(element), x - 34, y, { ox: 1 }));
         bg.on('pointerout', () => this._hideTooltip());
 
         return btn;
@@ -396,9 +420,7 @@ export class UIScene extends Phaser.Scene {
             if (this.gs.economySystem.gold < BARRICADE_COST) { audio.play('deny'); return; }
             this._select(btn, () => this.gs.events.emit('select-barricade'));
         });
-        bg.on('pointerover', () => this._showTooltip([
-            'Barricada', 'Desvia enemigos', 'sin cerrar del', 'todo el camino.',
-        ], LEFT + 20, y - 42));
+        bg.on('pointerover', () => this._showCard(this._barricadeShopCard(), LEFT - 8, y, { ox: 1 }));
         bg.on('pointerout', () => this._hideTooltip());
 
         return btn;
@@ -471,20 +493,7 @@ export class UIScene extends Phaser.Scene {
             this._select(btn, () => this.gs.events.emit('select-temple', element));
         });
 
-        bg.on('pointerover', () => {
-            const d = TEMPLE_DATA[element];
-            const ts = this.gs.templeSystem;
-            this._showTooltip([
-                d.name,
-                `Costo: ${ts.nextCost} oro`,
-                `Alcance: ${d.absorbRadius}`,
-                `Refina: +${Math.round(d.absorbBonus * 100)}% de mana`,
-                ts.hasTemple(element)
-                    ? `Mejoras: ${ts.totalLevels(element)} niveles`
-                    : 'Abre las mejoras',
-                `de ${d.shortName}.`,
-            ], x - 34, y + 54);
-        });
+        bg.on('pointerover', () => this._showCard(this._templeShopCard(element), x - 34, y, { ox: 1 }));
         bg.on('pointerout', () => this._hideTooltip());
 
         return btn;
@@ -536,7 +545,7 @@ export class UIScene extends Phaser.Scene {
 
     // ─── Global controls ────────────────────────────────
     /**
-     * Speed, auto-wave, pause and help, styled like BARRICADA / VENDER rather
+     * Speed, pause and help, styled like BARRICADA / VENDER rather
      * than as flat grey blocks. A toggle that is on shows it in its border and
      * its text, the same way an armed build button does.
      *
@@ -561,24 +570,18 @@ export class UIScene extends Phaser.Scene {
             return btn;
         };
 
-        const wm = this.gs.waveManager;
-
-        this.velBtn = mk(LEFT, 54, 'VEL 1x', 0xFF9800, () => {
+        // No auto-wave toggle: after every wave a rest runs down and the next
+        // one starts on its own (WaveManager), so there is nothing to switch.
+        this.velBtn = mk(LEFT, 82, 'VEL 1x', 0xFF9800, () => {
             this.gs.time.timeScale = this.gs.time.timeScale === 1 ? 2 : 1;
             this._refreshControls();
         }, ['Velocidad', 'x1 o x2.']);
 
-        this.autoBtn = mk(LEFT + 58, 74, 'AUTO: NO', 0x42A5F5, () => {
-            wm.autoWave = !wm.autoWave;
-            if (wm.autoWave && !wm.waveActive) this.gs.events.emit('start-wave');
-            this._refreshControls();
-        }, ['Auto oleada', 'Lanza la siguiente', 'oleada sola al', 'terminar la actual.']);
-
-        this.pauseBtn = mk(LEFT + 136, 58, 'PAUSA', 0xFFD54F, () => {
+        this.pauseBtn = mk(LEFT + 87, 82, 'PAUSA', 0xFFD54F, () => {
             if (!this.gs.uiModalOpen) this.togglePause();
         }, ['Pausa  [ESPACIO]']);
 
-        this.helpBtn = mk(LEFT + 198, 58, 'AYUDA', 0xFFD54F, () => this._openHelpPanel(),
+        this.helpBtn = mk(LEFT + 174, 82, 'AYUDA', 0xFFD54F, () => this._openHelpPanel(),
             ['Ayuda', 'Fusiones, elementos,', 'heroe y hechizos.']);
 
         this._refreshControls();
@@ -594,8 +597,6 @@ export class UIScene extends Phaser.Scene {
         };
         const fast = this.gs.time.timeScale > 1.5;
         paint(this.velBtn, fast, fast ? 'VEL 2x' : 'VEL 1x');
-        const auto = this.gs.waveManager.autoWave;
-        paint(this.autoBtn, auto, auto ? 'AUTO: SI' : 'AUTO: NO');
         paint(this.pauseBtn, this.isPaused, this.isPaused ? 'SEGUIR' : 'PAUSA');
     }
 
@@ -682,26 +683,46 @@ export class UIScene extends Phaser.Scene {
      * wave 1 and unreadable by wave 30: five groups in 256px overlapped into
      * "x3x1x1x7x1".
      *
-     * In the sidebar, one line: how many, and whether a boss is among them.
-     * Hovering it shows the same card.
+     * In the sidebar, one row (US 2.2): each kind of enemy as a small sprite
+     * with its count, a kind split over several groups counted once. Up to
+     * four fit; past that the last cell is a "+N". Hover an icon for that
+     * enemy's card, the label or the "+N" for the whole wave.
      */
     _buildWavePreview() {
         this.previewLabel = this.add.text(LEFT, ROW_PREVIEW, '', {
             fontFamily: FONT, fontSize: '8px', color: '#78909C',
         }).setOrigin(0, 0.5);
-        this.previewCount = this.add.text(LEFT + 76, ROW_PREVIEW, '', {
-            fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
-        }).setOrigin(0, 0.5);
-        this.previewBoss = this.add.text(RIGHT, ROW_PREVIEW, '', {
-            fontFamily: FONT, fontSize: '8px', color: '#FFD54F',
-        }).setOrigin(1, 0.5);
-
-        const rowHit = this.add.rectangle(CX, ROW_PREVIEW, INNER_W, 20, 0x000000, 0)
-            .setInteractive({ useHandCursor: false });
-        rowHit.on('pointerover', () => this._showWaveCard(LEFT - 8, ROW_PREVIEW + 10, 1, 1, false));
-        rowHit.on('pointerout', () => this._hideWaveCard());
+        const labelHit = this.add.zone(LEFT + 28, ROW_PREVIEW, 58, 20).setInteractive();
+        labelHit.on('pointerover', () => this._showWaveCard(LEFT - 8, ROW_PREVIEW + 10, 1, 1, false));
+        labelHit.on('pointerout', () => this._hideWaveCard());
+        this.previewCells = [];
 
         this._buildWaveMarker();
+    }
+
+    /** One preview cell: the enemy's sprite (framed in gold for a boss) and its count. */
+    _buildPreviewCell(type, count, x) {
+        const d = ENEMY_DATA[type];
+        const objs = [];
+        if (d?.isBoss) {
+            objs.push(this.add.rectangle(x + 8, ROW_PREVIEW, 19, 19, 0x000000, 0).setStrokeStyle(1, 0xFFD54F));
+        }
+        const icon = this.add.sprite(x + 8, ROW_PREVIEW, safeTexture(this, `enemy_${type}`, 'enemy_slime'));
+        icon.setScale(16 / Math.max(icon.width, icon.height));
+        const anim = `enemy_${type}_pulse`;
+        if (this.anims.exists(anim)) icon.play(anim);
+        objs.push(icon, this.add.text(x + 19, ROW_PREVIEW, `x${count}`, {
+            fontFamily: FONT, fontSize: '8px', color: d?.isBoss ? '#FFD54F' : '#ECEFF1',
+        }).setOrigin(0, 0.5));
+
+        const hit = this.add.zone(x + PREVIEW_CELL / 2 - 2, ROW_PREVIEW, PREVIEW_CELL - 2, 22).setInteractive();
+        hit.on('pointerover', () => {
+            this._hideWaveCard();
+            this._previewTip = this._showCard(this._enemyCard(type, count), LEFT - 8, ROW_PREVIEW + 10, { ox: 1, oy: 1 });
+        });
+        hit.on('pointerout', () => this._hideTooltip());
+        objs.push(hit);
+        return objs;
     }
 
     /** The skull at the gate. Lives in this scene: it is UI, drawn over the map. */
@@ -761,7 +782,7 @@ export class UIScene extends Phaser.Scene {
         hit.on('pointerdown', (pointer) => {
             pointer.event.stopPropagation();
             pointer.event._uiConsumed = true;
-            if (this.gs.waveManager.waveActive) return;
+            if (!this.gs.waveManager.canCall) return;
             this._hideWaveCard();
             this.gs.events.emit('start-wave');
         });
@@ -773,20 +794,41 @@ export class UIScene extends Phaser.Scene {
         const comp = wm.nextComposition;
         this._hideWaveCard();
         this._refreshWaveButton();
+        // The cells are rebuilt, so a card hanging off one goes with them.
+        if (this.tooltip && this.tooltip === this._previewTip) this._hideTooltip();
+        for (const o of this.previewCells) o.destroy();
+        this.previewCells = [];
 
         if (!comp) {
             this.previewLabel.setText('ULTIMA OLEADA').setColor('#FFD54F');
-            this.previewCount.setText('');
-            this.previewBoss.setText('');
             if (this.waveMarker) this.waveMarker.c.setVisible(false);
             return;
         }
 
         const isBoss = wm.isNextWaveBoss || comp.some(g => ENEMY_DATA[g.type]?.isBoss);
-        const total = comp.reduce((n, g) => n + g.count, 0);
-        this.previewLabel.setText(wm.waveActive ? 'LUEGO:' : 'PROXIMA:');
-        this.previewCount.setText(`${total} enemigos`);
-        this.previewBoss.setText(isBoss ? '¡JEFE!' : '');
+        this.previewLabel.setText(wm.waveActive ? 'LUEGO' : 'PROXIMA').setColor('#78909C');
+
+        const kinds = [];
+        for (const g of comp) {
+            const k = kinds.find(e => e.type === g.type);
+            if (k) k.count += g.count;
+            else kinds.push({ type: g.type, count: g.count });
+        }
+        const x0 = LEFT + 62;
+        const shown = kinds.length > PREVIEW_MAX ? kinds.slice(0, PREVIEW_MAX - 1) : kinds;
+        shown.forEach((k, i) => {
+            this.previewCells.push(...this._buildPreviewCell(k.type, k.count, x0 + i * PREVIEW_CELL));
+        });
+        if (kinds.length > PREVIEW_MAX) {
+            const x = x0 + (PREVIEW_MAX - 1) * PREVIEW_CELL;
+            const more = this.add.text(x + 4, ROW_PREVIEW, `+${kinds.length - shown.length}`, {
+                fontFamily: FONT, fontSize: '8px', color: '#78909C',
+            }).setOrigin(0, 0.5);
+            const hit = this.add.zone(x + PREVIEW_CELL / 2, ROW_PREVIEW, PREVIEW_CELL, 22).setInteractive();
+            hit.on('pointerover', () => this._showWaveCard(LEFT - 8, ROW_PREVIEW + 10, 1, 1, false));
+            hit.on('pointerout', () => this._hideWaveCard());
+            this.previewCells.push(more, hit);
+        }
 
         // Only between waves: during one, the gate is already busy saying it
         if (this.waveMarker) {
@@ -813,7 +855,7 @@ export class UIScene extends Phaser.Scene {
         const W = 252;
         const ROW = 26;
         const isBoss = wm.isNextWaveBoss || comp.some(g => ENEMY_DATA[g.type]?.isBoss);
-        const H = 30 + comp.length * ROW + (fromMarker ? 16 : 4);
+        const H = 44 + comp.length * ROW + (fromMarker ? 16 : 4);
         const left = Phaser.Math.Clamp(x - W * ox, 4, 636 - W);
         const top = Phaser.Math.Clamp(y - H * oy, 4, 476 - H);
 
@@ -830,12 +872,16 @@ export class UIScene extends Phaser.Scene {
             }).setOrigin(1, 0.5));
         }
         c.add(this.add.rectangle(10, 22, W - 20, 1, 0x2a2a4a).setOrigin(0, 0.5));
+        // Gold only comes at the end of a wave now, so the card says how much.
+        c.add(this.add.text(10, 32, `Paga al terminar: +${wm.nextReward} ORO`, {
+            fontFamily: FONT, fontSize: '7px', color: '#FFD54F',
+        }).setOrigin(0, 0.5));
 
         const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
         comp.forEach((g, i) => {
             const d = ENEMY_DATA[g.type];
             if (!d) return;
-            const ry = 30 + i * ROW + ROW / 2;
+            const ry = 44 + i * ROW + ROW / 2;
 
             const icon = this.add.sprite(18, ry, safeTexture(this, `enemy_${g.type}`, 'enemy_slime'));
             icon.setScale(18 / Math.max(icon.width, icon.height));
@@ -857,7 +903,7 @@ export class UIScene extends Phaser.Scene {
         });
 
         if (fromMarker) {
-            c.add(this.add.text(W / 2, H - 9, wm.waveActive ? '' : 'Click: iniciar oleada', {
+            c.add(this.add.text(W / 2, H - 9, wm.canCall ? 'Click: iniciar oleada' : '', {
                 fontFamily: FONT, fontSize: '7px', color: '#4CAF50',
             }).setOrigin(0.5));
         }
@@ -869,83 +915,652 @@ export class UIScene extends Phaser.Scene {
         if (this.waveCard) { this.waveCard.destroy(true); this.waveCard = null; }
     }
 
+    // ─── Cards ──────────────────────────────────────────
+    /**
+     * Every card and tooltip in the game, drawn one way: a stripe in the
+     * thing's colour and its name, then — each part optional — the price in
+     * large type beside its coin or maná, a before → after table, a list of
+     * plain stats, and body copy. Price first because it is the question asked
+     * first; the table's last column is the change, green when it rises and
+     * red when it falls, so a comparison reads without doing arithmetic.
+     *
+     * (x, y) is where the card's (ox, oy) point goes; it is then kept on
+     * screen whatever that asks. Takes the tooltip slot, so anything that
+     * hides tooltips hides it.
+     */
+    _showCard(card, x, y, { ox = 0, oy = 0.5 } = {}) {
+        this._hideTooltip();
+        const c = this._buildCard(card);
+        c.setPosition(
+            Phaser.Math.Clamp(Math.round(x - c.cardW * ox), 4, 916 - c.cardW),
+            Phaser.Math.Clamp(Math.round(y - c.cardH * oy), 4, 476 - c.cardH),
+        );
+        this.tooltip = c;
+        return c;
+    }
+
+    /**
+     * Draws a card at (0, 0) and leaves placing it to the caller; the
+     * container carries its size as cardW / cardH. Beyond what a tooltip
+     * uses, the pinned card adds `buttons` along the bottom (their rects in
+     * btnRects) and `solid`, a box that swallows clicks.
+     */
+    _buildCard(card) {
+        const W = card.width ?? CARD_W;
+        const P = 10;
+        const c = this.add.container(0, 0).setDepth(100);
+        // Plain text, or IconText when the line carries the maná glyph;
+        // either wraps at `wrapW` pixels when given one.
+        const txt = (tx, ty, s, size, color, originX = 0, wrapW = 0) => {
+            const style = { fontFamily: FONT, fontSize: size, color, lineSpacing: wrapW ? 4 : 0 };
+            let t;
+            if (hasManaGlyph(s)) {
+                t = new IconText(this, tx, ty, s, style, { wrap: wrapW ? Math.floor(wrapW / parseFloat(size)) : 0 });
+            } else {
+                t = this.add.text(tx, ty, s, style);
+                if (wrapW) t.setWordWrapWidth(wrapW);
+            }
+            t.setOrigin(originX, 0);
+            c.add(t);
+            return t;
+        };
+        let cy = P;
+        let pendingRule = false;
+        const rule = () => {
+            if (!pendingRule) return;
+            c.add(this.add.rectangle(P, cy, W - P * 2, 1, 0x3a3a55).setOrigin(0, 0));
+            cy += 7;
+            pendingRule = false;
+        };
+
+        c.add(this.add.rectangle(0, 0, W, 3, card.color ?? 0x5a5a80).setOrigin(0, 0));
+        if (card.title) {
+            txt(P, cy, card.title, '8px', card.titleColor ?? '#FFFFFF');
+            if (card.tag) txt(W - P, cy + 1, card.tag, '7px', card.tagColor ?? '#8a8aa0', 1);
+            cy += 16;
+            pendingRule = true;
+        }
+
+        const pr = card.price;
+        if (pr) {
+            let px = P;
+            if (pr.label) px += txt(px, cy + 3, pr.label, '8px', '#8a8aa0').width + 6;
+            if (pr.currency) {
+                const icon = this.add.image(px, cy + 5, pr.currency === 'gold' ? 'icon_coin' : MANA_SPRITE.key)
+                    .setOrigin(0, 0.5);
+                icon.setScale(12 / icon.height);
+                c.add(icon);
+                px += icon.displayWidth + 4;
+            }
+            txt(px, cy, pr.text, '11px', pr.color);
+            cy += 16;
+            if (pr.sub) {
+                txt(P, cy, pr.sub, '7px', pr.subColor ?? '#8a8aa0');
+                cy += 12;
+            }
+            pendingRule = true;
+        }
+
+        if (card.rows?.length) {
+            rule();
+            // A row without `after` is a plain reading; a table of nothing
+            // but those keeps its one column on the right edge. A `dim` row
+            // shows its change in grey: there, but not the point yet.
+            const compare = card.rows.some(r => r.after !== undefined);
+            const COL_BEFORE = compare ? 132 : W - P, COL_ARROW = 142, COL_AFTER = 202, COL_DELTA = W - P;
+            const DIM = '#4a4a62';
+            const [headBefore, headAfter] = card.cols ?? ['ANTES', 'DESPUES'];
+            if (headBefore) txt(COL_BEFORE, cy, headBefore, '7px', '#6a6a80', 1);
+            if (compare && headAfter) txt(COL_AFTER, cy, headAfter, '7px', '#6a6a80', 1);
+            cy += 13;
+            for (const r of card.rows) {
+                if (r.gap) {
+                    c.add(this.add.rectangle(P, cy - 2, W - P * 2, 1, 0x22223a).setOrigin(0, 0));
+                    cy += 4;
+                }
+                const plain = r.after === undefined;
+                txt(P, cy, r.label, '8px', '#B0BEC5');
+                txt(COL_BEFORE, cy, r.fmt(r.before), '8px', plain || r.dim ? '#ECEFF1' : '#8a8aa0', 1);
+                if (!plain) {
+                    const [delta, color] = this._delta(r.before, r.after);
+                    txt(COL_ARROW, cy, '→', '8px', r.dim ? DIM : '#6a6a80');
+                    txt(COL_AFTER, cy, r.fmt(r.after), '8px', r.dim ? DIM : delta === '=' ? '#FFFFFF' : color, 1);
+                    txt(COL_DELTA, cy, delta, '8px', r.dim ? DIM : color, 1);
+                }
+                cy += 15;
+            }
+            pendingRule = true;
+        }
+
+        if (card.stats?.length) {
+            rule();
+            for (const s of card.stats) {
+                const label = txt(P, cy, s.label, '8px', '#B0BEC5');
+                // A long value drops a size rather than running into its label.
+                const room = W - P * 2 - label.width - 8;
+                const size = `${s.value}`.length * 8 > room ? '7px' : '8px';
+                txt(W - P, cy + (size === '7px' ? 1 : 0), `${s.value}`, size, s.color ?? '#FFFFFF', 1);
+                cy += 14;
+            }
+            pendingRule = true;
+        }
+
+        if (card.note) {
+            cy += txt(P, cy, card.note, '7px', card.noteColor ?? '#6a6a80', 0, W - P * 2).height + 4;
+        }
+
+        const desc = [].concat(card.desc ?? []).filter(Boolean);
+        if (desc.length) {
+            rule();
+            for (const line of desc) cy += txt(P, cy, line, '7px', '#B0BEC5', 0, W - P * 2).height + 5;
+            cy -= 5;
+        }
+
+        if (card.hint) {
+            cy += 6;
+            txt(W / 2, cy, card.hint.text, '7px', card.hint.color, 0.5);
+            cy += 9;
+        }
+
+        // Full-width buttons, the price at the right edge beside its coin.
+        c.btnRects = [];
+        if (card.buttons?.length) {
+            cy += 8;
+            const bw = W - P * 2, bh = 22;
+            for (const b of card.buttons) {
+                const box = this.add.rectangle(P, cy, bw, bh, b.fill, 1).setOrigin(0, 0)
+                    .setStrokeStyle(1, b.stroke)
+                    .setInteractive({ useHandCursor: !!b.onClick });
+                box.on('pointerdown', (pointer) => {
+                    if (pointer.button !== 0 && pointer.button !== undefined) return;
+                    pointer.event.stopPropagation();
+                    pointer.event._uiConsumed = true;
+                    if (b.onClick) b.onClick();
+                });
+                c.add(box);
+                txt(P + 8, cy + 7, b.text, '8px', b.color);
+                if (b.price) {
+                    const pt = txt(W - P - 8, cy + 7, b.price.text, '8px', b.price.color, 1);
+                    const icon = this.add.image(pt.x - pt.width - 4, cy + bh / 2,
+                        b.price.currency === 'gold' ? 'icon_coin' : MANA_SPRITE.key).setOrigin(1, 0.5);
+                    icon.setScale(10 / icon.height);
+                    c.add(icon);
+                }
+                if (b.id) c.btnRects.push({ id: b.id, x: P, y: cy, w: bw, h: bh });
+                cy += bh + 4;
+            }
+            cy -= 4;
+        }
+
+        // The box goes in last, under everything, once the height is known.
+        const H = cy + P;
+        const bg = this.add.rectangle(0, 0, W, H, 0x0a0a1a, 0.95).setOrigin(0, 0);
+        bg.setStrokeStyle(card.alarm ? 2 : 1, card.alarm ? 0xEF5350 : 0x3a3a55);
+        if (card.solid) {
+            // A press on the card is not a press on the board under it.
+            bg.setInteractive();
+            bg.on('pointerdown', (pointer) => {
+                if (pointer.button !== 0 && pointer.button !== undefined) return;
+                pointer.event.stopPropagation();
+                pointer.event._uiConsumed = true;
+            });
+        }
+        c.addAt(bg, 0);
+        c.cardW = W;
+        c.cardH = H;
+        return c;
+    }
+
+    /** The change column: `+35%` green, `-12%` red, `=`, or `NUEVO` from nothing. */
+    _delta(before, after) {
+        if (before <= 0) return after > 0 ? ['NUEVO', '#81C784'] : ['=', '#8a8aa0'];
+        const change = Math.round((after / before - 1) * 100);
+        if (change > 0) return [`+${change}%`, '#81C784'];
+        if (change < 0) return [`${change}%`, '#EF5350'];
+        return ['=', '#8a8aa0'];
+    }
+
+    /** A price line: gold or red against what the player has, and how much is missing. */
+    _price(cost, have, currency) {
+        const ok = have >= cost;
+        const unit = currency === 'gold' ? 'ORO' : 'MANA';
+        return {
+            label: 'COSTO', currency, text: `${cost}`,
+            color: ok ? (currency === 'gold' ? '#FFD54F' : '#B388FF') : '#EF5350',
+            sub: ok ? null : `Faltan ${cost - have} ${unit}`,
+            subColor: '#EF5350',
+        };
+    }
+
     // ─── Fusion preview ─────────────────────────────────
     /**
-     * What the pair under the badge would become, next to what it is now.
+     * What the pair under the badge would become, and what it costs.
      *
      * A fusion is irreversible and consumes two buildings you paid for, so the
-     * before/after has to be available *before* the click — quoting only the
-     * result would still leave the actual question ("is that better than what I
-     * already have?") unanswered.
+     * card answers, in reading order and before the drop: how much gold leaves
+     * the purse, then whether the one building beats the two, stat by stat.
      */
     _showFusionTooltip(info) {
         const { b1, b2, result, kind } = info;
-        const ts = this.gs.templeSystem;
-        const r1 = (n) => Math.round(n);
-        let lines;
-
-        if (kind === 'temple') {
-            const d = TEMPLE_DATA[result];
-            const a = TEMPLE_DATA[b1.element];
-            const b = TEMPLE_DATA[b2.element];
-            const pct = (v) => Math.round(v * 100);
-            lines = [
-                `${d.emoji} ${d.name}`,
-                `Alcance ${d.absorbRadius}   antes ${a.absorbRadius}/${b.absorbRadius}`,
-                `Refina +${pct(d.absorbBonus)}%   antes +${pct(a.absorbBonus)}%`,
-                `Abre mejoras de ${d.shortName}`,
-                'Libera 1 casilla',
-            ];
-        } else {
-            const d = TOWER_DATA[result];
-            // The hybrid's own element carries its own upgrade tree, so its
-            // numbers are quoted through that tree rather than the parents'.
-            const dmg = d.damage * ts.multiplier(result, 'damage');
-            const rng = d.range * ts.multiplier(result, 'range');
-            const rate = d.fireRate * ts.multiplier(result, 'fireRate');
-            lines = [
-                `${d.emoji} ${d.name}`,
-                `DMG ${r1(dmg)}   antes ${r1(b1.damage)}+${r1(b2.damage)}`,
-                `RNG ${r1(rng)}   antes ${r1(b1.range)}/${r1(b2.range)}`,
-                `${(1000 / rate).toFixed(2)}/s   antes ${b1.shotsPerSecond.toFixed(2)}+${b2.shotsPerSecond.toFixed(2)}`,
-                d.specialDesc,
-                'Libera 1 casilla',
-            ];
-            // The levels bought with gold do not survive the merge; most of
-            // that gold does, and saying so before the drop is the point.
-            if (info.refund > 0) lines.push(`Reembolso mejoras: +${info.refund} ORO`);
-            if (d.tier === 3) lines.splice(1, 0, 'TORRE LEGENDARIA');
-        }
-
-        // Opens away from the nearer edge, so a card on a badge at the far left
-        // of the board is not half off it.
-        const leftSide = info.x < 300;
-        this._showTooltip(
-            lines,
-            leftSide ? info.x + 16 : info.x - 16,
-            Phaser.Math.Clamp(info.y - 56, 66, 400),
-            leftSide ? 0 : 1
-        );
+        const card = kind === 'temple'
+            ? this._templeFusionCard(b1, b2, result)
+            : this._towerFusionCard(info);
+        const p = worldToView(this.gs, info.x, info.y);
+        // Opens away from the nearer edge, so a card over a tower at the far
+        // left of the board is not half off it.
+        const leftSide = p.x < 300;
+        this._showCard(card, leftSide ? p.x + 16 : p.x - 16, p.y, { ox: leftSide ? 0 : 1 });
     }
 
-    _showEnemyTooltip(type, x, y) {
-        const d = ENEMY_DATA[type];
-        const list = (els) => els.map(e => `${elementSymbol(e)}${elementName(e)}`).join(' ');
-        const lines = [
-            d.name,
-            `Clase: ${elementSymbol(d.element)}${elementName(d.element)}`,
-            `${d.hp} HP  ·  vel ${d.speed}`,
-        ];
-        if (d.weakness?.length) lines.push(`${EFFECT_MARK[EFFECT.SUPER]} debil: ${list(d.weakness)}`);
-        if (d.resistance?.length) lines.push(`${EFFECT_MARK[EFFECT.RESIST]} resiste: ${list(d.resistance)}`);
-        // The one thing about an enemy you cannot read off its stat line: that it
-        // is going to leave the road. Worth saying before the wave, not during.
-        if (d.agro?.target === 'hero') {
-            lines.push('! deja el camino por el heroe');
-            lines.push('  lo suelta si entra a un templo');
+    _towerFusionCard({ b1, b2, result, refund = 0, cost = 0, affordable = true }) {
+        const d = TOWER_DATA[result];
+        const ts = this.gs.templeSystem;
+        // The new tower starts at level 1 on the target's tile, under its own
+        // element's temple ranks and whatever seal that tile has.
+        const seal = (stat) => this.gs.sealSystem?.multiplier(b2.col, b2.row, result, stat) ?? 1;
+        const dmg = d.damage * ts.multiplier(result, 'damage') * seal('damage');
+        const rng = d.range * ts.multiplier(result, 'range') * seal('range');
+        const sps = 1000 / (d.fireRate * ts.multiplier(result, 'fireRate'));
+        const dps = (t) => t.damage * t.shotsPerSecond;
+
+        // What actually leaves the purse: the fee minus the refund of the
+        // parents' gold levels, which do not survive the merge.
+        const net = cost - refund;
+        let price;
+        if (!affordable) {
+            price = {
+                label: 'COSTO', currency: 'gold', text: `${net}`, color: '#EF5350',
+                sub: `Faltan ${net - this.gs.economySystem.gold} ORO`, subColor: '#EF5350',
+            };
+        } else if (net > 0) {
+            price = { label: 'COSTO', currency: 'gold', text: `${net}`, color: '#FFD54F' };
+        } else if (net < 0) {
+            price = { label: 'RECIBIS', currency: 'gold', text: `+${-net}`, color: '#81C784' };
+        } else {
+            price = { text: 'SIN COSTO', color: '#81C784' };
         }
-        if (d.agro?.target === 'temple') lines.push('! deja el camino por los templos');
-        this._showTooltip(lines, x, y);
+        if (refund > 0 && affordable) price.sub = `fusion ${cost} - reembolso ${refund}`;
+
+        return {
+            title: d.name,
+            tag: d.tier === 3 ? 'LEGENDARIA' : 'HIBRIDA',
+            tagColor: d.tier === 3 ? '#FFD54F' : undefined,
+            color: d.color,
+            price,
+            alarm: !affordable,
+            // Per-shot stats against the better parent; DPS against the two
+            // together, since that is what the fusion trades away.
+            rows: [
+                { label: 'DAÑO', before: Math.max(b1.damage, b2.damage), after: dmg, fmt: fmtInt },
+                { label: 'CADENCIA', before: Math.max(b1.shotsPerSecond, b2.shotsPerSecond), after: sps, fmt: fmtRate },
+                { label: 'DPS', before: dps(b1) + dps(b2), after: dmg * sps, fmt: fmtDps },
+                { label: 'ALCANCE', before: Math.max(b1.range, b2.range), after: rng, fmt: fmtInt },
+            ],
+            note: 'Antes: la mejor de las 2 (DPS: las 2 juntas)',
+            desc: d.specialDesc,
+        };
+    }
+
+    _templeFusionCard(b1, b2, result) {
+        const d = TEMPLE_DATA[result];
+        const a = TEMPLE_DATA[b1.element];
+        const b = TEMPLE_DATA[b2.element];
+        return {
+            title: d.name,
+            tag: 'TEMPLO HIBRIDO',
+            color: d.color,
+            price: { text: 'SIN COSTO', color: '#81C784' },
+            rows: [
+                { label: 'ALCANCE', before: Math.max(a.absorbRadius, b.absorbRadius), after: d.absorbRadius, fmt: fmtInt },
+                { label: 'REFINA', before: Math.max(a.absorbBonus, b.absorbBonus), after: d.absorbBonus, fmt: fmtBonus },
+            ],
+            desc: `Abre mejoras de ${d.shortName}`,
+        };
+    }
+
+    // ─── Pinned card (a clicked tower, temple or barricade) ─────
+    /**
+     * The card that stays open over the building you clicked, drawn like
+     * every other card. Its purchases are buttons inside it, and what one
+     * changes shows in the same table: the next level's column is always
+     * there, dim, and lights up in colour while the pointer is on MEJORAR —
+     * one box, no second card beside it.
+     *
+     * GameScene owns the selection and the purchases; it announces the pinned
+     * building on 'pin-card' (also on every hit and kill it scores, hence the
+     * throttle) and is told about a click on 'buy-upgrade' / 'buy-enchant'.
+     */
+    _onPinCard(s) {
+        const changed = s !== this._pinned;
+        this._pinned = s;
+        if (changed) this._pinHover = null;
+        this._pinDirty = true;
+        if (changed || this.time.now - (this._pinAt ?? 0) >= 120) this._renderPinCard();
+    }
+
+    /**
+     * Hover on the card's buttons is read off the pointer every frame rather
+     * than from pointerover/out: a redraw replaces the buttons under a still
+     * pointer, and the replacements would never hear that it left.
+     */
+    _tickPinCard() {
+        const c = this.pinCard;
+        let hover = null;
+        if (c?.btnRects?.length) {
+            const p = pointerWorld(this, this.input.activePointer);
+            const r = c.btnRects.find(b => p.x >= c.x + b.x && p.x <= c.x + b.x + b.w
+                && p.y >= c.y + b.y && p.y <= c.y + b.y + b.h);
+            hover = r?.id ?? null;
+        }
+        if (hover !== (this._pinHover ?? null)) {
+            this._pinHover = hover;
+            this._renderPinCard();
+        } else if (this._pinDirty && this.time.now - (this._pinAt ?? 0) >= 120) {
+            this._renderPinCard();
+        }
+    }
+
+    _renderPinCard() {
+        this._pinDirty = false;
+        this._pinAt = this.time.now;
+        if (this.pinCard) { this.pinCard.destroy(true); this.pinCard = null; }
+        const t = this._pinned;
+        if (!t || !t.alive) return;
+        const card = t.kind === 'barricade' ? this._pinBarricadeCard(t)
+            : typeof t.getNextUpgradeCost === 'function' ? this._pinTowerCard(t)
+            : this._pinTempleCard(t);
+        // Over the hidden strip, under the boss bar, the tutorial and modals.
+        const c = this._buildCard({ ...card, solid: true }).setDepth(55);
+        const W = c.cardW, H = c.cardH;
+        // Above the building, else below it, else beside it: never on it.
+        const p = worldToView(this.gs, t.x, t.y);
+        const half = 16 * this.gs.cameras.main.zoom / SUPER + 4;
+        let x = p.x - W / 2, y;
+        if (p.y - half - H >= 4) y = p.y - half - H;
+        else if (p.y + half + H <= 476) y = p.y + half;
+        else {
+            x = p.x + half + W <= BAR_X - 4 ? p.x + half : p.x - half - W;
+            y = Phaser.Math.Clamp(p.y - H / 2, 4, 476 - H);
+        }
+        c.setPosition(Math.round(Phaser.Math.Clamp(x, 4, BAR_X - 4 - W)), Math.round(y));
+        this.pinCard = c;
+    }
+
+    _pinTowerCard(t) {
+        const ts = this.gs.templeSystem;
+        const gold = this.gs.economySystem.gold;
+        const max = t.level >= TOWER_UPGRADE.MAX_LEVEL;
+        const hot = !max && this._pinHover === 'upgrade';
+        const sps = t.shotsPerSecond;
+        // The next level: levels scale the base stat linearly; temples and
+        // the seal multiply on top and stay put.
+        let n = null;
+        if (!max) {
+            const step = (k) => (1 + t.level * k) / (1 + (t.level - 1) * k);
+            n = { dmg: t.damage * step(TOWER_UPGRADE.DAMAGE_STEP), rng: t.range * step(TOWER_UPGRADE.RANGE_STEP) };
+        }
+        const row = (label, before, after, fmt) => ({ label, before, after: n ? after : undefined, fmt, dim: !hot });
+        const cost = max ? 0 : t.getNextUpgradeCost();
+        const ok = gold >= cost;
+
+        const templeLvl = ts.totalLevels(t.element);
+        const desc = [t.data.specialDesc];
+        if (templeLvl > 0) {
+            const over = ts.overchargeOf(t.element);
+            desc.push(`Templo NV.${templeLvl}: ${TRACK_ORDER.map(tr => `${TRACK_TAG[tr]} ${ts.levelOf(t.element, tr)}`).join('  ')}`
+                + (over > 0 ? `  SOB ${over}` : ''));
+        }
+        if (t.empowered) desc.push('Potenciada por el heroe');
+        if (t.frozen) desc.push('Congelada: no dispara');
+        const seal = this.gs.sealSystem?.bonusLabel(t.col, t.row, t.element);
+        if (seal) desc.push(seal);
+
+        return {
+            title: t.data.name,
+            // Just the level: "Tormenta de Ceniza" leaves no room for more.
+            tag: `NV.${t.level}`,
+            tagColor: '#FFD54F',
+            color: t.data.color,
+            alarm: hot && !ok,
+            cols: ['ACTUAL', n ? `NV.${t.level + 1}` : null],
+            rows: [
+                row('DAÑO', t.damage, n?.dmg, fmtInt),
+                row('CADENCIA', sps, sps, fmtRate),
+                row('DPS', t.damage * sps, n && n.dmg * sps, fmtDps),
+                row('ALCANCE', t.range, n?.rng, fmtInt),
+                { label: 'BAJAS', before: t.enemiesKilled || 0, fmt: fmtInt, gap: true },
+                { label: 'DAÑO TOTAL', before: t.totalDamageDealt || 0, fmt: fmtBig },
+            ],
+            desc,
+            note: !max && !ok ? `Faltan ${cost - gold} ORO` : null,
+            noteColor: '#EF5350',
+            buttons: [max
+                ? { text: 'NIVEL MAXIMO', color: '#4CAF50', fill: 0x14210f, stroke: 0x4CAF50 }
+                : {
+                    id: 'upgrade', text: 'MEJORAR [U]',
+                    color: ok ? '#FFD700' : '#888899',
+                    fill: ok ? (hot ? 0x2e2650 : 0x241d3d) : 0x16162a,
+                    stroke: ok ? 0xFFD700 : 0x3a3a5a,
+                    price: { currency: 'gold', text: `${cost}`, color: ok ? '#FFD54F' : '#EF5350' },
+                    onClick: () => this.gs.events.emit('buy-upgrade'),
+                }],
+        };
+    }
+
+    _pinTempleCard(t) {
+        const d = t.data;
+        const lvl = this.gs.templeSystem.totalLevels(t.element);
+        return {
+            title: d.name,
+            tag: lvl > 0 ? `NV.${lvl}` : 'TEMPLO',
+            tagColor: '#FFD54F',
+            color: d.color,
+            stats: [
+                { label: 'ALCANCE', value: fmtInt(t.absorbRadius) },
+                { label: 'REFINA', value: fmtBonus(d.absorbBonus), color: '#B388FF' },
+                { label: 'ABSORBIDO', value: `${Math.round(t.absorbed || 0)} MANA`, color: '#B388FF' },
+            ],
+            desc: lvl > 0 ? 'Click para ver el arbol de mejoras' : 'Click para abrir las mejoras',
+        };
+    }
+
+    _pinBarricadeCard(t) {
+        const spikes = BARRICADE_ENCHANTS[ENCHANT.SPIKES];
+        const frost = BARRICADE_ENCHANTS[ENCHANT.FROST];
+        const spikeDps = spikes.damage * 1000 / spikes.tickMs;
+        const type = this.gs.barricadeSystem.typeAt(t.col, t.row);
+        if (type) {
+            const e = BARRICADE_ENCHANTS[type];
+            return {
+                title: `Barricada de ${e.name}`,
+                tag: 'ENCANTADA',
+                color: e.color,
+                stats: [type === ENCHANT.SPIKES
+                    ? { label: 'DAÑO/S', value: fmtInt(spikeDps) }
+                    : { label: 'LENTITUD', value: fmtPct(frost.slow) }],
+                desc: [`${e.desc}: todo enemigo en las 8 casillas de alrededor.`, 'Bloquea el paso.'],
+            };
+        }
+
+        const eco = this.gs.economySystem;
+        const hover = this._pinHover;
+        const btn = (key) => {
+            const e = BARRICADE_ENCHANTS[key];
+            const have = e.currency === 'gold' ? eco.gold : eco.mana;
+            const ok = have >= e.cost;
+            return {
+                id: key, text: `ENCANTAR: ${plainUpper(e.name)}`,
+                color: ok ? hexColor(e.color) : '#888899',
+                fill: ok ? (hover === key ? 0x2e2650 : 0x241d3d) : 0x16162a,
+                stroke: ok ? e.color : 0x3a3a5a,
+                price: {
+                    currency: e.currency, text: `${e.cost}`,
+                    color: ok ? (e.currency === 'gold' ? '#FFD54F' : '#B388FF') : '#EF5350',
+                },
+                onClick: () => this.gs.events.emit('buy-enchant', key),
+            };
+        };
+        const hoverShort = hover && (() => {
+            const e = BARRICADE_ENCHANTS[hover];
+            const have = e.currency === 'gold' ? eco.gold : eco.mana;
+            return have < e.cost;
+        })();
+        return {
+            title: 'Barricada',
+            tag: 'SIN ENCANTAR',
+            color: 0x8D6E63,
+            alarm: !!hoverShort,
+            cols: ['AHORA', 'ENCANTADA'],
+            rows: [
+                { label: 'DAÑO/S', before: 0, after: spikeDps, fmt: fmtInt, dim: hover !== ENCHANT.SPIKES },
+                { label: 'LENTITUD', before: 0, after: frost.slow, fmt: fmtPct, dim: hover !== ENCHANT.FROST },
+            ],
+            desc: 'Bloquea el paso. El encanto alcanza las 8 casillas de alrededor; uno por barricada, para siempre.',
+            buttons: [btn(ENCHANT.SPIKES), btn(ENCHANT.FROST)],
+        };
+    }
+
+    // ─── Shop and HUD cards ─────────────────────────────
+    _towerShopCard(element) {
+        const td = TOWER_DATA[element];
+        const ts = this.gs.templeSystem;
+        const dmg = td.damage * ts.multiplier(element, 'damage');
+        const sps = 1000 / (td.fireRate * ts.multiplier(element, 'fireRate'));
+        const levels = ts.totalLevels(element);
+        return {
+            title: td.name,
+            tag: 'TORRE',
+            color: td.color,
+            price: this._price(td.cost, this.gs.economySystem.gold, 'gold'),
+            stats: [
+                { label: 'DAÑO', value: fmtInt(dmg) },
+                { label: 'CADENCIA', value: fmtRate(sps) },
+                { label: 'DPS', value: fmtDps(dmg * sps) },
+                { label: 'ALCANCE', value: fmtInt(td.range * ts.multiplier(element, 'range')) },
+            ],
+            desc: [td.specialDesc, levels > 0 ? `Mejorada por templo (${levels} niveles)` : null],
+        };
+    }
+
+    _templeShopCard(element) {
+        const d = TEMPLE_DATA[element];
+        const ts = this.gs.templeSystem;
+        return {
+            title: d.name,
+            tag: 'TEMPLO',
+            color: d.color,
+            price: this._price(ts.nextCost, this.gs.economySystem.gold, 'gold'),
+            stats: [
+                { label: 'ALCANCE', value: fmtInt(d.absorbRadius) },
+                { label: 'REFINA', value: `${fmtBonus(d.absorbBonus)} de mana` },
+            ],
+            desc: [
+                ts.hasTemple(element)
+                    ? `Mejoras de ${d.shortName}: ${ts.totalLevels(element)} niveles`
+                    : `Abre las mejoras de ${d.shortName}.`,
+                'Cada templo nuevo cuesta mas.',
+            ],
+        };
+    }
+
+    _barricadeShopCard() {
+        const spikes = BARRICADE_ENCHANTS[ENCHANT.SPIKES];
+        const frost = BARRICADE_ENCHANTS[ENCHANT.FROST];
+        return {
+            title: 'Barricada',
+            color: 0x8D6E63,
+            price: this._price(BARRICADE_COST, this.gs.economySystem.gold, 'gold'),
+            desc: [
+                'Desvia a los enemigos sin cerrar del todo el camino.',
+                `Despues se encanta: ${spikes.name} (${enchantCostLabel(ENCHANT.SPIKES)}) o ${frost.name} (${enchantCostLabel(ENCHANT.FROST)}).`,
+            ],
+        };
+    }
+
+    _abilityCard(key) {
+        const a = HERO_ABILITIES[key];
+        const stats = [{ label: 'RECARGA', value: fmtSec(a.cooldown) }];
+        if (a.range) stats.push({ label: 'ALCANCE', value: fmtInt(a.range) });
+        if (a.damage) stats.push({ label: 'DAÑO', value: fmtInt(a.damage) });
+        if (a.radius) stats.push({ label: 'RADIO', value: fmtInt(a.radius) });
+        if (a.slow) stats.push({ label: 'LENTITUD', value: `${fmtPct(a.slow)} · ${fmtSec(a.slowDuration)}` });
+        return {
+            title: `${HERO_LORE.name}: ${a.label}`,
+            tag: `[${a.hotkey}]`,
+            tagColor: '#ECEFF1',
+            color: a.color,
+            stats,
+            desc: a.desc.join(' '),
+        };
+    }
+
+    _spellCard(key) {
+        const s = SPELLS[key];
+        const stats = [{ label: 'RECARGA', value: fmtSec(s.cooldown) }];
+        if (key === 'luna') {
+            stats.push(
+                { label: 'DAÑO', value: fmtInt(s.damage) },
+                { label: 'RADIO', value: fmtInt(s.radius) },
+                { label: 'LENTITUD', value: `${fmtPct(s.slow)} · ${fmtSec(s.slowDuration)}` },
+                { label: 'TARDA', value: fmtSec(s.channelMs + s.fallMs) },
+            );
+        } else if (key === 'centinelas') {
+            stats.push(
+                { label: 'SOLDADOS', value: `${s.count} · ${fmtSec(s.lifeMs)}` },
+                { label: 'VIDA', value: `${s.hp} c/u` },
+                { label: 'DAÑO', value: `${s.damage} c/${(s.attackMs / 1000).toFixed(1)}s` },
+                { label: 'ESTALLIDO', value: `${s.burstDamage} · radio ${s.burstRadius}` },
+            );
+        } else if (key === 'egida') {
+            stats.push(
+                { label: 'CURA', value: fmtPct(s.heal) },
+                { label: 'CADENCIA', value: `+${fmtPct(s.haste)} · ${fmtSec(s.hasteMs)}` },
+                { label: 'RADIO', value: fmtInt(s.radius) },
+            );
+        }
+        return {
+            title: s.label,
+            tag: `[${s.hotkey}]`,
+            tagColor: '#ECEFF1',
+            color: s.color,
+            price: this._price(s.cost, this.gs.economySystem.mana, 'mana'),
+            stats,
+            desc: s.desc.join(' '),
+        };
+    }
+
+    /** One enemy of the next wave, with the health it will actually have. */
+    _enemyCard(type, count) {
+        const d = ENEMY_DATA[type];
+        const wm = this.gs.waveManager;
+        const mult = wm.enemyHpMultiplier(type, wm.nextWaveNumber);
+        const list = (els) => (els?.length ? els.map(elementName).join(', ') : '-');
+        const pace = d.speed < 40 ? 'lento' : d.speed < 75 ? 'normal' : 'rapido';
+        const stats = [
+            { label: 'VIDA', value: mult > 1.001 ? `${Math.round(d.hp * mult)} (x${mult.toFixed(2)})` : `${d.hp}` },
+            { label: 'VELOCIDAD', value: `${d.speed} ${pace}` },
+            { label: 'DEBIL A', value: list(d.weakness), color: d.weakness?.length ? '#81C784' : '#8a8aa0' },
+            { label: 'RESISTE', value: list(d.resistance), color: d.resistance?.length ? '#EF5350' : '#8a8aa0' },
+            { label: 'CANTIDAD', value: `x${count}` },
+        ];
+        const desc = [];
+        if (d.spawns?.length) {
+            desc.push(`Al morir suelta ${d.spawns.map(s => `${s.count} ${ENEMY_DATA[s.type]?.name ?? s.type}`).join(', ')}.`);
+        }
+        // The one thing about an enemy you cannot read off its stats: that it
+        // is going to leave the road. Worth saying before the wave.
+        if (d.agro?.target === 'hero') desc.push('Deja el camino por el heroe; lo suelta si entra a un templo.');
+        if (d.agro?.target === 'temple') desc.push('Deja el camino por los templos.');
+        return {
+            title: d.name,
+            titleColor: hexColor(d.color),
+            tag: d.isBoss ? 'JEFE' : plainUpper(elementName(d.element)),
+            tagColor: d.isBoss ? '#FFD54F' : undefined,
+            color: d.isBoss ? 0xFFD54F : d.color,
+            alarm: false,
+            stats,
+            desc,
+        };
     }
 
     // ─── Wave button ────────────────────────────────────
@@ -957,127 +1572,242 @@ export class UIScene extends Phaser.Scene {
         this.waveBtnText = this.add.text(CX, ROW_WAVE_BTN, '', {
             fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
         }).setOrigin(0.5);
+        // Either clock (the early-call window or the rest) drains as a bar
+        // along the foot of the button; the bonus, when there is one, sits
+        // under the label.
+        this.waveRestBar = this.add.rectangle(LEFT + 2, ROW_WAVE_BTN + WAVE_BTN_H / 2 - 4, INNER_W - 4, 3, 0xA5D6A7)
+            .setOrigin(0, 0.5).setVisible(false);
+        this.waveBonusText = this.add.text(CX, ROW_WAVE_BTN + 6, '', {
+            fontFamily: FONT, fontSize: '7px', color: '#FFD54F',
+        }).setOrigin(0.5).setVisible(false);
+        this._waveBtnKey = '';
+        this._waveBtnHover = false;
         this._refreshWaveButton();
 
         this.waveBtnBg.on('pointerdown', () => {
-            if (!this.gs.waveManager.waveActive) this.gs.events.emit('start-wave');
+            if (this.gs.waveManager.canCall) this.gs.events.emit('start-wave');
         });
-        this.waveBtnBg.on('pointerover', () => {
-            if (!this.gs.waveManager.waveActive) this.waveBtnBg.fillColor = 0x388E3C;
-        });
-        this.waveBtnBg.on('pointerout', () => {
-            this.waveBtnBg.fillColor = this.gs.waveManager.waveActive ? 0x333344 : 0x2E7D32;
-        });
+        this.waveBtnBg.on('pointerover', () => { this._waveBtnHover = true; this._paintWaveButton(); });
+        this.waveBtnBg.on('pointerout', () => { this._waveBtnHover = false; this._paintWaveButton(); });
     }
 
-    /** Which wave the button starts, or which one is running. */
+    /**
+     *   idle   before the first wave, or after a load: start it.
+     *   busy   a wave on the board that cannot be called over (still
+     *          spawning, or its window has closed).
+     *   early  its last enemy is out: call the next one over it, for a bonus.
+     *   rest   the board is clear: the next one comes on its own.
+     */
+    _waveButtonState() {
+        const wm = this.gs.waveManager;
+        if (wm.canCallEarly) return 'early';
+        if (wm.waveActive) return 'busy';
+        return wm.resting ? 'rest' : 'idle';
+    }
+
+    _paintWaveButton() {
+        const st = this._waveButtonState();
+        const hover = this._waveBtnHover;
+        const [fill, hot, stroke, text] = {
+            busy: [0x333344, 0x333344, 0x4CAF50, '#8a8aa0'],
+            early: [0x5D4A10, 0x7A6216, 0xFFD54F, '#FFFFFF'],
+            rest: [0x2E7D32, 0x388E3C, 0x4CAF50, '#FFFFFF'],
+            idle: [0x2E7D32, 0x388E3C, 0x4CAF50, '#FFFFFF'],
+        }[st];
+        this.waveBtnBg.fillColor = hover ? hot : fill;
+        this.waveBtnBg.setStrokeStyle(2, stroke);
+        this.waveBtnText.setColor(text);
+    }
+
+    /** What the button does right now, and the clock it is on. */
     _refreshWaveButton() {
         if (!this.waveBtnText) return;
         const wm = this.gs.waveManager;
-        this.waveBtnText.setText(wm.waveActive
-            ? `OLEADA ${wm.currentWave} EN CURSO`
-            : `INICIAR OLEADA ${wm.nextWaveNumber} ▶`);
+        const st = this._waveButtonState();
+        const label = {
+            busy: `OLEADA ${wm.currentWave} EN CURSO`,
+            early: `ADELANTAR OLEADA ${wm.nextWaveNumber} ▶`,
+            rest: `OLEADA ${wm.nextWaveNumber} EN ${wm.restSecondsLeft}s ▶`,
+            idle: `INICIAR OLEADA ${wm.nextWaveNumber} ▶`,
+        }[st];
+        this.waveBtnText.setY(st === 'early' ? ROW_WAVE_BTN - 6 : ROW_WAVE_BTN).setText(label);
+        this.waveBonusText.setVisible(st === 'early')
+            .setText(st === 'early' ? `+${wm.earlyBonus} ORO  ·  ${wm.earlySecondsLeft}s` : '');
+        this.waveRestBar.setVisible(st === 'early' || st === 'rest');
+        this._waveBtnKey = this._waveBtnKeyNow();
+        this._paintWaveButton();
     }
 
-    // ─── Hero ability bar ───────────────────────────────
-    /**
-     * Lives over the board rather than in the sidebar. The sidebar is full to
-     * the pixel, and an ability bar belongs next to the thing it drives anyway —
-     * you fire these while watching the lane, not while reading a menu.
-     */
-    _buildHeroHud() {
-        // Named, not labelled: the abilities belong to somebody.
-        this.add.text(HUD_X - HUD_SIZE / 2, HUD_Y - HUD_SIZE / 2 - 9, HERO_LORE.name, {
-            fontFamily: FONT, fontSize: '8px', color: '#B388FF',
-            stroke: '#000000', strokeThickness: 3,
-        }).setOrigin(0, 0.5).setDepth(50);
-
-        this.abilityBtns = ABILITY_ORDER.map((key, i) => {
-            const a = HERO_ABILITIES[key];
-            const x = HUD_X + i * HUD_GAP;
-
-            const bg = this.add.rectangle(x, HUD_Y, HUD_SIZE, HUD_SIZE, 0x12122a, 0.86)
-                .setStrokeStyle(2, a.color)
-                .setDepth(50)
-                .setInteractive({ useHandCursor: true });
-
-            const glyph = this.add.text(x, HUD_Y - 3, a.glyph, {
-                fontFamily: FONT, fontSize: '8px', color: a.colorHex,
-                stroke: '#000000', strokeThickness: 3,
-            }).setOrigin(0.5).setDepth(52);
-
-            const hot = this.add.text(x, HUD_Y + 10, a.hotkey, {
-                fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
-                stroke: '#000000', strokeThickness: 3,
-            }).setOrigin(0.5).setDepth(52);
-
-            // Cooldown wipe: anchored at the bottom so the dark curtain drains from top to bottom
-            const wipe = this.add.rectangle(x, HUD_Y + (HUD_SIZE - 4) / 2, HUD_SIZE - 4, 0, 0x000000, 0.66)
-                .setOrigin(0.5, 1)
-                .setDepth(51);
-
-            const timer = this.add.text(x, HUD_Y, '', {
-                fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
-                stroke: '#000000', strokeThickness: 3,
-            }).setOrigin(0.5).setDepth(53);
-
-            bg.on('pointerdown', (pointer) => {
-                pointer.event.stopPropagation();
-                this.gs.events.emit('use-ability', key);
-            });
-            bg.on('pointerover', () => this._showTooltip(
-                [abilityHeading(key), ...a.desc], HUD_X - HUD_SIZE / 2, HUD_Y - 48, 0
-            ));
-            bg.on('pointerout', () => this._hideTooltip());
-
-            return { key, ability: a, bg, glyph, hot, wipe, timer };
-        });
+    _waveBtnKeyNow() {
+        const wm = this.gs.waveManager;
+        return `${this._waveButtonState()}:${wm.currentWave}:${wm.restSecondsLeft}:${wm.earlySecondsLeft}`;
     }
 
-    // ─── Spell bar ──────────────────────────────────────
+    /** The clocks: the bar every frame, the label when its numbers change. */
+    _tickRest() {
+        if (!this.waveRestBar) return;
+        const wm = this.gs.waveManager;
+        if (this._waveBtnKeyNow() !== this._waveBtnKey) this._refreshWaveButton();
+        const st = this._waveButtonState();
+        if (st === 'early') {
+            this.waveRestBar.width = (INNER_W - 4) * Math.max(0, wm.earlyTimer / (wm.earlyTotal || 1));
+            this.waveRestBar.fillColor = 0xFFD54F;
+        } else if (st === 'rest') {
+            this.waveRestBar.width = (INNER_W - 4) * Math.max(0, wm.restTimer / (wm.restTotal || 1));
+            // The last three seconds in amber: the wave is about to come anyway.
+            this.waveRestBar.fillColor = wm.restSecondsLeft <= 3 ? 0xFFB74D : 0xA5D6A7;
+        }
+    }
+
+    // ─── Hero and spell strip ───────────────────────────
     /**
-     * The maná sink, next to the maná spender it belongs to.
+     * Vesper's Q/E and the three spells, one low row in the bottom-left corner
+     * of the board: [Q] [E] | [R] [T] [Y]. Over the board rather than in the
+     * sidebar because you fire these while watching the lane; one row instead
+     * of two stacked ones so it covers a strip along the map's edge rather
+     * than a block of it.
      *
-     * Beside the ability bar rather than in the sidebar for the same reason the
-     * abilities are: you cast these while watching the lane. The difference is
-     * that a spell has a price, so each cell carries the number — and the number
-     * is what turns "I have 400✦" into a decision instead of a total.
+     * Everything sits in one container so the strip can fade as a whole
+     * (_tickHudStrip) without fighting the per-button alphas the refreshes set.
      */
-    /**
-     * One backing panel for the spell and ability rows, in the sidebar's own
-     * colours. Without it the two rows floated on the grass and the boulders
-     * showed through between them; with it they read as one piece of chrome.
-     *
-     * It also swallows clicks, so a press in the gaps between buttons can no
-     * longer drop a tower on the cells hidden underneath.
-     */
-    _buildHudPanel() {
-        const left = 3;
-        const right = HUD_X + HUD_GAP * 2 + HUD_SIZE / 2 + 7;
-        const top = SPELL_Y - SPELL_SIZE / 2 - 20;
-        const bottom = 477;
+    _buildHudStrip() {
+        const c = this.add.container(0, 0).setDepth(50);
+        this.hudStrip = c;
+        this.hudHits = [];
+
+        // One backing panel, in the sidebar's colours. Not interactive: only
+        // the five buttons take clicks, so a tower built in the cells behind
+        // the gaps can still be selected or dragged into a fusion.
         const panel = this.add.rectangle(
-            (left + right) / 2, (top + bottom) / 2, right - left, bottom - top, 0x12122a, 0.84,
-        ).setStrokeStyle(1, 0x2a2a4a).setDepth(49).setInteractive();
-        panel.on('pointerdown', (pointer) => {
-            pointer.event.stopPropagation();
-            pointer.event._uiConsumed = true;
-        });
+            (HUD_LEFT + HUD_RIGHT) / 2, (HUD_TOP + HUD_BOTTOM) / 2,
+            HUD_RIGHT - HUD_LEFT, HUD_BOTTOM - HUD_TOP, 0x12122a, 0.84,
+        ).setStrokeStyle(1, 0x2a2a4a);
+        c.add(panel);
 
-        // Vesper's health, beside the name, plus the wait while he is gone.
-        // The bar over his head is easy to lose in a fight; this one is not.
-        const barX = HUD_X - HUD_SIZE / 2 + 54;
-        const barW = right - 6 - barX;
-        const barY = HUD_Y - HUD_SIZE / 2 - 9;
-        this.heroHpBg = this.add.rectangle(barX, barY, barW, 5, 0x1a1a1a)
-            .setOrigin(0, 0.5).setStrokeStyle(1, 0x333344).setDepth(50);
-        this.heroHpFill = this.add.rectangle(barX + 1, barY, barW - 2, 3, 0x4CAF50)
-            .setOrigin(0, 0.5).setDepth(51);
+        // Vesper's health, thin, right over his two buttons, plus the wait
+        // while he is gone. The bar over his head is easy to lose in a fight.
+        const barX = HUD_X - HUD_SIZE / 2;
+        const barW = HUD_GAP + HUD_SIZE;
+        const barY = HUD_Y - HUD_SIZE / 2 - 6;
+        this.heroHpBg = this.add.rectangle(barX, barY, barW, 4, 0x1a1a1a)
+            .setOrigin(0, 0.5).setStrokeStyle(1, 0x333344);
+        this.heroHpFill = this.add.rectangle(barX + 1, barY, barW - 2, 2, 0x4CAF50).setOrigin(0, 0.5);
         this.heroHpBarW = barW - 2;
         this.heroRespawnText = this.add.text(barX + barW / 2, barY, '', {
             fontFamily: FONT, fontSize: '7px', color: '#B0BEC5',
             stroke: '#000000', strokeThickness: 3,
-        }).setOrigin(0.5).setDepth(52);
+        }).setOrigin(0.5);
+        c.add([this.heroHpBg, this.heroHpFill, this.heroRespawnText]);
+
+        // The spells' name on the same line as the bar, and a rule between
+        // what is Vesper's and what costs maná.
+        c.add(this.add.text(SPELL_X - HUD_SIZE / 2, barY, 'HECHIZOS', {
+            fontFamily: FONT, fontSize: '7px', color: '#CFDDE9',
+            stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0, 0.5));
+        c.add(this.add.rectangle(HUD_SEP_X, HUD_Y + 5, 1, HUD_SIZE + 12, 0x3a3a5a));
+
+        this.abilityBtns = ABILITY_ORDER.map((key, i) => this._buildAbilityBtn(key, HUD_X + i * HUD_GAP));
+        this.spellBtns = SPELL_ORDER.map((key, i) => this._buildSpellBtn(key, SPELL_X + i * HUD_GAP));
+    }
+
+    /** A strip button's card, opening above the strip. */
+    _showHudCard(card) {
+        this._hudTip = this._showCard(card, HUD_LEFT, HUD_TOP - 4, { ox: 0, oy: 1 });
+    }
+
+    _buildAbilityBtn(key, x) {
+        const a = HERO_ABILITIES[key];
+        const bg = this.add.rectangle(x, HUD_Y, HUD_SIZE, HUD_SIZE, 0x12122a, 0.86)
+            .setStrokeStyle(2, a.color)
+            .setInteractive({ useHandCursor: true });
+        // Cooldown wipe: anchored at the bottom so the dark curtain drains from top to bottom
+        const wipe = this.add.rectangle(x, HUD_Y + (HUD_SIZE - 4) / 2, HUD_SIZE - 4, 0, 0x000000, 0.66)
+            .setOrigin(0.5, 1);
+        const glyph = this.add.text(x, HUD_Y - 3, a.glyph, {
+            fontFamily: FONT, fontSize: '8px', color: a.colorHex,
+            stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0.5);
+        const hot = this.add.text(x, HUD_Y + 10, a.hotkey, {
+            fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
+            stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0.5);
+        const timer = this.add.text(x, HUD_Y, '', {
+            fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
+            stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0.5);
+        this.hudStrip.add([bg, wipe, glyph, hot, timer]);
+        this.hudHits.push(bg);
+
+        bg.on('pointerdown', (pointer) => {
+            pointer.event.stopPropagation();
+            pointer.event._uiConsumed = true;
+            this.gs.events.emit('use-ability', key);
+        });
+        bg.on('pointerover', () => this._showHudCard(this._abilityCard(key)));
+        bg.on('pointerout', () => this._hideTooltip());
+
+        return { key, ability: a, bg, glyph, hot, wipe, timer };
+    }
+
+    /**
+     * Laid out like Q/E: the picture in the upper half, the key along the
+     * bottom edge. The price is the one thing a Q/E button does not have, so
+     * it hangs underneath — a price you cannot see is not a price.
+     */
+    _buildSpellBtn(key, x) {
+        const s = SPELLS[key];
+        const bg = this.add.rectangle(x, HUD_Y, HUD_SIZE, HUD_SIZE, 0x12122a, 0.86)
+            .setStrokeStyle(2, s.color)
+            .setInteractive({ useHandCursor: true });
+        const wipe = this.add.rectangle(x, HUD_Y + (HUD_SIZE - 4) / 2, HUD_SIZE - 4, 0, 0x000000, 0.66)
+            .setOrigin(0.5, 1);
+        const icon = this.add.image(x, HUD_Y - 3, safeTexture(this, s.icon, 'mana_mote')).setScale(0.6);
+        const hot = this.add.text(x, HUD_Y + 10, s.hotkey, {
+            fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
+            stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0.5);
+        const cost = this.add.text(x, HUD_Y + HUD_SIZE / 2 + 7, `${s.cost}`, {
+            fontFamily: FONT, fontSize: '7px', color: '#B388FF',
+            stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0.5);
+        const timer = this.add.text(x, HUD_Y - 3, '', {
+            fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
+            stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0.5);
+        this.hudStrip.add([bg, wipe, icon, hot, cost, timer]);
+        this.hudHits.push(bg);
+
+        bg.on('pointerdown', (pointer) => {
+            pointer.event.stopPropagation();
+            pointer.event._uiConsumed = true;
+            this.gs.events.emit('select-spell', key);
+        });
+        bg.on('pointerover', () => this._showHudCard(this._spellCard(key)));
+        bg.on('pointerout', () => this._hideTooltip());
+
+        return { key, spell: s, bg, icon, hot, cost, wipe, timer, armed: false };
+    }
+
+    /**
+     * While the cursor is building, selling or dragging a fusion, the strip
+     * fades to a ghost and lets clicks through, so the cells under it can be
+     * built on and inspected. Polled because those modes have many ways in
+     * and out; the hotkeys keep working the whole time.
+     */
+    _tickHudStrip() {
+        if (!this.hudStrip) return;
+        const gs = this.gs;
+        const ghost = !!(gs.placementMode || gs.sellMode || gs.fusionSystem?.dragging);
+        if (ghost === !!this._hudGhost) return;
+        this._hudGhost = ghost;
+        this.tweens.killTweensOf(this.hudStrip);
+        this.tweens.add({ targets: this.hudStrip, alpha: ghost ? 0.25 : 1, duration: 150 });
+        for (const o of this.hudHits) {
+            if (ghost) o.disableInteractive(true);
+            else o.setInteractive();
+        }
+        if (ghost && this.tooltip && this.tooltip === this._hudTip) this._hideTooltip();
     }
 
     _refreshHeroHealth() {
@@ -1090,64 +1820,9 @@ export class UIScene extends Phaser.Scene {
             return;
         }
         const pct = Phaser.Math.Clamp(hero.hp / hero.maxHp, 0, 1);
-        this.heroHpFill.setVisible(true).setSize(Math.max(1, this.heroHpBarW * pct), 3);
+        this.heroHpFill.setVisible(true).setSize(Math.max(1, this.heroHpBarW * pct), 2);
         this.heroHpFill.fillColor = pct > 0.6 ? 0x4CAF50 : pct > 0.3 ? 0xFFC107 : 0xEF5350;
         this.heroRespawnText.setText('');
-    }
-
-    _buildSpellHud() {
-        this.add.text(HUD_X - HUD_SIZE / 2, SPELL_Y - SPELL_SIZE / 2 - 9, 'HECHIZOS', {
-            fontFamily: FONT, fontSize: '8px', color: '#CFDDE9',
-            stroke: '#000000', strokeThickness: 3,
-        }).setOrigin(0, 0.5).setDepth(50);
-
-        this.spellBtns = SPELL_ORDER.map((key, i) => {
-            const s = SPELLS[key];
-            const x = SPELL_X + i * SPELL_GAP;
-
-            const bg = this.add.rectangle(x, SPELL_Y, SPELL_SIZE, SPELL_SIZE, 0x12122a, 0.86)
-                .setStrokeStyle(2, s.color)
-                .setDepth(50)
-                .setInteractive({ useHandCursor: true });
-
-            // Laid out exactly like Vesper's Q/E right below: the picture in
-            // the upper half, the key along the bottom edge. The price is the
-            // one thing a Q/E button does not have, so it hangs underneath.
-            const icon = this.add.image(x, SPELL_Y - 3, safeTexture(this, s.icon, 'mana_mote'))
-                .setScale(0.6)
-                .setDepth(52);
-
-            const hot = this.add.text(x, SPELL_Y + 10, s.hotkey, {
-                fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
-                stroke: '#000000', strokeThickness: 3,
-            }).setOrigin(0.5).setDepth(53);
-
-            const cost = this.add.text(x, SPELL_Y + SPELL_SIZE / 2 + 7, `${s.cost}`, {
-                fontFamily: FONT, fontSize: '7px', color: '#B388FF',
-                stroke: '#000000', strokeThickness: 3,
-            }).setOrigin(0.5).setDepth(53);
-
-            const wipe = this.add.rectangle(x, SPELL_Y + (SPELL_SIZE - 4) / 2, SPELL_SIZE - 4, 0, 0x000000, 0.66)
-                .setOrigin(0.5, 1)
-                .setDepth(51);
-
-            const timer = this.add.text(x, SPELL_Y - 3, '', {
-                fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
-                stroke: '#000000', strokeThickness: 3,
-            }).setOrigin(0.5).setDepth(54);
-
-            bg.on('pointerdown', (pointer) => {
-                pointer.event.stopPropagation();
-                pointer.event._uiConsumed = true;
-                this.gs.events.emit('select-spell', key);
-            });
-            bg.on('pointerover', () => this._showTooltip(
-                [spellHeading(key), ...s.desc], HUD_X - HUD_SIZE / 2, SPELL_Y - 56, 0
-            ));
-            bg.on('pointerout', () => this._hideTooltip());
-
-            return { key, spell: s, bg, icon, hot, cost, wipe, timer, armed: false };
-        });
     }
 
     /**
@@ -1217,23 +1892,24 @@ export class UIScene extends Phaser.Scene {
      * looking at, so it never needs more room than this.
      */
     _buildTutorialBanner() {
-        this.tutorialBox = this.add.rectangle(320, 452, 510, 42, 0x0a0a1a, 0.95)
+        // Starts right of the hero and spell strip, which it used to cover.
+        this.tutorialBox = this.add.rectangle(421, 452, 426, 42, 0x0a0a1a, 0.95)
             .setStrokeStyle(1.5, 0xB388FF)
             .setDepth(70)
             .setVisible(false);
 
         // Wrapped with comfortable margins leaving the skip button its own column
-        this.tutorialText = new IconText(this, 285, 452, '', {
+        this.tutorialText = new IconText(this, 390, 452, '', {
             fontFamily: FONT, fontSize: '7.5px', color: '#ECEFF1', lineSpacing: 4,
-        }, { wrap: 54, align: 'center' }).setOrigin(0.5).setDepth(71).setVisible(false);
+        }, { wrap: 46, align: 'center' }).setOrigin(0.5).setDepth(71).setVisible(false);
 
-        this.tutorialSkipBg = this.add.rectangle(530, 452, 54, 22, 0x2a2a4a)
+        this.tutorialSkipBg = this.add.rectangle(600, 452, 54, 22, 0x2a2a4a)
             .setStrokeStyle(1, 0x555577)
             .setDepth(71)
             .setVisible(false)
             .setInteractive({ useHandCursor: true });
 
-        this.tutorialSkip = this.add.text(530, 452, 'SALTAR', {
+        this.tutorialSkip = this.add.text(600, 452, 'SALTAR', {
             fontFamily: FONT, fontSize: '7.5px', color: '#B0BEC5',
         }).setOrigin(0.5).setDepth(72).setVisible(false);
 
@@ -1373,8 +2049,6 @@ export class UIScene extends Phaser.Scene {
 
         on('wave-started', () => {
             this._updateStatus();
-            this.waveBtnBg.fillColor = 0x333344;
-            this.waveBtnText.setColor('#8a8aa0');
             this._refreshWaveButton();
             // currentWave has already advanced, so the readout now describes the
             // wave after this one — which is the one still worth preparing for.
@@ -1384,21 +2058,20 @@ export class UIScene extends Phaser.Scene {
         on('wave-complete', () => {
             this._refreshWavePreview();
             if (this.gs.waveManager.isLastWave) return;
-
-            this.waveBtnBg.fillColor = 0x2E7D32;
-            this.waveBtnText.setColor('#FFFFFF');
             this._refreshWaveButton();
+        });
 
-            this.gs.economySystem.addGold(15);
-            this._flashNotification('¡Oleada completada! +15 oro', '#4CAF50');
+        // The purse is paid by WaveManager, when the board clears or when the
+        // next wave is called over it; this only says so.
+        on('wave-paid', (wave, reward) => {
+            this._lastPurse = reward;
+            if (reward <= 0) return;
+            audio.play('coin');
+            this._flashNotification(`¡Oleada ${wave} completada! +${reward} ORO`, '#4CAF50');
+        });
 
-            if (this.gs.waveManager.autoWave) {
-                this.time.delayedCall(2000, () => {
-                    if (this.gs.waveManager.autoWave && !this.gs.waveManager.waveActive) {
-                        this.gs.events.emit('start-wave');
-                    }
-                });
-            }
+        on('wave-called-early', (bonus) => {
+            this._flashNotification(`Oleada +${this._lastPurse ?? 0}  ·  adelanto +${bonus} ORO`, '#FFD54F');
         });
 
         on('placement-cancelled', () => {
@@ -1422,10 +2095,12 @@ export class UIScene extends Phaser.Scene {
             this._updateManaBar();
         });
 
+        on('fusion-denied', (short) => this._flashNotification(`Fusion: faltan ${short} ORO`, '#EF5350'));
         on('fusion-hover', (info) => {
             if (info) this._showFusionTooltip(info);
             else this._hideTooltip();
         });
+        on('pin-card', (s) => this._onPinCard(s));
 
         on('open-temple', (el) => this._openUpgradePanel(el));
         on('hint', (text, color) => this._flashNotification(text, color ?? '#B388FF'));
@@ -2314,49 +2989,20 @@ export class UIScene extends Phaser.Scene {
     }
 
     // ─── Tooltip ────────────────────────────────────────
-    _showTowerTooltip(element, x, y) {
-        const td = TOWER_DATA[element];
-        const ts = this.gs.templeSystem;
-        const rate = td.fireRate * ts.multiplier(element, 'fireRate');
-        const lines = [
-            td.name,
-            `DMG: ${Math.round(td.damage * ts.multiplier(element, 'damage'))}`,
-            `RNG: ${Math.round(td.range * ts.multiplier(element, 'range'))}`,
-            `SPD: ${(1000 / rate).toFixed(2)}/s`,
-            td.specialDesc,
-        ];
-        if (ts.totalLevels(element) > 0) lines.push('mejorada por templo');
-        this._showTooltip(lines, x, y);
-    }
-
     /**
+     * A plain tooltip, drawn as a card: the first line is its name, the rest
+     * its body. Sized to its longest line, so a short tip stays small.
      * `originX` is 1 by default because everything in the sidebar hangs to the
-     * left of the thing it describes. The hero bar sits at the far left of the
-     * board instead, where a right-anchored box would run off the edge.
+     * left of the thing it describes.
      */
     _showTooltip(lines, x, y, originX = 1) {
-        this._hideTooltip();
-        const text = lines.join('\n');
-        if (hasManaGlyph(text)) {
-            // Same box as the plain tooltip, drawn by hand so the maná sprite
-            // can sit inside the line it belongs to.
-            const body = new IconText(this, 0, 0, text, {
-                fontFamily: FONT, fontSize: '8px', color: '#ECEFF1', lineSpacing: 7,
-            });
-            const pad = 10, w = body.width + pad * 2, h = body.height + pad * 2;
-            body.setOrigin(0, 0).setPosition(-w * originX + pad, -h / 2 + pad);
-            const bg = this.add.rectangle(0, 0, w, h, 0x0a0a1a, 0.94).setOrigin(originX, 0.5);
-            this.tooltip = this.add.container(x, y, [bg, body]).setDepth(100);
-            return;
-        }
-        this.tooltip = this.add.text(x, y, text, {
-            fontFamily: FONT,
-            fontSize: '8px',
-            color: '#ECEFF1',
-            backgroundColor: '#0a0a1af0',
-            padding: { x: 10, y: 10 },
-            lineSpacing: 7,
-        }).setOrigin(originX, 0.5).setDepth(100);
+        const [title, ...body] = lines;
+        const longest = Math.max(title.length * 8, ...body.map(l => l.length * 7));
+        this._showCard({
+            title,
+            desc: body.length ? body.join('\n') : null,
+            width: Phaser.Math.Clamp(longest + 24, 120, CARD_W),
+        }, x, y, { ox: originX, oy: 0.5 });
     }
 
     _hideTooltip() {
@@ -2385,8 +3031,9 @@ export class UIScene extends Phaser.Scene {
 
         const container = this.add.container(targetX, targetY).setDepth(120);
 
+        const cost = fusionCost(link.kind, link.result);
         const boxW = 168;
-        const boxH = 58;
+        const boxH = cost > 0 ? 72 : 58;
 
         // Glowing background card
         const bg = this.add.rectangle(0, 0, boxW, boxH, 0x0c0c1e, 0.95);
@@ -2417,6 +3064,13 @@ export class UIScene extends Phaser.Scene {
         }).setOrigin(0.5);
 
         container.add([bg, arrow, title, body]);
+        if (cost > 0) {
+            title.y -= 7;
+            body.y -= 7;
+            container.add(this.add.text(0, 26, `Costo: ${cost} ORO`, {
+                fontFamily: FONT, fontSize: '7px', color: '#FFD54F',
+            }).setOrigin(0.5));
+        }
 
         // Pop in animation
         container.setScale(0.8).setAlpha(0);

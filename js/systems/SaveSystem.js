@@ -138,7 +138,6 @@ export class SaveSystem {
             mana: manaToSave,
             lives: livesToSave,
             currentWave: currentWave,
-            autoWave: gameScene.waveManager.autoWave ?? false,
             hero: heroData,
             towers: towersToSave,
             towerHistory: gameScene.towerHistory || [],
@@ -173,8 +172,10 @@ export class SaveSystem {
 
             // 2. Restore wave state (ready before wave starts)
             gameScene.waveManager.currentWave = data.currentWave ?? 0;
+            // No rest timer after a load: the player starts the wave when
+            // they have had a look, as on the first one.
             gameScene.waveManager.waveActive = false;
-            gameScene.waveManager.autoWave = data.autoWave ?? false;
+            gameScene.waveManager.restTimer = 0;
 
             // 3. Restore TempleSystem upgrade levels
             if (data.templeLevels) {

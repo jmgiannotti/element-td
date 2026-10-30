@@ -82,6 +82,17 @@ export function fusionResult(a, b) {
  * each shot lands with weight. Legendaries were raised until each sits at
  * roughly 1.7–2.3× the DPS of the better hybrid it came from: a Tier 3 has to
  * be worth the two towers it eats.
+ *
+ * ── Economia por oleada ──────────────────────────────────
+ * Gold no longer drops per kill — it comes as a fixed purse at the end of each
+ * wave plus a bonus for calling the next one early (WaveData.waveReward,
+ * EconomySystem.earlyCallBonus). With a farm at the gate gone, the base towers
+ * were the thing to spam, so they cost 1.4–1.5× what they did (Tierra 30,
+ * Agua and Aire 35, Fuego 40): the opening buys three, not four. Gold
+ * upgrades key off these prices, so they rose with them.
+ *
+ * Fusing costs gold too (FUSION_COST): a hybrid used to be two base towers
+ * and nothing else, ~60–70 gold for a tower that outperforms both.
  */
 export const TOWER_DATA = {
     // ── Pure Elements ──────────────────────────
@@ -91,7 +102,7 @@ export const TOWER_DATA = {
         damage: 8,
         range: 120,
         fireRate: 1120,
-        cost: 25,
+        cost: 35,
         special: 'slow',
         specialValue: 0.2,
         specialDesc: 'Ralentiza 20%',
@@ -107,7 +118,7 @@ export const TOWER_DATA = {
         damage: 5,
         range: 150,
         fireRate: 700,
-        cost: 25,
+        cost: 35,
         special: 'none',
         specialValue: 0,
         specialDesc: 'Ataque rápido',
@@ -123,7 +134,7 @@ export const TOWER_DATA = {
         damage: 17,
         range: 100,
         fireRate: 1680,
-        cost: 30,
+        cost: 40,
         special: 'splash',
         specialValue: 50,
         specialDesc: 'Daño en área',
@@ -139,7 +150,7 @@ export const TOWER_DATA = {
         damage: 14,
         range: 90,
         fireRate: 1400,
-        cost: 20,
+        cost: 30,
         special: 'pierce',
         specialValue: 0,
         specialDesc: 'Ignora armadura',
@@ -337,6 +348,14 @@ export const TOWER_DATA = {
  * keeps less. The burn and freeze a chain carries fall off the same way.
  */
 export const CHAIN_FALLOFF = [1, 0.5, 0.3, 0.18];
+
+/**
+ * Gold charged to fuse into a tower of this tier: 50 for a hybrid, 150 for a
+ * legendary. Paid at the drop, netted against the refund of the parents'
+ * levels (FusionSystem), and added to the new tower's bill so selling it
+ * returns a cut of it like any other gold that went in. Temples fuse free.
+ */
+export const FUSION_COST = { 2: 50, 3: 150 };
 
 /**
  * Configuration and exponential scaling formula for individual tower upgrades with gold.
