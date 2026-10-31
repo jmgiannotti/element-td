@@ -129,7 +129,7 @@ export class BarricadeSystem {
                 for (const e of enemies) {
                     if (!e.alive) continue;
                     if (Phaser.Math.Distance.Between(pos.x, pos.y, e.x, e.y) <= ENCHANT_REACH) {
-                        e.applySlow(frost.slow, frost.lingerMs);
+                        e.applySlow(frost.slow, frost.lingerMs * (scene.talents?.frostLingerMult ?? 1));
                         this._shedFrost(e, delta);
                         chilling = true;
                     }
@@ -155,7 +155,9 @@ export class BarricadeSystem {
                     if (Phaser.Math.Distance.Between(pos.x, pos.y, e.x, e.y) > ENCHANT_REACH) continue;
                     // Silent like a burn: a number every half second per wall
                     // would bury the ones the towers are producing.
-                    e.takeDamage(spikes.damage * (e.hpMultiplier ?? 1), { silent: true });
+                    // PUAS DENTADAS sharpens every wall, old and new.
+                    const sharp = scene.talents?.spikeDamageMult ?? 1;
+                    e.takeDamage(spikes.damage * sharp * (e.hpMultiplier ?? 1), { silent: true });
                     this._spark(e.x, e.y);
                     this._knockback(pos, e);
                     pricked = true;

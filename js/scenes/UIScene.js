@@ -5,7 +5,7 @@ import {
 } from '../data/TempleData.js';
 import { safeTexture } from '../systems/TextureGuard.js';
 import { audio } from '../systems/AudioSystem.js';
-import { BARRICADE_COST, SELL_REFUND } from '../systems/EconomySystem.js';
+import { BARRICADE_COST } from '../systems/EconomySystem.js';
 import { BARRICADE_ENCHANTS, ENCHANT, enchantCostLabel } from '../data/BarricadeData.js';
 import { MANA_SPRITE } from '../data/ManaSprite.js';
 import { ENEMY_DATA } from '../data/EnemyData.js';
@@ -15,6 +15,7 @@ import {
 } from '../data/Elements.js';
 import { HERO_ABILITIES, ABILITY_ORDER, COMBO, abilityHeading } from '../data/HeroData.js';
 import { SPELLS, SPELL_ORDER, spellHeading } from '../data/SpellData.js';
+import { starsForVictory } from '../data/TalentData.js';
 import { IconText, hasManaGlyph } from '../systems/IconText.js';
 import { HERO_LORE, DEFAULT_LOOK, heroTextureKey } from '../data/HeroLook.js';
 import { applyViewport, worldToView, pointerWorld, SUPER } from '../systems/Viewport.js';
@@ -443,7 +444,7 @@ export class UIScene extends Phaser.Scene {
         bg.on('pointerdown', () => this._select(btn, () => this.gs.events.emit('select-sell')));
         bg.on('pointerover', () => this._showTooltip([
             'Vender',
-            `Devuelve el ${Math.round(SELL_REFUND * 100)}% del oro`,
+            `Devuelve el ${Math.round(this.gs.economySystem.sellRate * 100)}% del oro`,
             'que pagaste. Sirve para',
             'torres, templos y barricadas.',
             'Las mejoras compradas',
@@ -1496,17 +1497,19 @@ export class UIScene extends Phaser.Scene {
 
     _spellCard(key) {
         const s = SPELLS[key];
-        const stats = [{ label: 'RECARGA', value: fmtSec(s.cooldown) }];
+        // Through SpellSystem: the talent tree changes these per run.
+        const ss = this.gs.spellSystem;
+        const stats = [{ label: 'RECARGA', value: fmtSec(ss.cooldownOf(key)) }];
         if (key === 'luna') {
             stats.push(
-                { label: 'DAÑO', value: fmtInt(s.damage) },
+                { label: 'DAÑO', value: fmtInt(ss.lunaDamage()) },
                 { label: 'RADIO', value: fmtInt(s.radius) },
                 { label: 'LENTITUD', value: `${fmtPct(s.slow)} · ${fmtSec(s.slowDuration)}` },
                 { label: 'TARDA', value: fmtSec(s.channelMs + s.fallMs) },
             );
         } else if (key === 'centinelas') {
             stats.push(
-                { label: 'SOLDADOS', value: `${s.count} · ${fmtSec(s.lifeMs)}` },
+                { label: 'SOLDADOS', value: `${ss.sentinelCount()} · ${fmtSec(s.lifeMs)}` },
                 { label: 'VIDA', value: `${s.hp} c/u` },
                 { label: 'DAÑO', value: `${s.damage} c/${(s.attackMs / 1000).toFixed(1)}s` },
                 { label: 'ESTALLIDO', value: `${s.burstDamage} · radio ${s.burstRadius}` },
@@ -2648,7 +2651,7 @@ export class UIScene extends Phaser.Scene {
                 .setStrokeStyle(2, s.color));
             container.add(this.add.image(-180, y, safeTexture(this, s.icon, 'mana_mote')));
 
-            container.add(new IconText(this, -152, y - 22, spellHeading(key), {
+            container.add(new IconText(this, -152, y - 22, spellHeading(key, this.gs.spellSystem.cooldownOf(key)), {
                 fontFamily: FONT, fontSize: '8px', color: s.colorHex,
             }).setOrigin(0, 0.5));
 
@@ -3214,11 +3217,15 @@ export class UIScene extends Phaser.Scene {
         const gs = this.gs;
         const wm = gs.waveManager;
         const eco = gs.economySystem;
+        const lives = eco.lives, maxLives = gs.levelData.initialLives;
+        const stars = isVictory ? starsForVictory(lives, maxLives) : 0;
         // Remembered for the map selector: a victory marks the map completed;
-        // either way the furthest wave cleared counts as its best.
-        SaveSystem.recordProgress(gs.levelData?.id, {
+        // either way the furthest wave cleared counts as its best. The stars
+        // are the map's best mark, and what the talent tree spends.
+        const record = SaveSystem.recordProgress(gs.levelData?.id, {
             completed: isVictory,
             wave: isVictory ? wm.currentWave : wm.currentWave - 1,
+            stars,
         });
 
         const endless = wm.currentWave > wm.totalWaves;
@@ -3238,7 +3245,6 @@ export class UIScene extends Phaser.Scene {
         txt(W / 2, cy, isVictory ? '¡VICTORIA!' : 'DERROTA', '20px', hexColor(accent), 0.5)
             .setStroke('#000000', 4);
         cy += 32;
-        const lives = eco.lives, maxLives = gs.levelData.initialLives;
         const sub = isVictory
             ? `${plainUpper(gs.levelData.name)} · ${lives}/${maxLives} VIDAS`
             : `CAISTE EN LA OLEADA ${wm.currentWave}${endless ? ' (INFINITO)' : ''}`;
@@ -3246,9 +3252,20 @@ export class UIScene extends Phaser.Scene {
         cy += 18;
 
         if (isVictory) {
-            const stars = lives >= maxLives ? 3 : lives >= maxLives / 2 ? 2 : 1;
             for (let i = 0; i < 3; i++) this._endStar(c, W / 2 + (i - 1) * 34, cy + 10, i < stars);
             cy += 30;
+            // What the stars paid into the talent tree: only a better mark
+            // than the map's last one pays, so a replay says so instead.
+            const gained = record?.gained ?? 0;
+            const note = gained > 0
+                ? `+${gained} ${gained === 1 ? 'ESENCIA ARCANA' : 'ESENCIAS ARCANAS'}`
+                : `MEJOR MARCA: ${record?.best ?? stars}/3 ESTRELLAS`;
+            const t = txt(W / 2 + 8, cy, note, '7px', gained > 0 ? '#FFD54F' : '#6f7f99', 0.5);
+            const gem = this.add.image(t.x - t.width / 2 - 6, cy + 3, safeTexture(this, 'icon_essence', 'icon_coin'))
+                .setOrigin(1, 0.5);
+            if (gained <= 0) gem.setAlpha(0.5);
+            c.add(gem);
+            cy += 16;
         }
 
         // ── The run ─────────────────────────────
@@ -3285,37 +3302,46 @@ export class UIScene extends Phaser.Scene {
 
         // ── Buttons ─────────────────────────────
         cy += 14;
-        const buttons = [
-            { label: 'REINTENTAR', fill: 0x1f4a2a, stroke: 0x4CAF50, onClick: () => {
-                // The same map again, not the default one
-                const levelData = gs.levelData;
-                SaveSystem.clearSave();
-                this.scene.stop('UIScene');
-                this.scene.stop('GameScene');
-                this.scene.start('GameScene', { continueGame: false, levelData });
-            } },
-        ];
-        if (isVictory) {
-            buttons.push({ label: 'MODO INFINITO', fill: 0x3d1f52, stroke: 0xAB47BC, onClick: () => {
+        const toTitle = (data) => {
+            SaveSystem.clearSave();
+            this.scene.stop('UIScene');
+            this.scene.stop('GameScene');
+            this.scene.start('TitleScene', data);
+        };
+        const retry = { label: 'REINTENTAR', fill: 0x1f4a2a, stroke: 0x4CAF50, onClick: () => {
+            // The same map again, not the default one
+            const levelData = gs.levelData;
+            SaveSystem.clearSave();
+            this.scene.stop('UIScene');
+            this.scene.stop('GameScene');
+            this.scene.start('GameScene', { continueGame: false, levelData });
+        } };
+        // Straight to the map selector, where TALENTOS spends what the stars
+        // just paid. A win points it at the next map; a loss at this one.
+        const pickMap = { label: 'ELEGIR MAPA', fill: 0x3a2e0e, stroke: 0xFFD54F, onClick: () => {
+            toTitle({ openMapSelect: true, levelId: gs.levelData?.id, next: isVictory });
+        } };
+        const menu = { label: 'MENU PRINCIPAL', fill: 0x1f2740, stroke: 0x90CAF9, onClick: () => toTitle() };
+        const buttons = isVictory
+            ? [pickMap, { label: 'MODO INFINITO', fill: 0x3d1f52, stroke: 0xAB47BC, onClick: () => {
                 audio.play('click');
                 root.destroy();
                 gs.gameWon = false; // Unfreeze game
                 gs.events.emit('start-wave');
-            } });
-        }
-        buttons.push({ label: 'MENU PRINCIPAL', fill: 0x1f2740, stroke: 0x90CAF9, onClick: () => {
-            SaveSystem.clearSave();
-            this.scene.stop('UIScene');
-            this.scene.stop('GameScene');
-            this.scene.start('TitleScene');
-        } });
+            } }, retry, menu]
+            : [retry, pickMap, menu];
+        // Up to three in a row; four go in a 2×2 grid so labels stay legible.
         const gap = 8, bh = 28;
-        const bw = (W - P * 2 - gap * (buttons.length - 1)) / buttons.length;
+        const cols = buttons.length > 3 ? 2 : buttons.length;
+        const bw = (W - P * 2 - gap * (cols - 1)) / cols;
         buttons.forEach((b, i) => {
-            const x = P + i * (bw + gap) + bw / 2;
-            this._endButton(c, x, cy + bh / 2, bw, bh, b, buttons.length > 2 ? '7px' : '8px');
+            const col = i % cols, rowI = Math.floor(i / cols);
+            const x = P + col * (bw + gap) + bw / 2;
+            const y = cy + rowI * (bh + gap) + bh / 2;
+            this._endButton(c, x, y, bw, bh, b, cols > 2 ? '7px' : '8px');
         });
-        cy += bh + P;
+        const rows = Math.ceil(buttons.length / cols);
+        cy += rows * bh + (rows - 1) * gap + P;
 
         // ── Box, last, under everything ──────────
         const H = cy;

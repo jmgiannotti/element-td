@@ -15,8 +15,8 @@ export const MOTE_VALUE = { min: 6, max: 9 };
 // its two parents — so the refund never has to guess at a list price.
 export const SELL_REFUND = 0.6;
 
-export function refundValue(paidCost) {
-    return Math.floor(paidCost * SELL_REFUND);
+export function refundValue(paidCost, bonus = 0) {
+    return Math.floor(paidCost * (SELL_REFUND + bonus));
 }
 
 // Calling the next wave over a live one (WaveManager) pays for every second
@@ -33,8 +33,10 @@ export function earlyCallBonus(secondsLeft) {
 export class EconomySystem {
     constructor(scene) {
         this.scene = scene;
-        // Starting purse and lives are per level (LevelData).
-        this.gold = scene.levelData.initialGold;
+        // Starting purse and lives are per level (LevelData). TESORO DE
+        // GUERRA adds to the purse; a loaded save overwrites it afterwards.
+        this.talents = scene.talents ?? {};
+        this.gold = scene.levelData.initialGold + (this.talents.startGoldBonus ?? 0);
         this.mana = 0;
         this.lives = scene.levelData.initialLives;
         // What the game has paid out over the whole run, for the end screen:
@@ -49,6 +51,16 @@ export class EconomySystem {
         scene.events.on('enemy-died', (enemy) => this._spawnMotes(enemy));
         scene.events.on('enemy-reached-end', (enemy) => this._loseLife(enemy?.data?.leak ?? 1));
         scene.events.on('mana-collected', (value) => this.addMana(value));
+    }
+
+    // ── Selling ──────────────────────────────────
+    /** Share of the price that selling hands back (RECICLAJE raises it). */
+    get sellRate() {
+        return SELL_REFUND + (this.talents.sellRefundBonus ?? 0);
+    }
+
+    refundFor(paidCost) {
+        return refundValue(paidCost, this.talents.sellRefundBonus ?? 0);
     }
 
     // ── Gold ─────────────────────────────────────

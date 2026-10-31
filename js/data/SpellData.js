@@ -147,7 +147,7 @@ export const SPELLS = {
 export const SPELL_ORDER = ['luna', 'centinelas', 'egida'];
 
 /** `LUNA  [R]  ·  120✦  ·  25s` — name, key, price and recharge in one line. */
-export function spellHeading(key) {
+export function spellHeading(key, cooldownMs = SPELLS[key].cooldown) {
     const s = SPELLS[key];
-    return `${s.label}  [${s.hotkey}]  ·  ${s.cost}✦  ·  ${s.cooldown / 1000}s`;
+    return `${s.label}  [${s.hotkey}]  ·  ${s.cost}✦  ·  ${+(cooldownMs / 1000).toFixed(1)}s`;
 }

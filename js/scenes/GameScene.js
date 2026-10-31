@@ -2,7 +2,7 @@ import * as Phaser from 'phaser';
 import { GridSystem, TILE_SIZE, TILE } from '../systems/GridSystem.js';
 import { DEFAULT_LEVEL, getLevelById } from '../data/LevelData.js';
 import { WaveManager } from '../systems/WaveManager.js';
-import { EconomySystem, BARRICADE_COST, refundValue } from '../systems/EconomySystem.js';
+import { EconomySystem, BARRICADE_COST } from '../systems/EconomySystem.js';
 import { FusionSystem } from '../systems/FusionSystem.js';
 import { TempleSystem } from '../systems/TempleSystem.js';
 import { BarricadeSystem } from '../systems/BarricadeSystem.js';
@@ -69,6 +69,10 @@ export class GameScene extends Phaser.Scene {
         // Built before anything that can take damage: Enemy.takeDamage reaches
         // for it on the very first hit.
         this.floating = new FloatingText(this);
+        // The talent tree (TalentData), read once: talents only change in the
+        // title menu, so a run plays with the same numbers from start to end.
+        // Before the systems, which read it in their constructors.
+        this.talents = SaveSystem.getTalentEffects();
         this.economySystem = new EconomySystem(this);
         this.waveManager = new WaveManager(this);
         this.fusionSystem = new FusionSystem(this);
@@ -1112,13 +1116,13 @@ export class GameScene extends Phaser.Scene {
         const key = `${col},${row}`;
 
         const tower = this.towers.find(t => t.alive && t.col === col && t.row === row);
-        if (tower) return { kind: 'tower', target: tower, refund: refundValue(tower.paidCost) };
+        if (tower) return { kind: 'tower', target: tower, refund: this.economySystem.refundFor(tower.paidCost) };
 
         const temple = this.temples.find(t => t.alive && t.col === col && t.row === row);
-        if (temple) return { kind: 'temple', target: temple, refund: refundValue(temple.paidCost) };
+        if (temple) return { kind: 'temple', target: temple, refund: this.economySystem.refundFor(temple.paidCost) };
 
         if (this.barricades.has(key)) {
-            return { kind: 'barricade', refund: refundValue(this.barricades.get(key)) };
+            return { kind: 'barricade', refund: this.economySystem.refundFor(this.barricades.get(key)) };
         }
         return null;
     }

@@ -2,11 +2,17 @@ import { Tower } from '../entities/Tower.js';
 import { Temple } from '../entities/Temple.js';
 import { BARRICADE_COST } from './EconomySystem.js';
 import { TILE } from './GridSystem.js';
+import {
+    TALENTS, talentCost, talentRequirement, sanitizeOwned, talentEffects,
+} from '../data/TalentData.js';
 
 const SAVE_KEY = 'elemental-td:save-v1';
 // Kept apart from the save on purpose: a save is one game in progress and is
 // wiped when it ends; progress is what the player has done across all of them.
 const PROGRESS_KEY = 'elemental-td:progress-v1';
+// The talent tree (TalentData): stars earned, essences spent, talents owned.
+// Its own key so wiping a save or a map's progress never touches it.
+const TALENTS_KEY = 'elemental-td:talents-v1';
 
 export class SaveSystem {
     static hasSave() {
@@ -207,7 +213,8 @@ export class SaveSystem {
                     hero.posY = data.hero.posY;
                     hero.sprite.y = data.hero.posY;
                 }
-                if (data.hero.hp != null) hero.hp = data.hero.hp;
+                // Clamped: the talent that raised max HP may have been reset since.
+                if (data.hero.hp != null) hero.hp = Math.min(data.hero.hp, hero.maxHp);
                 if (data.hero.manaCollected != null) hero.manaCollected = data.hero.manaCollected;
                 // Stop any in-progress movement so the hero stays put
                 hero.targetPos = null;
@@ -317,18 +324,101 @@ export class SaveSystem {
      * falls (it never goes back to false), and the furthest wave cleared, which
      * is how endless runs are compared.
      */
-    static recordProgress(levelId, { completed = false, wave = 0 } = {}) {
-        if (!levelId) return;
+    static recordProgress(levelId, { completed = false, wave = 0, stars = 0 } = {}) {
+        if (!levelId) return { gained: 0, best: 0 };
         const all = SaveSystem.getProgress();
-        const prev = all[levelId] || { completed: false, bestWave: 0 };
+        const prev = all[levelId] || { completed: false, bestWave: 0, stars: 0 };
+        const prevStars = Math.max(0, Math.min(3, prev.stars || 0));
+        const best = Math.max(prevStars, Math.max(0, Math.min(3, stars || 0)));
         all[levelId] = {
             completed: prev.completed || completed,
             bestWave: Math.max(prev.bestWave || 0, wave),
+            // Best mark only: replaying a map can raise it, never farm it.
+            stars: best,
         };
         try {
             localStorage.setItem(PROGRESS_KEY, JSON.stringify(all));
         } catch {
             // Private window or blocked storage: progress just is not kept.
         }
+        if (best > prevStars) SaveSystem._writeTalents(SaveSystem.getTalentState());
+        return { gained: best - prevStars, best };
+    }
+
+    // ─── Talent tree (meta-progression) ──────────────────
+    /** Stars earned over all maps: the sum of each map's best mark. */
+    static totalStars() {
+        return Object.values(SaveSystem.getProgress())
+            .reduce((sum, p) => sum + Math.max(0, Math.min(3, p?.stars || 0)), 0);
+    }
+
+    /**
+     * `{ starsEarned, spent, available, owned }`. Stars come from the progress
+     * record (the source of truth); `owned` is cleaned of unknown ids and
+     * orphaned tiers, and `spent` is recomputed from it, so a stale or
+     * hand-edited record can never hand out essences that were not earned.
+     */
+    static getTalentState() {
+        let stored = {};
+        try {
+            stored = JSON.parse(localStorage.getItem(TALENTS_KEY) || '{}') || {};
+        } catch {
+            stored = {};
+        }
+        const owned = sanitizeOwned(stored.owned);
+        const spent = owned.reduce((sum, id) => sum + talentCost(id), 0);
+        const starsEarned = SaveSystem.totalStars();
+        return { starsEarned, spent, available: Math.max(0, starsEarned - spent), owned };
+    }
+
+    static _writeTalents(state) {
+        try {
+            localStorage.setItem(TALENTS_KEY, JSON.stringify({
+                version: 1,
+                starsEarned: state.starsEarned,
+                spent: state.spent,
+                owned: state.owned,
+            }));
+            return true;
+        } catch (e) {
+            console.warn('[SaveSystem] No se pudieron guardar los talentos:', e);
+            return false;
+        }
+    }
+
+    /**
+     * Why a talent cannot be bought right now, or null when it can:
+     * 'owned' | 'locked' (its lower tier is missing) | 'essence' | 'unknown'.
+     */
+    static talentRefusal(id, state = SaveSystem.getTalentState()) {
+        if (!TALENTS[id]) return 'unknown';
+        if (state.owned.includes(id)) return 'owned';
+        const req = talentRequirement(id);
+        if (req && !state.owned.includes(req)) return 'locked';
+        if (state.available < talentCost(id)) return 'essence';
+        return null;
+    }
+
+    /** Buys a talent. Returns the new state, or null when it was refused. */
+    static buyTalent(id) {
+        const state = SaveSystem.getTalentState();
+        if (SaveSystem.talentRefusal(id, state)) return null;
+        const owned = sanitizeOwned([...state.owned, id]);
+        const spent = owned.reduce((sum, k) => sum + talentCost(k), 0);
+        const next = { ...state, owned, spent, available: Math.max(0, state.starsEarned - spent) };
+        return SaveSystem._writeTalents(next) ? next : null;
+    }
+
+    /** Every essence back: the tree is cleared and can be bought again. */
+    static resetTalents() {
+        const state = SaveSystem.getTalentState();
+        const next = { ...state, owned: [], spent: 0, available: state.starsEarned };
+        SaveSystem._writeTalents(next);
+        return next;
+    }
+
+    /** The numbers a run plays with (TalentData.TALENT_DEFAULTS, merged). */
+    static getTalentEffects() {
+        return talentEffects(SaveSystem.getTalentState().owned);
     }
 }

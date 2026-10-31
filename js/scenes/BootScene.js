@@ -16,6 +16,7 @@ import { MANA_SPRITE } from '../data/ManaSprite.js';
 import { GEAR_SPRITE } from '../data/GearSprite.js';
 import { BOSS_SPRITES } from '../data/BossSprites.js';
 import { SPELLS, SPELL_ORDER } from '../data/SpellData.js';
+import { TALENTS, TALENT_ORDER } from '../data/TalentData.js';
 import { biomeTextures, townTextures } from '../data/BiomeArt.js';
 import {
     GRASS_VARIANTS, DIRT_VARIANTS, EDGE_VARIANTS, RUT_VARIANTS, BREAKABLE_VARIANTS,
@@ -65,6 +66,9 @@ export function expectedTextureKeys() {
     // One icon per spell, named off the table so a new spell fails the boot
     // check loudly instead of showing Phaser's placeholder square on a button.
     for (const key of SPELL_ORDER) keys.push(SPELLS[key].icon);
+    // Same for the talent tree: one drawn icon per talent, plus the essence.
+    for (const id of TALENT_ORDER) keys.push(TALENTS[id].icon);
+    keys.push('icon_essence');
 
     // Listed so the boot check catches a data URI that did not decode. The
     // hero still runs if this is missing — it falls back to the composed
@@ -188,6 +192,7 @@ export class BootScene extends Phaser.Scene {
         this._generateSpells();
         this._generateGates();
         this._generateUI();
+        this._generateTalentIcons();
     }
 
     /** Every key the game can ask for at runtime, minus the ones that exist. */
@@ -2535,5 +2540,174 @@ export class BootScene extends Phaser.Scene {
             g.lineStyle(2, 0x1e1e35);
             g.strokeRect(1, 1, 38, 38);
         });
+    }
+
+    /**
+     * The talent tree's icons (TalentData): 12×12 each, drawn as character
+     * maps because the font has no glyphs for any of this. Each branch keeps
+     * its own ramp — ember for MARCIAL, the lantern's violet for ARCANA, gold
+     * and timber for ARQUITECTURA — so a node says its branch at a glance.
+     * Plus the Esencia Arcana: an arcane four-point star, the tree's currency.
+     */
+    _generateTalentIcons() {
+        const EMBER = { a: 0x3a0a08, b: 0xB8321E, c: 0xFF7043, d: 0xFFCCBC };
+        const ARC = { a: SOUL.deep, b: SOUL.dark, c: SOUL.mid, d: SOUL.glow };
+        const icon = (key, rows, legend) => this._draw(key, 12, 12, (g) => blit(g, rows, legend));
+
+        // ── MARCIAL ─────────────────────────────
+        // A boot with speed lines trailing behind it.
+        icon('talent_paso_ligero', [
+            '............',
+            '....aaaa....',
+            '....abca....',
+            '....abca....',
+            'dd..abca....',
+            '....abcaaa..',
+            '.dd.abbbbbaa',
+            '....abbbbbba',
+            'dd..aaaaaaaa',
+            '............',
+        ], EMBER);
+        // A shield, lit on its left half.
+        icon('talent_temple_vigilia', [
+            '............',
+            '.aaaaaaaaaa.',
+            '.adccccbbba.',
+            '.acdccbbbba.',
+            '.accccbbbba.',
+            '.acccbbbbba.',
+            '..acbbbbba..',
+            '..acbbbbba..',
+            '...abbbba...',
+            '....abba....',
+            '.....aa.....',
+            '............',
+        ], EMBER);
+        // A shock burst: a hot core and eight rays.
+        icon('talent_pulso_choque', [
+            '.....a......',
+            '.....d......',
+            '.a...d...a..',
+            '..d..c..d...',
+            '...ccbcc....',
+            'addcbbbcdda.',
+            '...ccbcc....',
+            '..d..c..d...',
+            '.a...d...a..',
+            '.....d......',
+            '.....a......',
+            '............',
+        ], { ...EMBER, d: 0xFFF59D });
+
+        // ── ARCANA ──────────────────────────────
+        // An hourglass running fast: sand still falling through the neck.
+        icon('talent_canal_fluido', [
+            '.aaaaaaaaaa.',
+            '..abbbbbba..',
+            '..adddddda..',
+            '...adddda...',
+            '....adda....',
+            '.....dd.....',
+            '.....aa.....',
+            '....acca....',
+            '...acddca...',
+            '..accddcca..',
+            '.aaaaaaaaaa.',
+            '............',
+        ], ARC);
+        // A sentinel's empty helm, the visor glowing cyan.
+        icon('talent_cuarto_centinela', [
+            '............',
+            '....aaaa....',
+            '...abccba...',
+            '..abccbbba..',
+            '..abcbbbba..',
+            '..aaaaaaaa..',
+            '..abeeeaba..',
+            '..abbbbbba..',
+            '..abbaabba..',
+            '...aa..aa...',
+            '............',
+            '............',
+        ], { ...ARC, e: 0x7FE7FF });
+        // A full moon, lit from the top-left like the spell's own disc.
+        icon('talent_luna_llena', [
+            '....aaaa....',
+            '..aaccccaa..',
+            '.acccddccca.',
+            '.accddddcca.',
+            'acccddddccba',
+            'accccddcccba',
+            'acbbccccccba',
+            'acbbbcccbbba',
+            '.acbbbbbbba.',
+            '.abbbbbbbba.',
+            '..aabbbbaa..',
+            '....aaaa....',
+        ], { a: SOUL.dark, b: MARBLE.mid, c: MARBLE.light, d: MARBLE.glow });
+
+        // ── ARQUITECTURA ────────────────────────
+        // A coin with a green plus: more of it comes back.
+        icon('talent_reciclaje', [
+            '........ee..',
+            '........ee..',
+            '......eeeeee',
+            '......eeeeee',
+            '..aaaa..ee..',
+            '.acccca.ee..',
+            'acbbbbca....',
+            'acbaabca....',
+            'acbbbbca....',
+            '.acccca.....',
+            '..aaaa......',
+            '............',
+        ], { a: GOLD.deep, b: GOLD.mid, c: GOLD.light, e: 0x7AD46A });
+        // Three steel spikes nailed on a timber block.
+        icon('talent_puas_dentadas', [
+            '............',
+            '..d...d...d.',
+            '..c...c...c.',
+            '.cce.cce.cce',
+            '.cce.cce.cce',
+            'ccceccceccce',
+            'aaaaaaaaaaaa',
+            'abbbbbbbbbba',
+            'abffbbbffbba',
+            'abbbbbbbbbba',
+            'aaaaaaaaaaaa',
+            '............',
+        ], { a: 0x1e140a, b: 0x5e3f22, f: 0x7a5531, c: 0xC3D7E2, e: 0x6f8796, d: 0xFFFFFF });
+        // A war chest: timber, a gold band and a gold lock.
+        icon('talent_tesoro_guerra', [
+            '............',
+            '..aaaaaaaa..',
+            '.abbbbbbbba.',
+            '.abccccccba.',
+            'aaaaaaaaaaaa',
+            'abbbbddbbbba',
+            'abbbbdgbbbba',
+            'abbbbbbbbbba',
+            'abbbbbbbbbba',
+            'aaaaaaaaaaaa',
+            '............',
+            '............',
+        ], { a: 0x1e140a, b: 0x7a5531, c: GOLD.mid, d: GOLD.light, g: GOLD.deep });
+
+        // ── Esencia Arcana ──────────────────────
+        // A star, because stars are what it is made of; violet at the heart,
+        // because it is spent on Vesper's light.
+        this._draw('icon_essence', 11, 11, (g) => blit(g, [
+            '.....a.....',
+            '.....d.....',
+            '....aca....',
+            '....aca....',
+            '..aacbcaa..',
+            'adccbbbccda',
+            '..aacbcaa..',
+            '....aca....',
+            '....aca....',
+            '.....d.....',
+            '.....a.....',
+        ], { a: GOLD.dark, b: SOUL.light, c: GOLD.light, d: GOLD.glow }));
     }
 }

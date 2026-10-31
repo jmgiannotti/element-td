@@ -3,6 +3,7 @@ import { applyViewport } from '../systems/Viewport.js';
 import { audio } from '../systems/AudioSystem.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { OptionsModal } from '../systems/OptionsModal.js';
+import { TalentModal } from '../systems/TalentModal.js';
 import { safeTexture } from '../systems/TextureGuard.js';
 import { DEFAULT_LOOK, ensureHeroTexture } from '../data/HeroLook.js';
 import { LEVELS, getLevelById } from '../data/LevelData.js';
@@ -27,7 +28,12 @@ export class TitleScene extends Phaser.Scene {
         super('TitleScene');
     }
 
-    create() {
+    /**
+     * @param {{ openMapSelect?: boolean, levelId?: string, next?: boolean }} data
+     *   From the end screen's ELEGIR MAPA: open the selector on that map, or on
+     *   the one after it when `next` (a win).
+     */
+    create(data = {}) {
         applyViewport(this);
         // Leaving a game mid-wave must not carry its drums into the menu,
         // nor its map's song: the menu has the first map's.
@@ -35,6 +41,7 @@ export class TitleScene extends Phaser.Scene {
         audio.setMusicMood('calm');
 
         this.optionsModal = null;
+        this.talentModal = null;
         this.guideModal = null;
         this.confirmModal = null;
         this.mapSelect = null;
@@ -44,6 +51,11 @@ export class TitleScene extends Phaser.Scene {
         this._buildHeader();
         this._buildMenu();
         this._buildFooter();
+
+        if (data?.openMapSelect) {
+            const i = LEVELS.findIndex(l => l.id === data.levelId);
+            this._openMapSelect(i < 0 ? null : (i + (data.next ? 1 : 0)) % LEVELS.length);
+        }
     }
 
     _buildBackground() {
@@ -175,6 +187,61 @@ export class TitleScene extends Phaser.Scene {
         });
     }
 
+    // ─── Talents (from the map selector) ────────────────
+    /**
+     * TALENTOS in the selector's bottom row, with the essences waiting to be
+     * spent: the drawn essence icon and a number, never a glyph (the font has
+     * no star). Rebuilt after the tree closes, so the count is current.
+     */
+    _buildSelectorTalentBtn() {
+        this.msTalentBtn?.destroy();
+        const state = SaveSystem.getTalentState();
+        const x = 490, y = 420, w = 150, h = 32;
+        const b = this.add.container(x, y);
+        const bg = this.add.rectangle(0, 0, w, h, 0x2a1f48).setStrokeStyle(2, 0xB388FF)
+            .setInteractive({ useHandCursor: true });
+        const label = this.add.text(-w / 2 + 14, 0, 'TALENTOS', {
+            fontFamily: FONT, fontSize: '8px', color: '#FFFFFF', stroke: '#000000', strokeThickness: 2,
+        }).setOrigin(0, 0.5);
+        const count = this.add.text(w / 2 - 12, 0, String(state.available), {
+            fontFamily: FONT, fontSize: '8px', color: state.available > 0 ? '#FFD54F' : '#78909C',
+            stroke: '#000000', strokeThickness: 2,
+        }).setOrigin(1, 0.5);
+        const gem = this.add.image(count.x - count.width - 5, 0, safeTexture(this, 'icon_essence', 'icon_coin'))
+            .setOrigin(1, 0.5).setScale(1.3).setAlpha(state.available > 0 ? 1 : 0.5);
+        b.add([bg, label, gem, count]);
+        bg.on('pointerover', () => { bg.setStrokeStyle(2, 0xFFD54F); label.setColor('#FFD54F'); });
+        bg.on('pointerout', () => { bg.setStrokeStyle(2, 0xB388FF); label.setColor('#FFFFFF'); });
+        bg.on('pointerdown', (p) => {
+            p.event?.stopPropagation();
+            audio.play('click');
+            this._openTalents();
+        });
+        // Essences waiting: the icon breathes, so the button asks to be opened.
+        if (state.available > 0) {
+            this.tweens.add({ targets: gem, scaleX: 1.6, scaleY: 1.6, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        }
+        b.once('destroy', () => this.tweens.killTweensOf(gem));
+        this.mapSelect.c.add(b);
+        this.msTalentBtn = b;
+    }
+
+    _openTalents() {
+        if (this.talentModal || this.confirmModal) return;
+        // Above the selector, which sits at 99–100.
+        this.talentModal = new TalentModal(this, {
+            depth: 200,
+            onClose: () => {
+                this.talentModal = null;
+                if (!this.mapSelect) return;
+                this._buildSelectorTalentBtn();
+                // TESORO DE GUERRA may have been bought or refunded.
+                this.msGoldBonus = SaveSystem.getTalentEffects().startGoldBonus || 0;
+                this._selectMap(this.msIndex);
+            },
+        });
+    }
+
     _createMenuBtn(x, y, w, h, text, fillHex, strokeHex, onClick, disabled = false, fontSize = 8) {
         const c = this.add.container(x, y).setDepth(15);
         const bg = this.add.rectangle(0, 0, w, h, fillHex)
@@ -249,16 +316,14 @@ export class TitleScene extends Phaser.Scene {
     }
 
     /**
-     * COMENZAR. Starting a new game overwrites the saved one, so a player with a
-     * game in progress is asked first; backing out of the selector afterwards
-     * still leaves the save untouched — it is only cleared on JUGAR.
+     * COMENZAR opens the selector straight away: looking at the maps or the
+     * talent tree costs nothing. Only JUGAR replaces a saved game, so that is
+     * where a player with one in progress is asked (_startSelectedMap).
      */
     _onStart() {
-        if (this.mapSelect || this.confirmModal) return;
+        if (this.mapSelect || this.confirmModal || this.talentModal) return;
         audio.play('click');
-        const save = SaveSystem.getSummary();
-        if (save) this._confirmOverwrite(save, () => this._openMapSelect());
-        else this._openMapSelect();
+        this._openMapSelect();
     }
 
     /** A plain rectangle button inside a modal container. */
@@ -280,9 +345,10 @@ export class TitleScene extends Phaser.Scene {
     }
 
     _confirmOverwrite(save, onYes) {
+        // Above the map selector it is now asked from.
         const shade = this.add.rectangle(460, 240, 920, 480, 0x000000, 0.75)
-            .setDepth(99).setInteractive();
-        const c = this.add.container(460, 240).setDepth(100);
+            .setDepth(199).setInteractive();
+        const c = this.add.container(460, 240).setDepth(200);
         const close = () => {
             c.destroy();
             shade.destroy();
@@ -321,11 +387,11 @@ export class TitleScene extends Phaser.Scene {
      * enemies' route, its pitch, its starting purse and whether it has been
      * beaten. Arrow keys move, ENTER plays, ESC closes.
      */
-    _openMapSelect() {
+    _openMapSelect(startIndex = null) {
         if (this.mapSelect) return;
         const save = SaveSystem.getSummary();
         const savedIndex = save ? LEVELS.findIndex(l => l.id === save.levelId) : -1;
-        this.msIndex = Math.max(0, savedIndex);
+        this.msIndex = startIndex ?? Math.max(0, savedIndex);
         this.msProgress = SaveSystem.getProgress();
 
         const shade = this.add.rectangle(460, 240, 920, 480, 0x000000, 0.8)
@@ -411,6 +477,13 @@ export class TitleScene extends Phaser.Scene {
             stroke: '#000000', strokeThickness: 2,
         }).setOrigin(0.5);
         this.msBest = this.add.text(584, 232, '', { fontFamily: FONT, fontSize: '6px', color: '#90A4AE' });
+        // The map's best mark: three drawn stars, lit or dim, and what they are.
+        this.msStarIcons = [0, 1, 2].map(k => this.add.image(590 + k * 18, 256, safeTexture(this, 'icon_essence', 'icon_coin'))
+            .setScale(1.4));
+        this.msStarLabel = this.add.text(642, 256, '', { fontFamily: FONT, fontSize: '6px', color: '#90A4AE' })
+            .setOrigin(0, 0.5);
+        c.add([...this.msStarIcons, this.msStarLabel]);
+        this.msGoldBonus = SaveSystem.getTalentEffects().startGoldBonus || 0;
         this.msBrief = this.add.text(322, 296, '', {
             fontFamily: FONT, fontSize: '7px', color: '#ECEFF1',
             lineSpacing: 8, wordWrap: { width: 520 },
@@ -427,7 +500,11 @@ export class TitleScene extends Phaser.Scene {
         });
         this._modalBtn(c, 784, 420, 130, 32, 'JUGAR', 0x2E7D32, 0x4CAF50, () => this._startSelectedMap());
 
+        this._buildSelectorTalentBtn();
+
         this._msOnKey = (event) => {
+            // The tree or the overwrite question is on top: the keys are theirs.
+            if (this.talentModal || this.confirmModal) return;
             if (event.code === 'ArrowUp' || event.code === 'ArrowLeft') this._selectMap(this.msIndex - 1, true);
             else if (event.code === 'ArrowDown' || event.code === 'ArrowRight') this._selectMap(this.msIndex + 1, true);
             else if (event.code === 'Enter' || event.code === 'Space') this._startSelectedMap();
@@ -463,7 +540,7 @@ export class TitleScene extends Phaser.Scene {
 
         this.msName.setText(level.name.toUpperCase());
         this.msBiome.setText(`BIOMA: ${look.label}`).setColor(look.accent);
-        this.msGold.setText(String(level.initialGold));
+        this.msGold.setText(String(level.initialGold + this.msGoldBonus));
         this.msLives.setText(String(level.initialLives));
         this.msWaves.setText(`${getWaveProfile(level.waveProfile).waves.length} OLEADAS + INFINITO`);
         this.msBrief.setText(level.brief || level.description || '');
@@ -478,6 +555,9 @@ export class TitleScene extends Phaser.Scene {
         }
         const best = progress?.bestWave || 0;
         this.msBest.setText(best > 0 ? `MEJOR: OLEADA ${best}` : progress?.completed ? '' : 'SIN COMPLETAR');
+        const stars = progress?.stars || 0;
+        this.msStarIcons.forEach((img, k) => img.setAlpha(k < stars ? 1 : 0.22));
+        this.msStarLabel.setText(stars > 0 ? `${stars}/3 ESTRELLAS` : 'GANALO PARA SUMAR ESTRELLAS');
     }
 
     /** A gold seal with a check in it — the list's mark for a beaten map. */
@@ -509,11 +589,16 @@ export class TitleScene extends Phaser.Scene {
         this._drawCompletedMark(g, x + 14, y + h / 2, 7);
     }
 
-    _startSelectedMap() {
-        if (!this.mapSelect) return;
+    _startSelectedMap(confirmed = false) {
+        if (!this.mapSelect || this.confirmModal || this.talentModal) return;
         audio.play('click');
         const level = LEVELS[this.msIndex];
-        // The player already agreed to replace any saved game on COMENZAR
+        // A game in progress is replaced only once the player says so.
+        const save = SaveSystem.getSummary();
+        if (save && !confirmed) {
+            this._confirmOverwrite(save, () => this._startSelectedMap(true));
+            return;
+        }
         SaveSystem.clearSave();
         this._closeMapSelect();
         this.scene.start('GameScene', { continueGame: false, levelData: level });

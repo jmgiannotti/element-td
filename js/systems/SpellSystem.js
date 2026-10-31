@@ -73,11 +73,28 @@ export class SpellSystem {
         }
     }
 
-    /** 0 → ready, 1 → just cast. Drives the cooldown wipe in the UI. */
-    cooldownPct(key) {
+    /** A spell's recharge for this run: the table's, cut by CANAL FLUIDO. */
+    cooldownOf(key) {
         const s = SPELLS[key];
         if (!s) return 0;
-        return Phaser.Math.Clamp(this.cooldown[key] / s.cooldown, 0, 1);
+        return Math.round(s.cooldown * (this.scene.talents?.spellCooldownMult ?? 1));
+    }
+
+    /** Luna's hit for this run (LUNA LLENA raises it). */
+    lunaDamage() {
+        return Math.round(SPELLS.luna.damage * (this.scene.talents?.lunaDamageMult ?? 1));
+    }
+
+    /** How many soldiers CENTINELAS calls this run (CUARTO CENTINELA adds one). */
+    sentinelCount() {
+        return SPELLS.centinelas.count + (this.scene.talents?.sentinelBonus ?? 0);
+    }
+
+    /** 0 → ready, 1 → just cast. Drives the cooldown wipe in the UI. */
+    cooldownPct(key) {
+        const total = this.cooldownOf(key);
+        if (!total) return 0;
+        return Phaser.Math.Clamp(this.cooldown[key] / total, 0, 1);
     }
 
     cooldownSeconds(key) {
@@ -165,7 +182,7 @@ export class SpellSystem {
         // number — going through it keeps the 'mana-changed' event honest.
         if (!this.scene.economySystem.spendMana(spell.cost)) return false;
 
-        this.cooldown[key] = spell.cooldown;
+        this.cooldown[key] = this.cooldownOf(key);
         perform.call(this, spell, x, y);
         this.scene.events.emit('spell-cast', key, x, y);
         return true;
@@ -401,7 +418,7 @@ export class SpellSystem {
             if (!enemy.alive) continue;
             const d = Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y);
             if (d > spell.radius) continue;
-            enemy.takeDamage(spell.damage);
+            enemy.takeDamage(this.lunaDamage());
             enemy.applySlow(spell.slow, spell.slowDuration);
             hits++;
         }
@@ -435,7 +452,12 @@ export class SpellSystem {
         scene.time.delayedCall(spell.channelMs, () => {
             audio.play('summon');
             if (!scene.sentinels) scene.sentinels = [];
-            for (const [dx, dy] of [[0, -10], [-10, 7], [10, 7]].slice(0, spell.count)) {
+            // A triangle of three; with CUARTO CENTINELA, a square of four.
+            const n = this.sentinelCount();
+            const formation = n >= 4
+                ? [[-9, -8], [9, -8], [-9, 8], [9, 8]]
+                : [[0, -10], [-10, 7], [10, 7]];
+            for (const [dx, dy] of formation.slice(0, n)) {
                 scene.sentinels.push(new Sentinel(scene, at.x + dx, at.y + dy, spell, { x: dx, y: dy }));
             }
         });

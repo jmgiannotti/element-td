@@ -236,7 +236,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Victoria con 3 estrellas pixel art dibujadas con Graphics: 3 con todas las vidas, 2 con la mitad o más, 1 con menos.
 > - Tabla a dos columnas con divisores: OLEADAS, ORO OBTENIDO (moneda; oro ganado en toda la partida, sin contar reembolsos por vender o fusionar), MANA REFINADO (orbe; todo el maná ganado) con RECOLECTADO POR VESPER debajo, y ESTRUCTURAS (`X Torres · Y Templos`).
 > - Recuadro ámbar de la TORRE MVP con el sprite real de la torre, nombre y nivel, DAÑO y BAJAS.
-> - Botones REINTENTAR, MODO INFINITO (victoria) y MENU PRINCIPAL dentro del panel, con borde iluminado al pasar el mouse; el cartel entra con una animación de 180 ms y el fondo oscuro bloquea los clics.
+> - Botones REINTENTAR, ELEGIR MAPA, MODO INFINITO (victoria) y MENU PRINCIPAL dentro del panel (con cuatro, en grilla de 2×2). ELEGIR MAPA vuelve al menú con el selector de mapas ya abierto (donde está TALENTOS para gastar las esencias recién ganadas): tras una victoria elige el mapa siguiente, tras una derrota el mismo; con borde iluminado al pasar el mouse; el cartel entra con una animación de 180 ms y el fondo oscuro bloquea los clics.
 > 
 > *Estado:* **Implementado** en `UIScene._showEndScreen()` (`_endMvp`, `_endButton`, `_endStar`), `EconomySystem.js` (`goldEarned`, `manaEarned`), `SaveSystem.js` y `GameScene.js` (los totales se guardan con la partida y el checkpoint), `FusionSystem.js` (el reembolso no cuenta como oro obtenido).
 
@@ -247,7 +247,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 
 > **Criterios de Aceptación:**
 > - Escena `TitleScene` con título "ELEMENTAL TD: MARCAS DE CENIZA".
-> - Botón "COMENZAR" (nueva partida con confirmación si ya hay guardado).
+> - Botón "COMENZAR" (abre el selector de mapas; si ya hay guardado, JUGAR pide confirmación antes de reemplazarlo).
 > - Botón "CONTINUAR" que indica la oleada guardada (deshabilitado si no hay partida).
 > - Botones de "OPCIONES" y "¿CÓMO JUGAR?".
 > 
@@ -565,7 +565,7 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - **Datos**: `js/data/LevelData.js` (`map_1` Paso de Ceniza, `map_2` Plaza del Mercado, `map_3` Caldera de Magma, `map_4` Glaciar Quebrado, `map_5` Cripta Ancestral; `biome`, `waveProfile`, `brief`, `roadAreas`, `townBlocks`), `js/data/WaveData.js` (perfiles de 20 oleadas y receta de Modo Infinito por mapa), `js/data/Palette.js` (paletas de bioma y de sellos).
 > - **Motor**: `js/systems/GridSystem.js` (dimensiones del nivel, `roadAreas`), `js/systems/WaveManager.js` (perfil por mapa, multiplicadores de vida, infinito ponderado), `js/entities/Hero.js`, `js/systems/EconomySystem.js`.
 > - **Biomas** (creados): `js/systems/Terrain.js` (capas por celda sin Phaser, anillo urbano) y `js/data/BiomeArt.js` (terreno de city/volcano/snow/dungeon, casas en 3/4, puestos, rompibles); modificados `js/scenes/BootScene.js` y `js/scenes/GameScene.js`.
-> - **Selector** (creado): `js/systems/MapPreview.js` (mini-mapa con camino, rompibles, ciudad y sellos); `js/scenes/TitleScene.js` (modal ELIGE UN MAPA con lista, vista previa animada de la ruta, oro/vidas/oleadas e insignia COMPLETADO; confirmación antes de reemplazar una partida; CONTINUAR muestra mapa y oleada).
+> - **Selector** (creado): `js/systems/MapPreview.js` (mini-mapa con camino, rompibles, ciudad y sellos); `js/scenes/TitleScene.js` (modal ELIGE UN MAPA con lista, vista previa animada de la ruta, oro/vidas/oleadas e insignia COMPLETADO; confirmación antes de reemplazar una partida, al tocar JUGAR; CONTINUAR muestra mapa y oleada).
 > - **Persistencia**: `js/systems/SaveSystem.js` (`levelId` en el guardado; progreso por mapa en `elemental-td:progress-v1` con completado y mejor oleada), `js/scenes/UIScene.js` (registro al ganar/perder y en cada oleada del infinito; Reintentar/Reiniciar repiten el mapa jugado).
 > - **Tutorial**: `js/systems/TutorialSystem.js` y `GameScene.js` (solo en `map_1` y hasta completarlo o saltarlo una vez).
 
@@ -664,6 +664,24 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 > - Enemigos estándar ~13% más rápidos; +25% de vida desde la oleada 10, también en modo sin fin (luego subido en US 8.6).
 > 
 > *Estado:* **Implementado** en `TowerData.js` (stats, `CHAIN_FALLOFF`, curva de `TOWER_UPGRADE`), `Projectile.js`, `EnemyData.js`, `WaveData.js` (`LATE_WAVE_HP`) y `WaveManager.js`.
+
+### US 14.9: Meta-progresión y Árbol de Talentos de Vesper [✓]
+**Como** jugador,  
+**Quiero** que las estrellas que gano al superar cada mapa se conviertan en Esencias Arcanas para comprar mejoras permanentes,  
+**Para** que cada victoria me deje algo para la próxima partida y tenga un motivo para volver a jugar un mapa buscando 3 estrellas.
+
+> **Criterios de Aceptación:**
+> - Al ganar (última oleada base) se otorgan 1 a 3 estrellas por las vidas que quedan (todas: 3; la mitad o más: 2; menos: 1). Cada mapa guarda solo su **mejor marca**, así que repetir un mapa sube la marca pero no farmea esencias. La pantalla de victoria muestra `+N ESENCIAS ARCANAS` o `MEJOR MARCA: X/3 ESTRELLAS`.
+> - 9 talentos en 3 ramas (MARCIAL, ARCANA, ARQUITECTURA) de 3 niveles; cada nivel exige el anterior de su rama y cuesta tantas esencias como su nivel (1/2/3). El árbol completo cuesta 18 = 3 estrellas en cada uno de los 6 mapas.
+>   - **MARCIAL:** PASO LIGERO (+15% velocidad de Vesper), TEMPLE DE VIGILIA (+25% vida máxima), PULSO DE CHOQUE (al aterrizar el Dash aturde 0,8s a los enemigos a 60px; la mitad a los jefes).
+>   - **ARCANA:** CANAL FLUIDO (-15% recarga de hechizos), CUARTO CENTINELA (+1 Centinela Arcano, en cuadro), LUNA LLENA (+40% daño de Luna).
+>   - **ARQUITECTURA:** RECICLAJE (+10% valor de venta: 60% → 70%), PUAS DENTADAS (Púas +50% daño, Escarcha deja lentos el doble de tiempo), TESORO DE GUERRA (+40 de oro al empezar una partida nueva).
+> - Persistencia en `localStorage` (`elemental-td:talents-v1`: estrellas ganadas, esencias gastadas y talentos comprados), separada de la partida guardada y del progreso por mapa (`progress-v1`, que ahora guarda `stars`). Al leerla se descartan ids desconocidos y niveles sin su requisito, y las esencias gastadas se recalculan, así un dato viejo o editado no regala esencias.
+> - Botón TALENTOS en el selector de mapas (fila de abajo, junto a VOLVER y JUGAR) con las esencias disponibles (icono dibujado + número; late si hay para gastar). Abre un modal centrado con el árbol creciendo desde el núcleo de Vesper: líneas oscuras donde no hay nada, punteadas y respirando hacia el próximo talento comprable, y brillantes con chispas subiendo entre talentos comprados. A la derecha, la tarjeta del talento elegido: descripción, costo, estado (DISPONIBLE / ADQUIRIDO / FALTAN N ESENCIAS / REQUIERE ...), COMPRAR, RESETEAR (pide un segundo clic `¿SEGURO?`) y VOLVER; ESC cierra. Como la partida guardada solo se reemplaza al tocar JUGAR, la confirmación de PARTIDA GUARDADA pasó de COMENZAR a JUGAR: se puede entrar al selector y gastar esencias sin tocar la partida en curso. Descripciones cortas, de una línea ("Centinelas Arcanos invoca +1 soldado.").
+> - Cero emojis en texto: los 9 iconos de talento y la Esencia Arcana son texturas pixel art de 12×12 / 11×11 generadas en `BootScene`.
+> - Los talentos se leen una vez por partida (`GameScene.talents`), y las tarjetas y la ayuda de hechizos muestran los valores reales (recarga, daño de Luna, cantidad de soldados); la tarjeta de VENDER muestra el % real. El selector de mapas muestra el oro inicial con el bonus y las estrellas del mapa. Al continuar una partida guardada después de resetear, la vida de Vesper se recorta a su nuevo máximo.
+> 
+> *Estado:* **Implementado** en `TalentData.js` (talentos, ramas, costos, `starsForVictory`, `talentEffects`), `SaveSystem.js` (`recordProgress` con `stars`, `getTalentState`, `buyTalent`, `resetTalents`, `talentRefusal`, `getTalentEffects`), `TalentModal.js` (modal del árbol), `TitleScene.js` (botón TALENTOS y estrellas y oro en el selector; confirmación de reemplazo en JUGAR), `UIScene.js` (estrellas y esencias en la victoria, valores reales en tarjetas), `BootScene.js` (`_generateTalentIcons`), `GameScene.js` (`talents`), `Hero.js` (velocidad, vida, `_dashPulse`), `Enemy.js` (`applyStun`), `SpellSystem.js` (`cooldownOf`, `lunaDamage`, `sentinelCount`), `SpellData.js` (`spellHeading` con recarga), `EconomySystem.js` (`sellRate`, `refundFor`, oro inicial) y `BarricadeSystem.js` (Púas y Escarcha).
 
 ---
 

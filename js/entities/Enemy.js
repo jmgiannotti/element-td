@@ -755,6 +755,17 @@ export class Enemy {
         this.slowTimer = Math.max(this.slowTimer, duration);
     }
 
+    /**
+     * Held in place like a freeze (same timer, so the two never stack into a
+     * longer hold), tinted pale yellow so it does not read as ice.
+     */
+    applyStun(duration) {
+        if (!this.alive) return;
+        this.frozen = true;
+        this.freezeTimer = Math.max(this.freezeTimer, duration);
+        this.sprite.setTint(0xFFF59D);
+    }
+
     applyFreeze(duration) {
         this.frozen = true;
         this.freezeTimer = duration;

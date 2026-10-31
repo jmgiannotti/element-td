@@ -63,7 +63,11 @@ export class Hero {
         this.lanternGlow = scene.add.image(pos.x + lo0.x, pos.y + lo0.y, HERO_GLOW_KEY)
             .setDepth(19.5).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
 
-        this.speed = 87;
+        // The talent tree (TalentData), read once per run by GameScene.
+        this.talents = scene.talents ?? {};
+
+        // PASO LIGERO scales the walk; the dash keeps its own fixed reach.
+        this.speed = 87 * (this.talents.heroSpeedMult ?? 1);
         this.attackDamage = 10;
         this.attackRange = 55;
         this.attackRate = 900;
@@ -115,8 +119,9 @@ export class Hero {
         this.moving = false;
         this.steering = false;
 
-        this.maxHp = 100;
-        this.hp = 100;
+        // TEMPLE DE VIGILIA raises the ceiling; he starts and respawns full.
+        this.maxHp = Math.round(100 * (this.talents.heroHpMult ?? 1));
+        this.hp = this.maxHp;
         this.isDead = false;
 
         // HP bar
@@ -396,6 +401,44 @@ export class Hero {
         }
     }
 
+    /**
+     * PULSO DE CHOQUE: where the dash lands, a ring of the dash's own blue
+     * snaps outward and every enemy inside is held still for a moment. Bosses
+     * shrug off half of it — a stun-lock on a boss would be the whole fight.
+     */
+    _dashPulse() {
+        const ms = this.talents.dashStunMs;
+        const radius = this.talents.dashStunRadius || 60;
+        const color = HERO_ABILITIES.dash.color;
+        const scene = this.scene;
+
+        const ring = scene.add.circle(this.posX, this.posY, radius * 0.3, 0xFFF59D, 0.16);
+        ring.setStrokeStyle(2, color, 0.95).setDepth(3);
+        scene.tweens.add({
+            targets: ring,
+            scaleX: 1 / 0.3,
+            scaleY: 1 / 0.3,
+            alpha: 0,
+            duration: 300,
+            ease: 'Quad.easeOut',
+            onComplete: () => ring.destroy(),
+        });
+
+        let hits = 0;
+        for (const enemy of scene.enemies) {
+            if (!enemy.alive) continue;
+            if (Phaser.Math.Distance.Between(this.posX, this.posY, enemy.x, enemy.y) > radius) continue;
+            enemy.applyStun(enemy.isBoss ? ms / 2 : ms);
+            hits++;
+        }
+        if (hits > 0) {
+            audio.play('quake');
+            scene.floating?.show(this.posX, this.posY - 26, 'aturdidos', {
+                color: '#FFF59D', size: 7, rise: 16,
+            });
+        }
+    }
+
     /** Ground slam: damage plus a slow in a ring around the hero. */
     _castQuake(a) {
         audio.play('quake');
@@ -596,6 +639,7 @@ export class Hero {
             if (this.busy <= 0 || this._reached(this.dashTarget)) {
                 this.dashing = false;
                 this.dashTarget = null;
+                if ((this.talents.dashStunMs ?? 0) > 0) this._dashPulse();
             }
         } else if (this.moving && this.targetPos) {
             if (this._stepToward(this.targetPos, this.speed * (delta / 1000))) {

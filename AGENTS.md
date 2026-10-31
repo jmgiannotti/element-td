@@ -55,7 +55,7 @@ e:/Proyectos/Mini juego TD/
 * **`MapEventSystem.js`**: Reglas propias de cada mapa declaradas en `LevelData.mechanics` (puestos de oro en Plaza del Mercado, brechas, etc.).
 * **`TelegraphSystem.js`**: Señalización visual en el suelo (líneas, conos, círculos) antes de que un jefe lance una habilidad.
 * **`TutorialSystem.js`**: Tutorial de economía dual en dos pasos (recoger maná con el héroe, construir un templo) y cuándo corresponde mostrarlo (`tutorialWanted`).
-* **`SaveSystem.js`**: Serialización y restauración de estado en `localStorage`.
+* **`SaveSystem.js`**: Serialización y restauración de estado en `localStorage`: la partida en curso, el progreso por mapa (completado, mejor oleada, mejores estrellas) y el árbol de talentos (`getTalentState`, `buyTalent`, `resetTalents`, `getTalentEffects`).
 
 **Dibujo y efectos**
 * **`Pixels.js`**: Herramientas de pixel art (rampas de 5 tonos, siluetas por filas, sombreado) con las que se generan todas las texturas procedurales.
@@ -74,6 +74,7 @@ e:/Proyectos/Mini juego TD/
 * **`TextureGuard.js`**: `safeTexture(scene, key, fallback)`: evita el cuadro negro de textura faltante y avisa la clave en consola. Usarlo en toda búsqueda de textura en tiempo de ejecución.
 * **`AudioSystem.js`**: Sonido y música generados con Web Audio (sin archivos). `audio.play(cue, arg, x)`: `x` (posición en el mundo) panea el sonido. Música dinámica: `audio.setSong(id)` (cada mapa la elige con `LevelData.music`) y `audio.setMusicMood('calm' | 'tension' | 'boss')`; volúmenes separados de efectos y música.
 * **`OptionsModal.js`**: Modal de configuración (escala de resolución, volumen y controles).
+* **`TalentModal.js`**: Modal del árbol de talentos que abre el selector de mapas de `TitleScene` (botón TALENTOS): nodos, líneas de energía, tarjeta del talento, COMPRAR y RESETEAR.
 * **`TouchControls.js`**: Joystick y controles táctiles (US 7.1, en pausa). **Sin uso**: no lo importa ningún archivo.
 * **`ManaShader.js`**: Shader de la base de maná (`getManaBaseShader`). **Sin uso**: no lo importa ningún archivo.
 
@@ -88,6 +89,7 @@ e:/Proyectos/Mini juego TD/
 * **`EnemyData.js`**: Tipos de enemigos, velocidades, puntos de vida, afinidades y habilidades de jefes.
 * **`WaveData.js`**: Lista secuencial de oleadas base.
 * **`MusicData.js`**: Las canciones, una por mapa: tonalidad, tempo, acordes y cómo toca cada capa (colchón, melodía, bajo, batería). Una canción nueva es una entrada nueva acá.
+* **`TalentData.js`**: Árbol de talentos de Vesper (meta-progresión): 9 talentos en 3 ramas, costo por nivel, estrellas por victoria (`starsForVictory`) y `talentEffects` (números neutros en `TALENT_DEFAULTS`). En partida se leen de `GameScene.talents`; un talento nuevo es una entrada acá más su ícono en `BootScene._generateTalentIcons`.
 * **`Elements.js`**: Reglas de efectividad (`SUPER_MULT = 1.5`, `RESIST_MULT = 0.5`).
 * **`*Sprite.js`** (`CoinSprite.js`, `ManaSprite.js`, `BossSprites.js`): Contenedores generados automáticamente con Base64 de sprites compilados.
 
