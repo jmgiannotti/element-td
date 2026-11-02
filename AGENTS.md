@@ -65,7 +65,7 @@ e:/Proyectos/Mini juego TD/
 * **`ParticleSystem.js`**: Partículas (chispas, impactos) para no usar tweens ni objetos temporales.
 * **`FloatingText.js`**: Números de daño que salen de los golpes, con pool; ▲ si pega en debilidad y ▼ si choca con resistencia.
 * **`ManaAura.js`**: Aura animada bajo los orbes de maná del piso (la usa `ManaMote.js`).
-* **`IconText.js`**: Texto con el sprite de maná en línea: reemplaza el token `✦` (la fuente no lo tiene) por la imagen.
+* **`IconText.js`**: Texto con sprites en línea: reemplaza los tokens `✦` (maná), `▲` (súper efectivo) y `▼` (resistido) por sus imágenes pixel art.
 
 **Pantalla, entrada y utilidades**
 * **`Viewport.js`**: Supersampling (`SUPER = 4`), cámara del tablero con zoom en mapas grandes, `worldToView` (mundo → vista 920×480) y `pointerWorld` (puntero → mundo).
@@ -91,7 +91,7 @@ e:/Proyectos/Mini juego TD/
 * **`MusicData.js`**: Las canciones, una por mapa: tonalidad, tempo, acordes y cómo toca cada capa (colchón, melodía, bajo, batería). Una canción nueva es una entrada nueva acá.
 * **`TalentData.js`**: Árbol de talentos de Vesper (meta-progresión): 9 talentos en 3 ramas, costo por nivel, estrellas por victoria (`starsForVictory`) y `talentEffects` (números neutros en `TALENT_DEFAULTS`). En partida se leen de `GameScene.talents`; un talento nuevo es una entrada acá más su ícono en `BootScene._generateTalentIcons`.
 * **`Elements.js`**: Reglas de efectividad (`SUPER_MULT = 1.5`, `RESIST_MULT = 0.5`).
-* **`*Sprite.js`** (`CoinSprite.js`, `ManaSprite.js`, `BossSprites.js`): Contenedores generados automáticamente con Base64 de sprites compilados.
+* **`*Sprite.js`** (`CoinSprite.js`, `ManaSprite.js`, `GearSprite.js`, `PlayWaveSprite.js`, `EffectivenessSprites.js`, `BossSprites.js`): Contenedores generados automáticamente con Base64 de sprites compilados.
 
 ---
 
@@ -113,6 +113,8 @@ e:/Proyectos/Mini juego TD/
      node update_coin.cjs
      node update_mana.cjs
      node update_gear.cjs
+     node update_play_wave.cjs
+     node update_effectiveness.cjs
      node update_bosses.cjs
      node update_sprite.cjs
      ```

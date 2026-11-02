@@ -904,18 +904,19 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 
 ---
 
-### US 15.16: Sprite Pixel Art en `.ase` para Indicadores de Efectividad (`▲` y `▼`)
+### US 15.16: Sprite Pixel Art en `.ase` para Indicadores de Efectividad (`▲` y `▼`) [✓]
 **Como** creador y jugador,  
 **Quiero** crear flechas de efectividad de combate personalizadas en Aseprite,  
 **Para** reemplazar los triángulos de texto `▲` (Súper Efectivo) y `▼` (Resistido).
 
 > **Criterios de Aceptación:**
-> - Archivos fuente: `icon_effective_up.ase` (dorado/verde) e `icon_resist_down.ase` (gris azulado).
+> - Archivos fuente: `assets/icon_effective_up.ase` (dorado/verde) y `assets/icon_resist_down.ase` (gris azulado), ambos 8×8 px.
+> - Script de compilación `update_effectiveness.cjs` que convierte ambos `.ase` en Data URIs en `EffectivenessSprites.js`.
 > - Tamaño compacto de 7×7 u 8×8 px.
 > - Uso en números flotantes de combate, codex elemental y comparativas de daño.
 > - Alto contraste visual contra cualquier fondo de terreno.
 > 
-> *Estado:* **Pendiente**.
+> *Estado:* **Implementado** en `assets/icon_effective_up.ase`, `assets/icon_resist_down.ase`, `update_effectiveness.cjs`, `EffectivenessSprites.js`, `Elements.js`, `BootScene.js`, `IconText.js`, `FloatingText.js` y `UIScene.js`.
 
 ---
 
@@ -933,15 +934,16 @@ Cada historia sigue el formato estándar: **Como [rol], quiero [acción] para [b
 
 ---
 
-### US 15.18: Sprite Pixel Art en `.ase` para Botón de Iniciar Oleada (`▶`)
+### US 15.18: Sprite Pixel Art en `.ase` para Botón de Iniciar Oleada (`▶`) [✓]
 **Como** creador y jugador,  
 **Quiero** diseñar una flecha de reproducción/play rúnica en Aseprite,  
 **Para** reemplazar el carácter `▶` en el botón principal de inicio de oleada.
 
 > **Criterios de Aceptación:**
-> - Archivo fuente: `icon_play_wave.ase` (resolución 8×8 o 12×12 px).
+> - Archivo fuente: `assets/icon_play_wave.ase` (12×12 px).
+> - Script de compilación `update_play_wave.cjs` que convierte `icon_play_wave.ase` en Data URI en `PlayWaveSprite.js`.
 > - Paleta de esmeralda y oro (`#81C784`, `#FFFFFF`, acentos `#4CAF50`).
 > - Acompaña el texto "OLEADA" en la barra lateral con estilo arcade/fantasía.
 > 
-> *Estado:* **Pendiente**.
+> *Estado:* **Implementado** en `assets/icon_play_wave.ase`, `update_play_wave.cjs`, `PlayWaveSprite.js`, `BootScene.js` y `UIScene.js`.
 

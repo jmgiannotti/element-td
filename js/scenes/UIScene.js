@@ -232,6 +232,7 @@ export class UIScene extends Phaser.Scene {
         this.manaGoalCount = this.add.text(RIGHT, 113, '', {
             fontFamily: FONT, fontSize: '7px', color: '#B388FF',
         }).setOrigin(1, 0.5);
+        this.manaGoalIcon = this.add.image(RIGHT, 113, 'icon_play_wave').setOrigin(1, 0.5).setScale(8 / 12).setVisible(false);
         this.manaBarBg = this.add.rectangle(CX, 124, INNER_W, 6, 0x1a1a2e);
         this.manaBarBg.setStrokeStyle(1, 0x2a2a4a);
         this.manaBarFill = this.add.rectangle(LEFT, 124, 0, 4, 0xB388FF).setOrigin(0, 0.5);
@@ -309,6 +310,7 @@ export class UIScene extends Phaser.Scene {
             this.manaBarFill.width = 0;
             this.manaGoalTitle.setText('MEJORA').setColor('#6a6a8a');
             this.manaGoalCount.setText('');
+            if (this.manaGoalIcon) this.manaGoalIcon.setVisible(false);
             // With no temple the hero still gathers maná — there is just
             // nowhere to spend it yet, which is the thing worth saying.
             this.manaGoalText
@@ -330,8 +332,10 @@ export class UIScene extends Phaser.Scene {
             .setText(`${d.shortName} ${t.label}`)
             .setColor(`#${d.color.toString(16).padStart(6, '0')}`);
         this.manaGoalCount
-            .setText(ready ? 'ABRIR ▶' : `${mana}/${goal.cost}`)
+            .setText(ready ? 'ABRIR' : `${mana}/${goal.cost}`)
+            .setX(ready ? RIGHT - 11 : RIGHT)
             .setColor(ready ? '#4CAF50' : '#B388FF');
+        if (this.manaGoalIcon) this.manaGoalIcon.setVisible(ready);
     }
 
     // ─── Build buttons ──────────────────────────────────
@@ -897,8 +901,8 @@ export class UIScene extends Phaser.Scene {
                 fontFamily: FONT, fontSize: '8px', color: '#ECEFF1',
             }).setOrigin(1, 0.5));
 
-            const weak = d.weakness?.length ? `  debil: ${d.weakness.map(elementName).join(', ')}` : '';
-            c.add(this.add.text(34, ry + 6, `${elementName(d.element)}${weak}`, {
+            const weak = d.weakness?.length ? `  ${EFFECT_MARK[EFFECT.SUPER]} ${d.weakness.map(elementName).join(', ')}` : '';
+            c.add(new IconText(this, 34, ry + 6, `${elementName(d.element)}${weak}`, {
                 fontFamily: FONT, fontSize: '7px', color: '#78909C',
             }).setOrigin(0, 0.5));
         });
@@ -1008,7 +1012,7 @@ export class UIScene extends Phaser.Scene {
             // but those keeps its one column on the right edge. A `dim` row
             // shows its change in grey: there, but not the point yet.
             const compare = card.rows.some(r => r.after !== undefined);
-            const COL_BEFORE = compare ? 132 : W - P, COL_ARROW = 142, COL_AFTER = 202, COL_DELTA = W - P;
+            const COL_BEFORE = compare ? 126 : W - P, COL_ARROW = 131, COL_AFTER = 191, COL_DELTA = W - P;
             const DIM = '#4a4a62';
             const [headBefore, headAfter] = card.cols ?? ['ANTES', 'DESPUES'];
             if (headBefore) txt(COL_BEFORE, cy, headBefore, '7px', '#6a6a80', 1);
@@ -1026,7 +1030,8 @@ export class UIScene extends Phaser.Scene {
                     const [delta, color] = this._delta(r.before, r.after);
                     txt(COL_ARROW, cy, '→', '8px', r.dim ? DIM : '#6a6a80');
                     txt(COL_AFTER, cy, r.fmt(r.after), '8px', r.dim ? DIM : delta === '=' ? '#FFFFFF' : color, 1);
-                    txt(COL_DELTA, cy, delta, '8px', r.dim ? DIM : color, 1);
+                    const dt = txt(COL_DELTA, cy, delta, '8px', r.dim ? DIM : color, 1);
+                    if (r.dim) dt.setAlpha(0.45);
                 }
                 cy += 15;
             }
@@ -1114,10 +1119,10 @@ export class UIScene extends Phaser.Scene {
 
     /** The change column: `+35%` green, `-12%` red, `=`, or `NUEVO` from nothing. */
     _delta(before, after) {
-        if (before <= 0) return after > 0 ? ['NUEVO', '#81C784'] : ['=', '#8a8aa0'];
+        if (before <= 0) return after > 0 ? [`${EFFECT_MARK[EFFECT.SUPER]}NUEVO`, '#81C784'] : ['=', '#8a8aa0'];
         const change = Math.round((after / before - 1) * 100);
-        if (change > 0) return [`+${change}%`, '#81C784'];
-        if (change < 0) return [`${change}%`, '#EF5350'];
+        if (change > 0) return [`${EFFECT_MARK[EFFECT.SUPER]}+${change}%`, '#81C784'];
+        if (change < 0) return [`${EFFECT_MARK[EFFECT.RESIST]}${change}%`, '#EF5350'];
         return ['=', '#8a8aa0'];
     }
 
@@ -1542,8 +1547,8 @@ export class UIScene extends Phaser.Scene {
         const stats = [
             { label: 'VIDA', value: mult > 1.001 ? `${Math.round(d.hp * mult)} (x${mult.toFixed(2)})` : `${d.hp}` },
             { label: 'VELOCIDAD', value: `${d.speed} ${pace}` },
-            { label: 'DEBIL A', value: list(d.weakness), color: d.weakness?.length ? '#81C784' : '#8a8aa0' },
-            { label: 'RESISTE', value: list(d.resistance), color: d.resistance?.length ? '#EF5350' : '#8a8aa0' },
+            { label: `${EFFECT_MARK[EFFECT.SUPER]} DEBIL A`, value: list(d.weakness), color: d.weakness?.length ? '#81C784' : '#8a8aa0' },
+            { label: `${EFFECT_MARK[EFFECT.RESIST]} RESISTE`, value: list(d.resistance), color: d.resistance?.length ? '#78909C' : '#8a8aa0' },
             { label: 'CANTIDAD', value: `x${count}` },
         ];
         const desc = [];
@@ -1572,6 +1577,7 @@ export class UIScene extends Phaser.Scene {
         this.waveBtnBg.setStrokeStyle(2, 0x4CAF50);
         this.waveBtnBg.setInteractive({ useHandCursor: true });
 
+        this.waveBtnIcon = this.add.image(CX, ROW_WAVE_BTN, 'icon_play_wave');
         this.waveBtnText = this.add.text(CX, ROW_WAVE_BTN, '', {
             fontFamily: FONT, fontSize: '8px', color: '#FFFFFF',
         }).setOrigin(0.5);
@@ -1629,11 +1635,28 @@ export class UIScene extends Phaser.Scene {
         const st = this._waveButtonState();
         const label = {
             busy: `OLEADA ${wm.currentWave} EN CURSO`,
-            early: `ADELANTAR OLEADA ${wm.nextWaveNumber} ▶`,
-            rest: `OLEADA ${wm.nextWaveNumber} EN ${wm.restSecondsLeft}s ▶`,
-            idle: `INICIAR OLEADA ${wm.nextWaveNumber} ▶`,
+            early: `ADELANTAR OLEADA ${wm.nextWaveNumber}`,
+            rest: `OLEADA ${wm.nextWaveNumber} EN ${wm.restSecondsLeft}s`,
+            idle: `INICIAR OLEADA ${wm.nextWaveNumber}`,
         }[st];
-        this.waveBtnText.setY(st === 'early' ? ROW_WAVE_BTN - 6 : ROW_WAVE_BTN).setText(label);
+        const rowY = st === 'early' ? ROW_WAVE_BTN - 6 : ROW_WAVE_BTN;
+        this.waveBtnText.setText(label);
+        if (this.waveBtnIcon) {
+            const showIcon = st !== 'busy';
+            this.waveBtnIcon.setVisible(showIcon);
+            if (showIcon) {
+                const gap = 6;
+                const iconW = this.waveBtnIcon.displayWidth;
+                const totalW = this.waveBtnText.width + gap + iconW;
+                const left = Math.round(CX - totalW / 2);
+                this.waveBtnText.setPosition(left + Math.round(this.waveBtnText.width / 2), rowY);
+                this.waveBtnIcon.setPosition(left + this.waveBtnText.width + gap + Math.round(iconW / 2), rowY);
+            } else {
+                this.waveBtnText.setPosition(CX, rowY);
+            }
+        } else {
+            this.waveBtnText.setPosition(CX, rowY);
+        }
         this.waveBonusText.setVisible(st === 'early')
             .setText(st === 'early' ? `+${wm.earlyBonus} ORO  ·  ${wm.earlySecondsLeft}s` : '');
         this.waveRestBar.setVisible(st === 'early' || st === 'rest');
@@ -2565,7 +2588,7 @@ export class UIScene extends Phaser.Scene {
         const superPct = `x${SUPER_MULT}`;
         const resistPct = `x${RESIST_MULT}`;
 
-        container.add(this.add.text(0, -124,
+        container.add(new IconText(this, 0, -124,
             `${EFFECT_MARK[EFFECT.SUPER]} Super efectivo ${superPct}   ·   ${EFFECT_MARK[EFFECT.RESIST]} Resistido ${resistPct}`,
             { fontFamily: FONT, fontSize: '8px', color: '#B0BEC5' }
         ).setOrigin(0.5));
@@ -2612,12 +2635,12 @@ export class UIScene extends Phaser.Scene {
                 { fontFamily: FONT, fontSize: '7px', color: '#5f6a80' }
             ).setOrigin(0, 0.5));
 
-            container.add(this.add.text(122, y - 9,
+            container.add(new IconText(this, 122, y - 9,
                 `${EFFECT_MARK[EFFECT.SUPER]} ${list(d.weakness)}`,
                 { fontFamily: FONT, fontSize: '8px', color: EFFECT_COLOR[EFFECT.SUPER] }
             ).setOrigin(0, 0.5));
 
-            container.add(this.add.text(122, y + 8,
+            container.add(new IconText(this, 122, y + 8,
                 `${EFFECT_MARK[EFFECT.RESIST]} ${list(d.resistance)}`,
                 { fontFamily: FONT, fontSize: '8px', color: EFFECT_COLOR[EFFECT.RESIST] }
             ).setOrigin(0, 0.5));
@@ -2662,7 +2685,7 @@ export class UIScene extends Phaser.Scene {
     }
 
     _buildHeroTab(container) {
-        container.add(this.add.text(0, -124, 'Click derecho mueve al heroe.', {
+        container.add(new IconText(this, 0, -124, 'Click derecho mueve al heroe.', {
             fontFamily: FONT, fontSize: '8px', color: '#B0BEC5',
         }).setOrigin(0.5));
 

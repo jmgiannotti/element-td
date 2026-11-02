@@ -14,6 +14,8 @@ import { HERO_SPRITE } from '../data/HeroSprite.js';
 import { COIN_SPRITE } from '../data/CoinSprite.js';
 import { MANA_SPRITE } from '../data/ManaSprite.js';
 import { GEAR_SPRITE } from '../data/GearSprite.js';
+import { PLAY_WAVE_SPRITE } from '../data/PlayWaveSprite.js';
+import { EFFECTIVE_UP_SPRITE, RESIST_DOWN_SPRITE } from '../data/EffectivenessSprites.js';
 import { BOSS_SPRITES } from '../data/BossSprites.js';
 import { SPELLS, SPELL_ORDER } from '../data/SpellData.js';
 import { TALENTS, TALENT_ORDER } from '../data/TalentData.js';
@@ -76,6 +78,8 @@ export function expectedTextureKeys() {
     if (HERO_SPRITE.enabled) keys.push(HERO_SPRITE.key);
     keys.push(COIN_SPRITE.key);
     keys.push(GEAR_SPRITE.key);
+    keys.push(PLAY_WAVE_SPRITE.key);
+    keys.push(EFFECTIVE_UP_SPRITE.key, RESIST_DOWN_SPRITE.key);
 
     // The starting look is pre-baked across every lantern tier and every pose:
     // both change several times a wave, and a first-time bake mid-swing would
@@ -136,6 +140,15 @@ export class BootScene extends Phaser.Scene {
         }
         if (!this.textures.exists(MANA_SPRITE.key)) {
             this.load.image(MANA_SPRITE.key, MANA_SPRITE.png);
+        }
+        if (!this.textures.exists(EFFECTIVE_UP_SPRITE.key)) {
+            this.load.image(EFFECTIVE_UP_SPRITE.key, EFFECTIVE_UP_SPRITE.png);
+        }
+        if (!this.textures.exists(RESIST_DOWN_SPRITE.key)) {
+            this.load.image(RESIST_DOWN_SPRITE.key, RESIST_DOWN_SPRITE.png);
+        }
+        if (!this.textures.exists(PLAY_WAVE_SPRITE.key)) {
+            this.load.image(PLAY_WAVE_SPRITE.key, PLAY_WAVE_SPRITE.png);
         }
         if (!this.textures.exists(GEAR_SPRITE.key)) {
             this.load.image(GEAR_SPRITE.key, GEAR_SPRITE.png);

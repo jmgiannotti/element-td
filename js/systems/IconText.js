@@ -1,22 +1,39 @@
 import * as Phaser from 'phaser';
 import { MANA_SPRITE } from '../data/ManaSprite.js';
+import { EFFECTIVE_UP_SPRITE, RESIST_DOWN_SPRITE } from '../data/EffectivenessSprites.js';
 
 /**
- * Text with the maná sprite inline.
+ * Text with inline pixel-art sprites (✦ maná, ▲ super effective, ▼ resisted).
  *
- * "Press Start 2P" has no glyph for ✦, so the browser draws it from some other
- * font — a different weight, a different size, sometimes a box. Strings keep
- * using ✦ as the token for "maná" (it reads fine in code and in data), and
- * this is what puts the real sprite in its place when the string is drawn.
+ * "Press Start 2P" has no glyphs for ✦, ▲ or ▼, so the browser would otherwise
+ * draw them from a fallback font — a different weight, a different size, or a
+ * missing box. Strings keep using ✦, ▲ and ▼ as readable tokens in code and
+ * data, and IconText puts the real Aseprite sprites in their place when drawn.
  *
  * A Container of Text runs and Images, laid out left to right and line by
  * line. It answers the handful of Text methods the UI calls on these labels
  * (setText, setColor, setOrigin) so it can stand in for one.
  */
 export const MANA_GLYPH = '✦';
+export const SUPER_GLYPH = '▲';
+export const RESIST_GLYPH = '▼';
 
+const GLYPH_MAP = {
+    [MANA_GLYPH]: { sprite: MANA_SPRITE, scaleFor: (px) => Math.round(px * 1.6) / MANA_SPRITE.height, pad: 1 },
+    [SUPER_GLYPH]: { sprite: EFFECTIVE_UP_SPRITE, scaleFor: (px) => Math.max(8, Math.round(px)) / EFFECTIVE_UP_SPRITE.height, pad: 2 },
+    [RESIST_GLYPH]: { sprite: RESIST_DOWN_SPRITE, scaleFor: (px) => Math.max(8, Math.round(px)) / RESIST_DOWN_SPRITE.height, pad: 2 },
+};
+
+const GLYPH_SPLIT_RE = /([✦▲▼])/g;
+const GLYPH_TEST_RE = /[✦▲▼]/;
+
+export function hasInlineGlyph(text) {
+    return typeof text === 'string' && GLYPH_TEST_RE.test(text);
+}
+
+/** Backwards-compatible alias used across UI helpers for any inline sprite token. */
 export function hasManaGlyph(text) {
-    return typeof text === 'string' && text.includes(MANA_GLYPH);
+    return hasInlineGlyph(text);
 }
 
 export class IconText extends Phaser.GameObjects.Container {
@@ -62,15 +79,18 @@ export class IconText extends Phaser.GameObjects.Container {
         return this;
     }
 
-    /** Greedy word wrap by character count; the icon is counted as two. */
+    /** Greedy word wrap by character count; each inline icon counts as two. */
     _lines() {
         const raw = this.content.split('\n');
         if (!this.wrap) return raw;
         const out = [];
+        const len = (s) => {
+            const icons = (s.match(GLYPH_SPLIT_RE) || []).length;
+            return s.length + icons;
+        };
         for (const para of raw) {
             let line = '';
             for (const word of para.split(' ')) {
-                const len = (s) => s.length + (s.split(MANA_GLYPH).length - 1);
                 const next = line ? `${line} ${word}` : word;
                 if (line && len(next) > this.wrap) {
                     out.push(line);
@@ -91,22 +111,23 @@ export class IconText extends Phaser.GameObjects.Container {
         delete style.wordWrap;
         delete style.padding;
         delete style.backgroundColor;
-        // The icon stands a little taller than a capital, like the HUD's.
-        const iconH = Math.round(this.fontPx * 1.6);
-        const iconScale = iconH / MANA_SPRITE.height;
+        const px = this.fontPx;
+
         this.rows = this._lines().map((line) => {
             const parts = [];
-            line.split(MANA_GLYPH).forEach((chunk, i) => {
-                if (i > 0) {
-                    const icon = this.scene.add.image(0, 0, MANA_SPRITE.key)
+            for (const token of line.split(GLYPH_SPLIT_RE)) {
+                if (!token) continue;
+                const def = GLYPH_MAP[token];
+                if (def) {
+                    const iconScale = def.scaleFor(px);
+                    const icon = this.scene.add.image(0, 0, def.sprite.key)
                         .setScale(iconScale).setOrigin(0, 0.5);
-                    parts.push({ obj: icon, w: Math.round(MANA_SPRITE.width * iconScale) + 1 });
-                }
-                if (chunk) {
-                    const t = this.scene.add.text(0, 0, chunk, style).setOrigin(0, 0.5);
+                    parts.push({ obj: icon, w: Math.round(def.sprite.width * iconScale) + def.pad });
+                } else {
+                    const t = this.scene.add.text(0, 0, token, style).setOrigin(0, 0.5);
                     parts.push({ obj: t, w: t.width });
                 }
-            });
+            }
             for (const p of parts) this.add(p.obj);
             return { parts, w: parts.reduce((s, p) => s + p.w, 0) };
         });

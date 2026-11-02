@@ -20,12 +20,19 @@ export const EFFECT = {
     NORMAL: 'normal',
 };
 
-// Every effect carries a glyph as well as a colour. Colour alone is unreadable
+// Every effect carries a glyph token (rendered as a pixel-art sprite via
+// IconText / FloatingText) as well as a colour. Colour alone is unreadable
 // for a good share of players, and this is a system you cannot play blind.
 export const EFFECT_MARK = {
     [EFFECT.SUPER]: '▲',
     [EFFECT.RESIST]: '▼',
     [EFFECT.NORMAL]: '',
+};
+
+export const EFFECT_ICON = {
+    [EFFECT.SUPER]: 'icon_effective_up',
+    [EFFECT.RESIST]: 'icon_resist_down',
+    [EFFECT.NORMAL]: null,
 };
 
 export const EFFECT_LABEL = {
