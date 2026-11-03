@@ -2841,7 +2841,7 @@ export class UIScene extends Phaser.Scene {
                 this._refreshUpgradePanel();
             } else {
                 audio.play('deny');
-                this.cameras.main.shake(90, 0.003);
+                this.cameras.main.shake(65, 0.001);
             }
         });
 
@@ -2887,7 +2887,7 @@ export class UIScene extends Phaser.Scene {
                 this._refreshUpgradePanel();
             } else {
                 audio.play('deny');
-                this.cameras.main.shake(90, 0.003);
+                this.cameras.main.shake(65, 0.001);
             }
         });
 

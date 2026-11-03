@@ -375,7 +375,7 @@ export class SpellSystem {
         const scene = this.scene;
 
         audio.play('moon');
-        scene.cameras.main.shake(240, 0.009);
+        scene.cameras.main.shake(150, 0.0028);
 
         const flash = scene.add.circle(x, y, spell.radius * 0.5, 0xffffff, 0.5)
             .setDepth(23).setBlendMode(Phaser.BlendModes.ADD);

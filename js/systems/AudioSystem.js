@@ -62,7 +62,7 @@ const STORE = {
 // The songs themselves live in MusicData; this is the player.
 // Seconds a layer keeps being scheduled after its mood turns it off, so it
 // fades out instead of being cut.
-const FADE_TAIL = 4;
+const FADE_TAIL = 2;
 
 const midiHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
@@ -147,7 +147,7 @@ class AudioSystem {
         this.sfxBus.connect(soften);
 
         this.musicBus = ctx.createGain();
-        this.musicBus.gain.value = this.musicVolume * 0.5;
+        this.musicBus.gain.value = this.musicVolume * 0.55;
         this.musicBus.connect(this.master);
 
         // One second of white noise, reused by every percussive cue.
@@ -175,7 +175,7 @@ class AudioSystem {
         this.sfxWet.gain.value = this.sfxVolume;
         this.sfxWet.connect(this.reverb);
         this.musicWet = ctx.createGain();
-        this.musicWet.gain.value = this.musicVolume * 0.5;
+        this.musicWet.gain.value = this.musicVolume * 0.55;
         this.musicWet.connect(this.reverb);
 
         this._buildMusic();
@@ -208,8 +208,8 @@ class AudioSystem {
         this.musicVolume = clamp01(Math.round(v * 10) / 10);
         saveVolume(STORE.music, this.musicVolume);
         if (!this.musicBus) return;
-        this.musicBus.gain.setTargetAtTime(this.musicVolume * 0.5, this.ctx.currentTime, 0.05);
-        this.musicWet.gain.setTargetAtTime(this.musicVolume * 0.5, this.ctx.currentTime, 0.05);
+        this.musicBus.gain.setTargetAtTime(this.musicVolume * 0.55, this.ctx.currentTime, 0.05);
+        this.musicWet.gain.setTargetAtTime(this.musicVolume * 0.55, this.ctx.currentTime, 0.05);
     }
 
     // ── Voices ───────────────────────────────────
@@ -583,18 +583,17 @@ class AudioSystem {
 
     // ── Music (US 14.3) ───────────────────────────
     /**
-     * Four layers, each on its own gain under the music bus, so a change of
-     * mood is a crossfade between them rather than a change of track. What
-     * each layer plays comes from the current song (MusicData).
+     * Five layers (`pad`, `arp`, `lead`, `bass`, `drums`), each on its own
+     * gain under the music bus, so switching between preparation, combat and
+     * boss waves crossfades briskly without losing rhythmic momentum.
      */
     _buildMusic() {
         const ctx = this.ctx;
         this.musicLayers = {};
-        // How much of each layer goes into the room: the pad and bells live
-        // in it, the bass and drums stay dry and close.
-        const sends = { pad: 0.5, bell: 0.7, bass: 0.05, drums: 0.12 };
+        // Tight reverb sends keep the TD mix punchy and legible alongside SFX.
+        const sends = { pad: 0.24, arp: 0.16, lead: 0.26, bass: 0.03, drums: 0.10 };
         const levels = this._levels();
-        for (const name of ['pad', 'bell', 'bass', 'drums']) {
+        for (const name of ['pad', 'arp', 'lead', 'bass', 'drums']) {
             const g = ctx.createGain();
             g.gain.value = levels[name];
             g.connect(this.musicBus);
@@ -610,8 +609,8 @@ class AudioSystem {
         this.padFilter.frequency.value = this._song.cutoff[this._mood];
         this.padFilter.connect(this.musicLayers.pad);
 
-        this._musicNext = ctx.currentTime + 0.1;
-        this._musicTimer = setInterval(() => this._musicTick(), 90);
+        this._musicNext = ctx.currentTime + 0.08;
+        this._musicTimer = setInterval(() => this._musicTick(), 60);
     }
 
     /** The layer levels for the current mood, with the song's overrides. */
@@ -634,17 +633,17 @@ class AudioSystem {
         const now = this.ctx.currentTime;
         for (const v of this._padVoices) {
             v.g.gain.cancelScheduledValues(now);
-            v.g.gain.setTargetAtTime(0.0001, now, 0.25);
-            v.osc.stop(now + 1.2);
+            v.g.gain.setTargetAtTime(0.0001, now, 0.12);
+            v.osc.stop(now + 0.5);
         }
         this._padVoices = [];
-        this._musicNext = now + 0.6;
+        this._musicNext = now + 0.22;
         this._applyMood(now);
     }
 
     /**
-     * 'calm' (preparation), 'tension' (a wave on the board) or 'boss'. The
-     * layers crossfade over a couple of seconds.
+     * 'calm' (tactical preparation / menus), 'tension' (active wave) or 'boss'.
+     * Crossfades rapidly when escalating into battle so waves hit immediately.
      */
     setMusicMood(mood) {
         if (!MOOD_LEVELS[mood] || mood === this._mood) return;
@@ -655,25 +654,27 @@ class AudioSystem {
     }
 
     _applyMood(now) {
+        const tc = this._mood === 'calm' ? 0.55 : 0.28;
         const levels = this._levels();
         for (const [name, g] of Object.entries(this.musicLayers)) {
-            g.gain.setTargetAtTime(levels[name], now, 1.2);
+            g.gain.setTargetAtTime(levels[name], now, tc);
         }
-        this.padFilter.frequency.setTargetAtTime(this._song.cutoff[this._mood], now, 1.5);
+        this.padFilter.frequency.setTargetAtTime(this._song.cutoff[this._mood], now, tc);
     }
 
-    /** Schedules every sixteenth that falls in the next third of a second. */
+    /** Schedules every sixteenth that falls in the lookahead window. */
     _musicTick() {
         const ctx = this.ctx;
         if (!ctx || ctx.state !== 'running') return;
         const now = ctx.currentTime;
         const song = this._song;
-        const stepLen = 60 / song.bpm / 4;
+        const bpm = song.bpm * (this._mood === 'boss' ? (song.bossTempo ?? 1.07) : 1);
+        const stepLen = 60 / bpm / 4;
         const loop = song.stepsPerChord * song.progression.length;
         // After a hidden tab or a suspend, pick up from now rather than
         // playing the backlog all at once.
-        if (this._musicNext < now) this._musicNext = now + 0.05;
-        while (this._musicNext < now + 0.35) {
+        if (this._musicNext < now) this._musicNext = now + 0.04;
+        while (this._musicNext < now + 0.28) {
             if (this.enabled && this.musicVolume > 0) this._musicAt(this._musicStep, this._musicNext, stepLen);
             this._musicNext += stepLen;
             this._musicStep = (this._musicStep + 1) % loop;
@@ -685,77 +686,207 @@ class AudioSystem {
         return this._levels()[name] > 0 || this.ctx.currentTime - this._moodAt < FADE_TAIL;
     }
 
+    /**
+     * Sustained retro-fantasy lead note with filter articulation and subtle
+     * delayed vibrato on longer notes so melodies sing instead of pinging.
+     */
+    _leadNote({
+        type = 'square', freq, dur = 0.2, gain = 0.045, at,
+        cut = 2800, detune = 8, vibrato = false, bus, pan = 0,
+    }) {
+        const ctx = this.ctx;
+        const t0 = at ?? ctx.currentTime;
+        const d = Math.max(0.05, dur);
+        const atk = Math.min(0.014, d * 0.25);
+        const holdEnd = t0 + Math.max(atk + 0.005, d * 0.78);
+        const tEnd = Math.max(holdEnd + 0.015, t0 + d);
+
+        const env = ctx.createGain();
+        env.gain.setValueAtTime(0.0001, t0);
+        env.gain.linearRampToValueAtTime(gain, t0 + atk);
+        env.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain * 0.78), holdEnd);
+        env.gain.exponentialRampToValueAtTime(0.0001, tEnd);
+
+        let head = env;
+        if (cut) {
+            const f = ctx.createBiquadFilter();
+            f.type = 'lowpass';
+            f.Q.value = 1.1;
+            f.frequency.setValueAtTime(cut * 1.25, t0);
+            f.frequency.exponentialRampToValueAtTime(Math.max(200, cut * 0.75), tEnd);
+            f.connect(env);
+            head = f;
+        }
+
+        let lfoGain = null;
+        if (vibrato && d >= 0.22) {
+            const lfo = ctx.createOscillator();
+            lfo.type = 'sine';
+            lfo.frequency.value = 5.6;
+            lfoGain = ctx.createGain();
+            lfoGain.gain.setValueAtTime(0, t0);
+            lfoGain.gain.linearRampToValueAtTime(6.5, t0 + Math.min(0.14, d * 0.5));
+            lfo.connect(lfoGain);
+            lfo.start(t0);
+            lfo.stop(tEnd + 0.03);
+        }
+
+        for (const cents of detune ? [-detune / 2, detune / 2] : [0]) {
+            const osc = ctx.createOscillator();
+            osc.type = type;
+            osc.detune.value = cents;
+            osc.frequency.setValueAtTime(freq, t0);
+            if (lfoGain) lfoGain.connect(osc.detune);
+            osc.connect(head);
+            osc.start(t0);
+            osc.stop(tEnd + 0.03);
+        }
+        this._route(env, 0, bus ?? this.musicLayers.lead, pan);
+    }
+
     _musicAt(step, t, stepLen) {
         const song = this._song;
-        const chord = song.progression[Math.floor(step / song.stepsPerChord)];
+        const bar = Math.floor(step / song.stepsPerChord);
+        const chord = song.progression[bar];
         const s = step % 16;
         const mood = this._mood;
         const boss = mood === 'boss';
         const L = this.musicLayers;
 
-        if (step % song.stepsPerChord === 0) this._padChord(chord, t, stepLen * song.stepsPerChord);
-
-        // Melody: a random chord tone, or the arpeggio's next note.
-        const bell = song.bell;
-        if (this._layerLive('bell') && s % bell.every === 0
-            && Math.random() < (bell.chance[mood] ?? bell.chance.tension)) {
-            const n = bell.arp
-                ? chord.bells[bell.arp[(step / bell.every) % bell.arp.length] % chord.bells.length]
-                : chord.bells[Math.floor(Math.random() * chord.bells.length)];
-            const f = midiHz(n);
-            this._tone({
-                type: bell.type, freq: f, dur: bell.decay, gain: bell.gain, at: t,
-                bus: L.bell, pan: (Math.random() - 0.5) * 0.8,
-            });
-            const o = bell.overtone;
-            if (o) this._tone({ type: 'sine', freq: f * o.ratio, dur: o.decay, gain: o.gain, at: t, bus: L.bell, pan: 0 });
+        // 1. Pad: 1-bar harmonic backing bed.
+        if (step % song.stepsPerChord === 0 && this._layerLive('pad')) {
+            this._padChord(chord, t, stepLen * song.stepsPerChord);
         }
 
-        // Bass: on the root, `pattern` semitones away per eighth.
+        // 2. Arpeggio: crisp staccato tactical ostinato.
+        const arp = song.arp;
+        const arpEvery = arp?.every[mood] ?? 1;
+        if (arp && this._layerLive('arp') && s % arpEvery === 0) {
+            const idx = Math.floor(s / arpEvery) % arp.pattern.length;
+            const baseMidi = chord.arp[arp.pattern[idx] % chord.arp.length];
+            const oct = boss && (idx % 4 === 3) ? 12 : 0;
+            const accent = (s % 4 === 0) ? 1.12 : 0.88;
+            this._tone({
+                type: arp.type,
+                freq: midiHz(baseMidi + oct),
+                dur: Math.min(arp.dur, stepLen * arpEvery * 0.85),
+                gain: arp.gain * accent,
+                attack: 0.004,
+                cut: arp.cut * (mood === 'calm' ? 0.82 : boss ? 1.2 : 1),
+                at: t,
+                bus: L.arp,
+                pan: idx % 2 ? 0.22 : -0.22,
+            });
+        }
+
+        // 3. Lead: composed 8-bar Tower Defense melody (+ harmony in boss waves).
+        const lead = song.lead;
+        if (lead && this._layerLive('lead')) {
+            if (!lead._byStep) {
+                lead._byStep = new Map();
+                for (const entry of lead.melody) lead._byStep.set(entry[0], entry);
+            }
+            const note = lead._byStep.get(step);
+            if (note) {
+                const [, midi, lenSteps, accent = 1] = note;
+                const noteDur = lenSteps * stepLen * 0.92;
+                const noteGain = lead.gain * accent;
+                const noteCut = lead.cut * (mood === 'calm' ? 0.78 : boss ? 1.18 : 1);
+                this._leadNote({
+                    type: lead.type,
+                    freq: midiHz(midi),
+                    dur: noteDur,
+                    gain: noteGain,
+                    at: t,
+                    cut: noteCut,
+                    detune: lead.detune,
+                    vibrato: lead.vibrato,
+                    bus: L.lead,
+                    pan: 0.06,
+                });
+                if (boss && lead.bossHarmony) {
+                    this._leadNote({
+                        type: 'triangle',
+                        freq: midiHz(midi + lead.bossHarmony),
+                        dur: noteDur * 0.9,
+                        gain: noteGain * 0.42,
+                        at: t,
+                        cut: noteCut * 1.1,
+                        detune: 4,
+                        vibrato: false,
+                        bus: L.lead,
+                        pan: -0.14,
+                    });
+                }
+            }
+        }
+
+        // 4. Bass: staccato marching / galloping bassline per mood.
         const bass = song.bass;
-        const every = boss && bass.bossEvery ? bass.bossEvery : bass.every;
-        if (this._layerLive('bass') && s % every === 0) {
-            const eighth = Math.floor(s / 2);
-            const accent = bass.accents[eighth];
-            const shift = (bass.pattern?.[eighth] ?? 0) + (boss && bass.bossUp.includes(s) ? 12 : 0);
+        const bassSteps = boss ? bass.bossSteps : mood === 'tension' ? bass.tensionSteps : bass.calmSteps;
+        if (bass && this._layerLive('bass') && bassSteps.includes(s)) {
+            const shift = bass.shifts[s] ?? 0;
+            const accent = (s % 4 === 0) ? 1.1 : 0.9;
             for (const v of bass.voices) {
                 this._tone({
-                    type: v.type, freq: midiHz(chord.root + v.octave + shift), dur: stepLen * v.len,
-                    gain: v.gain * accent, at: t, cut: v.cut ? v.cut[boss ? 'boss' : 'tension'] : 0,
-                    bus: L.bass, pan: 0,
+                    type: v.type,
+                    freq: midiHz(chord.root + v.octave + shift),
+                    dur: stepLen * v.len,
+                    gain: v.gain * accent,
+                    attack: 0.004,
+                    at: t,
+                    cut: v.cut ? (v.cut[mood] ?? v.cut.tension) : 0,
+                    bus: L.bass,
+                    pan: 0,
                 });
             }
         }
 
+        // 5. Drums: tactical pulse in calm, battle march in tension, assault in boss.
         if (this._layerLive('drums')) {
             const d = song.drums;
-            const on = (part) => part && (boss ? part.boss : part.tension).includes(s);
+            const on = (part) => part && (part[mood] ?? []).includes(s);
+            const turnaround = mood !== 'calm' && (bar % 4 === 3);
             if (on(d.kick)) {
                 const k = d.kick;
-                this._tone({ type: 'sine', freq: k.freq, to: k.to, dur: k.dur, gain: k.gain, at: t, bus: L.drums, pan: 0 });
+                this._tone({ type: 'sine', freq: k.freq, to: k.to, dur: k.dur, gain: k.gain, attack: 0.002, at: t, bus: L.drums, pan: 0 });
+                this._tone({ type: 'triangle', freq: k.freq * 2.1, to: k.freq * 0.7, dur: 0.028, gain: k.gain * 0.35, attack: 0.001, at: t, bus: L.drums, pan: 0 });
             }
-            if (on(d.tom)) {
+            if (on(d.tom) || (turnaround && s === 13)) {
                 const k = d.tom;
-                this._tone({
-                    type: 'triangle', freq: k.freq, to: k.to, dur: 0.22, gain: k.gain, at: t,
-                    bus: L.drums, pan: s % 2 ? 0.25 : -0.25,
-                });
+                if (k) {
+                    const fillPitch = (turnaround && s === 13) ? 1.18 : 1;
+                    this._tone({
+                        type: 'triangle', freq: k.freq * fillPitch, to: k.to * fillPitch, dur: 0.16, gain: k.gain, attack: 0.003, at: t,
+                        bus: L.drums, pan: s % 2 ? 0.24 : -0.24,
+                    });
+                }
             }
             if (on(d.hat)) {
+                const offbeat = (s % 4 === 2) ? 1.18 : 0.85;
                 this._noise({
-                    dur: 0.04, gain: d.hat.gain, from: d.hat.from, to: d.hat.from * 0.85, filter: 'highpass', at: t,
-                    bus: L.drums, pan: s % 8 < 4 ? -0.3 : 0.3,
+                    dur: (s % 4 === 2 && mood !== 'calm') ? 0.055 : 0.032,
+                    gain: d.hat.gain * offbeat,
+                    from: d.hat.from,
+                    to: d.hat.from * 0.82,
+                    filter: 'highpass',
+                    at: t,
+                    bus: L.drums,
+                    pan: s % 8 < 4 ? -0.22 : 0.22,
                 });
             }
-            if (on(d.snare)) {
+            if (on(d.snare) || (turnaround && s === 15)) {
                 const k = d.snare;
-                this._noise({ dur: 0.14, gain: k.gain, from: k.from, to: k.from / 2, filter: 'bandpass', at: t, bus: L.drums, pan: 0 });
-                this._tone({ type: 'triangle', freq: 190, to: 150, dur: 0.08, gain: k.gain * 0.65, at: t, bus: L.drums, pan: 0 });
+                if (k) {
+                    const fillGain = (turnaround && !on(d.snare)) ? 0.75 : 1;
+                    this._noise({ dur: 0.12, gain: k.gain * fillGain, from: k.from, to: k.from * 0.45, filter: 'bandpass', q: 0.9, at: t, bus: L.drums, pan: 0 });
+                    this._tone({ type: 'triangle', freq: 210, to: 135, dur: 0.07, gain: k.gain * 0.7 * fillGain, attack: 0.002, at: t, bus: L.drums, pan: 0 });
+                }
             }
         }
     }
 
-    /** One chord of the pad: a slow swell that overlaps the next one. */
+    /** One chord of the pad: a tight harmonic bed that overlaps the next bar. */
     _padChord(chord, t, dur) {
         const ctx = this.ctx;
         const pad = this._song.pad;

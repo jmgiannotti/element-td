@@ -823,7 +823,7 @@ export class GameScene extends Phaser.Scene {
             this._refreshStatLabel();
         } else {
             audio.play('deny');
-            this.cameras.main.shake(90, 0.003);
+            this.cameras.main.shake(65, 0.001);
         }
     }
 
@@ -841,7 +841,7 @@ export class GameScene extends Phaser.Scene {
             this._refreshStatLabel();
         } else {
             audio.play('deny');
-            this.cameras.main.shake(90, 0.003);
+            this.cameras.main.shake(65, 0.001);
         }
     }
 
@@ -1040,7 +1040,7 @@ export class GameScene extends Phaser.Scene {
             if (!outcome.ok) {
                 if (outcome.reason) {
                     audio.play('deny');
-                    this.cameras.main.shake(100, 0.005);
+                    this.cameras.main.shake(75, 0.0014);
                     this.events.emit('hint', BLOCK_REASON[outcome.reason], '#FF8A80');
                 }
                 return;
@@ -1288,7 +1288,7 @@ export class GameScene extends Phaser.Scene {
         const hp = this.breakableBlocks.get(key) - amount;
         if (hp <= 0) {
             this._clearBlock(col, row);
-            this.cameras.main.shake(100, 0.005);
+            this.cameras.main.shake(75, 0.0014);
             this.events.emit('path-changed');
         } else {
             this.breakableBlocks.set(key, hp);

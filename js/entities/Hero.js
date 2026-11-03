@@ -442,7 +442,7 @@ export class Hero {
     /** Ground slam: damage plus a slow in a ring around the hero. */
     _castQuake(a) {
         audio.play('quake');
-        this.scene.cameras.main.shake(180, 0.006);
+        this.scene.cameras.main.shake(120, 0.002);
 
         const ring = this.scene.add.circle(this.posX, this.posY, a.radius * 0.35, a.color, 0.18);
         ring.setStrokeStyle(3, a.color, 0.9).setDepth(3);

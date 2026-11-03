@@ -661,7 +661,7 @@ export class FusionSystem {
             });
         }
 
-        if (scene.cameras?.main) scene.cameras.main.shake(180, 0.004);
+        if (scene.cameras?.main) scene.cameras.main.shake(110, 0.0015);
         if (scene.floating) {
             scene.floating.show(pos.x, pos.y - 24, '¡LEGENDARIA!', {
                 color: '#FFD54F', size: 8, rise: 22, duration: 1100,

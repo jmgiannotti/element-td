@@ -264,7 +264,7 @@ export class MapEventSystem {
                     this._explosion(x, y, { debris: 0xB07840, scale: 1.2 });
                 }
                 scene.breakBlocks(still);
-                scene.cameras.main.shake(450, 0.009);
+                scene.cameras.main.shake(240, 0.003);
                 scene.cameras.main.flash(180, 255, 170, 80, false);
                 audio.play('boss_slam');
                 audio.play('quake');
@@ -392,7 +392,7 @@ export class MapEventSystem {
         const e = m.eruption;
         if (!e || wave !== e.wave) return;
         const scene = this.scene;
-        scene.cameras.main.shake(900, 0.007);
+        scene.cameras.main.shake(320, 0.0022);
         audio.play('quake');
         scene.events.emit('map-event', '¡ERUPCION! Llueven meteoritos sobre la caldera', '#FF5722');
         this._told.add('meteors');
@@ -487,7 +487,7 @@ export class MapEventSystem {
         const m = this.mech.meteors;
         const { x, y } = this._cellCenter(col, row);
         this._explosion(x, y, { debris: 0x3E2723, fire: 0xFF6D00, scale: 1.1 });
-        scene.cameras.main.shake(220, 0.008);
+        scene.cameras.main.shake(90, 0.0012);
         audio.play('boss_fire');
 
         // Whatever stood under it gets hurt.

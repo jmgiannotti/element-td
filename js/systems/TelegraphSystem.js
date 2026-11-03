@@ -184,7 +184,7 @@ export class TelegraphSystem {
 
         // Play impact sound
         audio.play(skill.sound || 'boss_slam');
-        this.scene.cameras.main.shake(180, 0.005);
+        this.scene.cameras.main.shake(120, 0.0018);
 
         // ── 1. Hero damage test ───────────────────
         let hitHero = false;

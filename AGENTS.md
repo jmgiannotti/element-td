@@ -88,7 +88,7 @@ e:/Proyectos/Mini juego TD/
 * **`TowerData.js`**: Stats base de torres puras e híbridas, costos, radios, colores y multiplicadores.
 * **`EnemyData.js`**: Tipos de enemigos, velocidades, puntos de vida, afinidades y habilidades de jefes.
 * **`WaveData.js`**: Lista secuencial de oleadas base.
-* **`MusicData.js`**: Las canciones, una por mapa: tonalidad, tempo, acordes y cómo toca cada capa (colchón, melodía, bajo, batería). Una canción nueva es una entrada nueva acá.
+* **`MusicData.js`**: Las canciones, una por mapa: tonalidad, tempo, acordes y cómo toca cada capa (colchón, arpegio, melodía, bajo, batería). Una canción nueva es una entrada nueva acá.
 * **`TalentData.js`**: Árbol de talentos de Vesper (meta-progresión): 9 talentos en 3 ramas, costo por nivel, estrellas por victoria (`starsForVictory`) y `talentEffects` (números neutros en `TALENT_DEFAULTS`). En partida se leen de `GameScene.talents`; un talento nuevo es una entrada acá más su ícono en `BootScene._generateTalentIcons`.
 * **`Elements.js`**: Reglas de efectividad (`SUPER_MULT = 1.5`, `RESIST_MULT = 0.5`).
 * **`*Sprite.js`** (`CoinSprite.js`, `ManaSprite.js`, `GearSprite.js`, `PlayWaveSprite.js`, `EffectivenessSprites.js`, `BossSprites.js`): Contenedores generados automáticamente con Base64 de sprites compilados.
